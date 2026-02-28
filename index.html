@@ -2005,6 +2005,142 @@ Vom furniza 3 mix-uri separate din Stage Box-ul poziționat pe scenă:
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// AI CHAT WIDGET
+// ═══════════════════════════════════════════════════════════════════════════════
+function buildAIContext(evs, tasks) {
+  var confirmed = evs.filter(function(e){return e.st==="confirmat";});
+  var pending   = evs.filter(function(e){return e.st==="asteptare";});
+  var totalRev  = confirmed.reduce(function(s,e){return s+(e.fee||0);},0);
+  var upcoming  = evs.filter(function(e){return e.date&&new Date(e.date)>=new Date();}).sort(function(a,b){return a.date>b.date?1:-1;}).slice(0,5).map(function(e){return "  - "+e.date+" | "+(e.cn||e.title||"—")+" | "+(e.type||"")+" | "+e.st+" | "+(e.fee||0)+" RON";}).join("\n")||"  (niciun eveniment viitor)";
+  var activeTasks = tasks.filter(function(t){return !t.done;}).slice(0,8).map(function(t){return "  - ["+(t.priority||"medium")+"] "+t.text;}).join("\n")||"  (niciun task activ)";
+  return "Esti un asistent AI in Phaser Manager.\n\nDATE LIVE:\nEvenimente: "+evs.length+" (confirmate: "+confirmed.length+", asteptare: "+pending.length+")\nVenit: "+totalRev+" RON\nTasks: "+tasks.filter(function(t){return !t.done;}).length+"\n\nEVENIMENTE VIITOARE:\n"+upcoming+"\n\nTASKS ACTIVE:\n"+activeTasks+"\n\nRaspunde in romana. Fii concis si util.";
+}
+
+function SettingsAI(props) {
+  var th=props.th,apiKeys=props.apiKeys,onSave=props.onSave,onClose=props.onClose;
+  var initModel=props.model;
+  var _k=useState({claude:apiKeys.claude||"",openai:apiKeys.openai||""}); var keys=_k[0],setKeys=_k[1];
+  var _m=useState(initModel); var mdl=_m[0],setMdl=_m[1];
+  var _sc=useState(false); var showC=_sc[0],setShowC=_sc[1];
+  var _so=useState(false); var showO=_so[0],setShowO=_so[1];
+  return React.createElement("div",{style:{background:th.c,border:"1px solid "+th.b,borderRadius:14,width:340,padding:24,maxWidth:"90vw"},onClick:function(e){e.stopPropagation();}},
+    React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:16}},"Setari AI"),
+    React.createElement("div",{style:{marginBottom:14}},
+      React.createElement("div",{style:{fontSize:11,color:"#7c3aed",fontWeight:700,marginBottom:8}},"Model preferat"),
+      React.createElement("div",{style:{display:"flex",gap:8}},
+        [{v:"claude",l:"Claude",sub:"Anthropic"},{v:"openai",l:"GPT-4o Mini",sub:"OpenAI"}].map(function(opt){
+          return React.createElement("button",{key:opt.v,onClick:function(){setMdl(opt.v);},style:{flex:1,padding:"10px 8px",borderRadius:10,cursor:"pointer",textAlign:"center",border:"2px solid "+(mdl===opt.v?"#7c3aed":th.b),background:mdl===opt.v?"rgba(124,58,237,0.1)":th.h,color:th.t}},
+            React.createElement("div",{style:{fontSize:12,fontWeight:700}},opt.l),
+            React.createElement("div",{style:{fontSize:10,color:"#7c3aed"}},opt.sub)
+          );
+        })
+      )
+    ),
+    React.createElement("div",{style:{marginBottom:12}},
+      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}},"Claude API Key"),
+      React.createElement("div",{style:{display:"flex",gap:6}},
+        React.createElement("input",{type:showC?"text":"password",value:keys.claude,onChange:function(e){setKeys(function(k){return Object.assign({},k,{claude:e.target.value});});},placeholder:"sk-ant-...",style:{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,outline:"none"}}),
+        React.createElement("button",{onClick:function(){setShowC(function(v){return !v;});},style:{padding:"6px 8px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:12}},showC?"🙈":"👁️")
+      ),
+      React.createElement("div",{style:{fontSize:9,color:th.tm,marginTop:3}},"console.anthropic.com → API Keys")
+    ),
+    React.createElement("div",{style:{marginBottom:18}},
+      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}},"OpenAI API Key"),
+      React.createElement("div",{style:{display:"flex",gap:6}},
+        React.createElement("input",{type:showO?"text":"password",value:keys.openai,onChange:function(e){setKeys(function(k){return Object.assign({},k,{openai:e.target.value});});},placeholder:"sk-...",style:{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,outline:"none"}}),
+        React.createElement("button",{onClick:function(){setShowO(function(v){return !v;});},style:{padding:"6px 8px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:12}},showO?"🙈":"👁️")
+      ),
+      React.createElement("div",{style:{fontSize:9,color:th.tm,marginTop:3}},"platform.openai.com → API Keys")
+    ),
+    React.createElement("div",{style:{display:"flex",gap:8}},
+      React.createElement("button",{onClick:function(){onSave(keys,mdl);},style:{flex:1,padding:10,borderRadius:10,border:"none",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}},"Salveaza"),
+      React.createElement("button",{onClick:onClose,style:{padding:"10px 16px",borderRadius:10,border:"1px solid "+th.b,background:th.h,color:th.t,cursor:"pointer",fontSize:13}},"Anuleaza")
+    )
+  );
+}
+
+function AIChatWidget(props) {
+  var th=props.th,evs=props.evs,tasks=props.tasks,mob=props.mob;
+  var _o=useState(false); var open=_o[0],setOpen=_o[1];
+  var _ms=useState([]); var msgs=_ms[0],setMsgs=_ms[1];
+  var _in=useState(""); var input=_in[0],setInput=_in[1];
+  var _ld=useState(false); var loading=_ld[0],setLoading=_ld[1];
+  var _ss=useState(false); var showS=_ss[0],setShowS=_ss[1];
+  var _ak=useState(function(){try{return JSON.parse(localStorage.getItem("pm_ai_keys")||"{}");}catch(e){return {};}});
+  var apiKeys=_ak[0],setApiKeys=_ak[1];
+  var _md=useState(localStorage.getItem("pm_ai_model")||"claude"); var model=_md[0],setModel=_md[1];
+  var bottomRef=useRef(null);
+
+  useEffect(function(){if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:"smooth"});},[msgs,loading]);
+
+  function saveSettings(keys,m){
+    localStorage.setItem("pm_ai_keys",JSON.stringify(keys));
+    localStorage.setItem("pm_ai_model",m);
+    setApiKeys(keys);setModel(m);setShowS(false);
+  }
+
+  async function sendMsg(){
+    if(!input.trim()||loading)return;
+    var userMsg={role:"user",content:input.trim()};
+    var history=msgs.concat([userMsg]);
+    setMsgs(history);setInput("");setLoading(true);
+    try{
+      var key=model==="claude"?apiKeys.claude:apiKeys.openai;
+      if(!key){setMsgs(function(m){return m.concat([{role:"assistant",content:"⚠️ API key lipsa. Apasa ⚙️"}]);});setLoading(false);return;}
+      var sys=buildAIContext(evs,tasks);
+      var reply;
+      if(model==="claude"){
+        var r=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:1024,system:sys,messages:history})});
+        var d=await r.json();
+        reply=(d.content&&d.content[0]&&d.content[0].text)||(d.error&&d.error.message)||"Eroare.";
+      }else{
+        var r2=await fetch("https://api.openai.com/v1/chat/completions",{method:"POST",headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"system",content:sys}].concat(history)})});
+        var d2=await r2.json();
+        reply=(d2.choices&&d2.choices[0]&&d2.choices[0].message&&d2.choices[0].message.content)||(d2.error&&d2.error.message)||"Eroare.";
+      }
+      setMsgs(function(m){return m.concat([{role:"assistant",content:reply}]);});
+    }catch(err){setMsgs(function(m){return m.concat([{role:"assistant",content:"Eroare: "+err.message}]);});}
+    setLoading(false);
+  }
+
+  var hasKey=model==="claude"?!!apiKeys.claude:!!apiKeys.openai;
+  var SUGG=["Cate evenimente confirmate?","Genereaza oferta corporate","Ce functionalitati are aplicatia?"];
+
+  return React.createElement("div",null,
+    React.createElement("button",{onClick:function(){setOpen(function(o){return !o;});},title:"AI Assistant",style:{position:"fixed",bottom:mob?72:24,right:20,zIndex:9999,width:50,height:50,borderRadius:25,background:open?"#6d28d9":"linear-gradient(135deg,#7c3aed,#4f46e5)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(79,70,229,0.5)",fontSize:22,color:"#fff"}},open?"✕":"🤖"),
+    open&&React.createElement("div",{style:{position:"fixed",bottom:mob?0:82,right:mob?0:20,width:mob?"100%":"370px",height:mob?"78vh":"520px",background:th.c,border:"1px solid "+th.b,borderRadius:mob?"16px 16px 0 0":"16px",boxShadow:"0 8px 40px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",zIndex:9998,overflow:"hidden"}},
+      React.createElement("div",{style:{padding:"11px 14px",borderBottom:"1px solid "+th.b,display:"flex",alignItems:"center",gap:8}},
+        React.createElement("span",{style:{fontSize:20}},"🤖"),
+        React.createElement("div",{style:{flex:1}},
+          React.createElement("div",{style:{fontSize:13,fontWeight:700}},"AI Assistant"),
+          React.createElement("div",{style:{fontSize:10,color:th.tm}},(model==="claude"?"Claude 3.5 Haiku":"GPT-4o Mini")+" "+(hasKey?"✓ conectat":"— fara API key"))
+        ),
+        React.createElement("button",{onClick:function(){setShowS(true);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"⚙️"),
+        React.createElement("button",{onClick:function(){setMsgs([]);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"🗑")
+      ),
+      React.createElement("div",{style:{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:8}},
+        msgs.length===0&&React.createElement("div",{style:{textAlign:"center",color:th.tm,fontSize:12,marginTop:16}},
+          React.createElement("div",{style:{fontSize:36,marginBottom:8}},"🎸"),
+          React.createElement("div",{style:{fontWeight:700,fontSize:13,marginBottom:12}},"Salut! Sunt asistentul tau AI."),
+          SUGG.map(function(s){return React.createElement("button",{key:s,onClick:function(){setInput(s);},style:{display:"block",width:"100%",marginBottom:5,padding:"7px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,cursor:"pointer",textAlign:"left"}},"💬 "+s);})
+        ),
+        msgs.map(function(m,i){return React.createElement("div",{key:i,style:{alignSelf:m.role==="user"?"flex-end":"flex-start",maxWidth:"88%",padding:"9px 12px",borderRadius:m.role==="user"?"12px 12px 3px 12px":"12px 12px 12px 3px",background:m.role==="user"?"linear-gradient(135deg,#7c3aed,#4f46e5)":th.h,color:m.role==="user"?"#fff":th.t,fontSize:12,lineHeight:1.6,border:m.role==="assistant"?"1px solid "+th.b:"none",whiteSpace:"pre-wrap"}},m.content);}),
+        loading&&React.createElement("div",{style:{alignSelf:"flex-start",padding:"9px 12px",borderRadius:12,background:th.h,border:"1px solid "+th.b,fontSize:12,color:th.tm}},"⏳ Se gandeste..."),
+        React.createElement("div",{ref:bottomRef})
+      ),
+      React.createElement("div",{style:{padding:"10px 12px",borderTop:"1px solid "+th.b,display:"flex",gap:8}},
+        React.createElement("input",{value:input,onChange:function(e){setInput(e.target.value);},onKeyDown:function(e){if(e.key==="Enter"&&!e.shiftKey)sendMsg();},placeholder:"Scrie un mesaj...",style:{flex:1,padding:"9px 12px",borderRadius:10,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:12,outline:"none"}}),
+        React.createElement("button",{onClick:sendMsg,disabled:loading||!input.trim(),style:{padding:"9px 14px",borderRadius:10,border:"none",background:loading||!input.trim()?th.ab:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",fontSize:16,cursor:loading||!input.trim()?"default":"pointer"}},"➤")
+      )
+    ),
+    showS&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10000},onClick:function(){setShowS(false);}},
+      React.createElement(SettingsAI,{th:th,apiKeys:apiKeys,model:model,onSave:saveSettings,onClose:function(){setShowS(false);}})
+    )
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2949,6 +3085,7 @@ function App() {
         </div>;
       })()}
 
+      <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
       <Toast message={toast.message} visible={toast.visible}/>
     </div>
   );
