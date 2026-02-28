@@ -1412,6 +1412,211 @@ Vom furniza 3 mix-uri separate din Stage Box-ul poziționat pe scenă:
   );
 }
 
+// ═══ AI CHAT WIDGET ═══
+function buildAIContext(evs, tasks) {
+  const confirmed = evs.filter(e=>e.st==="confirmat");
+  const pending   = evs.filter(e=>e.st==="asteptare");
+  const totalRev  = confirmed.reduce((s,e)=>s+(e.fee||0),0);
+  const upcomingRaw = evs.filter(e=>e.date&&new Date(e.date)>=new Date()).sort((a,b)=>a.date>b.date?1:-1).slice(0,5);
+  const upcoming  = upcomingRaw.map(e=>`  - ${e.date} | ${e.cn||e.title||"—"} | ${e.type||""} | ${e.st} | ${e.fee||0} RON`).join("\n")||"  (niciun eveniment viitor)";
+  const activeTasks = tasks.filter(t=>!t.done).slice(0,8).map(t=>`  - [${t.priority||"medium"}] ${t.text}`).join("\n")||"  (niciun task activ)";
+  return `Ești un asistent AI integrat în Phaser Manager — aplicație de management pentru trupa Phaser (trupă de nuntă/corporate/public din România).
+
+DATE LIVE DIN APLICAȚIE:
+• Total evenimente: ${evs.length} (confirmate: ${confirmed.length}, în așteptare: ${pending.length})
+• Venit total confirmat: ${totalRev.toLocaleString()} RON
+• Tasks active: ${tasks.filter(t=>!t.done).length}
+
+EVENIMENTE VIITOARE:
+${upcoming}
+
+TASKS ACTIVE:
+${activeTasks}
+
+Răspunde ÎNTOTDEAUNA în română. Fii concis, practic și util.
+Când generezi oferte sau conținut, adaptează la stilul trupei Phaser — profesional dar cald.`;
+}
+
+function SettingsAI({ th, apiKeys, model: initModel, onSave, onClose }) {
+  const [keys, setKeys]         = useState({ claude: apiKeys.claude||"", openai: apiKeys.openai||"" });
+  const [mdl, setMdl]           = useState(initModel);
+  const [showClaude, setShowC]  = useState(false);
+  const [showOAI, setShowOAI]   = useState(false);
+  return (
+    <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:340,padding:24,maxWidth:"90vw"}} onClick={e=>e.stopPropagation()}>
+      <h3 style={{fontSize:15,fontWeight:700,marginBottom:16}}>⚙️ Setări AI Assistant</h3>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:11,color:"#7c3aed",fontWeight:700,marginBottom:8}}>Model preferat</div>
+        <div style={{display:"flex",gap:8}}>
+          {[{v:"claude",l:"Claude",sub:"Anthropic"},{v:"openai",l:"GPT-4o Mini",sub:"OpenAI"}].map(opt=>(
+            <button key={opt.v} onClick={()=>setMdl(opt.v)} style={{flex:1,padding:"10px 8px",borderRadius:10,cursor:"pointer",textAlign:"center",border:`2px solid ${mdl===opt.v?"#7c3aed":th.b}`,background:mdl===opt.v?"rgba(124,58,237,0.1)":th.h,color:th.t}}>
+              <div style={{fontSize:12,fontWeight:700}}>{opt.l}</div>
+              <div style={{fontSize:10,color:"#7c3aed"}}>{opt.sub}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}}>Claude API Key</label>
+        <div style={{display:"flex",gap:6}}>
+          <input type={showClaude?"text":"password"} value={keys.claude} onChange={e=>setKeys(k=>({...k,claude:e.target.value}))} placeholder="sk-ant-..." style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1px solid ${th.b}`,background:th.h,color:th.t,fontSize:11,outline:"none"}}/>
+          <button onClick={()=>setShowC(v=>!v)} style={{padding:"6px 8px",border:`1px solid ${th.b}`,borderRadius:8,background:th.h,cursor:"pointer",color:th.tm,fontSize:12}}>{showClaude?"🙈":"👁️"}</button>
+        </div>
+        <div style={{fontSize:9,color:th.tm,marginTop:3}}>Obține la: console.anthropic.com → API Keys</div>
+      </div>
+      <div style={{marginBottom:18}}>
+        <label style={{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}}>OpenAI API Key</label>
+        <div style={{display:"flex",gap:6}}>
+          <input type={showOAI?"text":"password"} value={keys.openai} onChange={e=>setKeys(k=>({...k,openai:e.target.value}))} placeholder="sk-..." style={{flex:1,padding:"8px 10px",borderRadius:8,border:`1px solid ${th.b}`,background:th.h,color:th.t,fontSize:11,outline:"none"}}/>
+          <button onClick={()=>setShowOAI(v=>!v)} style={{padding:"6px 8px",border:`1px solid ${th.b}`,borderRadius:8,background:th.h,cursor:"pointer",color:th.tm,fontSize:12}}>{showOAI?"🙈":"👁️"}</button>
+        </div>
+        <div style={{fontSize:9,color:th.tm,marginTop:3}}>Obține la: platform.openai.com → API Keys</div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>onSave(keys,mdl)} style={{flex:1,padding:10,borderRadius:10,border:"none",background:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",fontWeight:700,cursor:"pointer",fontSize:13}}>Salvează</button>
+        <button onClick={onClose} style={{padding:"10px 16px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h,color:th.t,cursor:"pointer",fontSize:13}}>Anulează</button>
+      </div>
+    </div>
+  );
+}
+
+function AIChatWidget({ th, evs, tasks, mob }) {
+  const [open, setOpen]           = useState(false);
+  const [msgs, setMsgs]           = useState([]);
+  const [input, setInput]         = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [showSettings, setShowS]  = useState(false);
+  const [apiKeys, setApiKeys]     = useState(()=>{ try{return JSON.parse(localStorage.getItem("pm_ai_keys")||"{}");}catch{return {};} });
+  const [model, setModel]         = useState(()=>localStorage.getItem("pm_ai_model")||"claude");
+  const bottomRef = useRef(null);
+
+  useEffect(()=>{ if(bottomRef.current) bottomRef.current.scrollIntoView({behavior:"smooth"}); },[msgs,loading]);
+
+  const saveSettings = (keys, m) => {
+    localStorage.setItem("pm_ai_keys", JSON.stringify(keys));
+    localStorage.setItem("pm_ai_model", m);
+    setApiKeys(keys); setModel(m); setShowS(false);
+  };
+
+  const sendMsg = async () => {
+    if(!input.trim()||loading) return;
+    const userMsg = {role:"user",content:input.trim()};
+    const history = [...msgs, userMsg];
+    setMsgs(history); setInput(""); setLoading(true);
+    try {
+      const key = model==="claude" ? apiKeys.claude : apiKeys.openai;
+      if(!key){ setMsgs(m=>[...m,{role:"assistant",content:"⚠️ API key lipsă. Apasă ⚙️ pentru a configura."}]); setLoading(false); return; }
+      const sys = buildAIContext(evs, tasks);
+      let reply;
+      if(model==="claude"){
+        const r = await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+          body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:1024,system:sys,messages:history})
+        });
+        const d = await r.json();
+        reply = d.content?.[0]?.text || d.error?.message || "Eroare necunoscută.";
+      } else {
+        const r = await fetch("https://api.openai.com/v1/chat/completions",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","Authorization":`Bearer ${key}`},
+          body:JSON.stringify({model:"gpt-4o-mini",messages:[{role:"system",content:sys},...history]})
+        });
+        const d = await r.json();
+        reply = d.choices?.[0]?.message?.content || d.error?.message || "Eroare necunoscută.";
+      }
+      setMsgs(m=>[...m,{role:"assistant",content:reply}]);
+    } catch(e){ setMsgs(m=>[...m,{role:"assistant",content:`❌ Eroare: ${e.message}`}]); }
+    setLoading(false);
+  };
+
+  const hasKey = model==="claude" ? !!apiKeys.claude : !!apiKeys.openai;
+  const SUGGESTIONS = ["Câte evenimente am confirmate?","Generează o ofertă corporate pentru 150 persoane","Ce funcționalități are aplicația?","Cum adaug un eveniment nou?"];
+
+  return <>
+    {/* Buton flotant */}
+    <button onClick={()=>setOpen(o=>!o)} title="AI Assistant" style={{
+      position:"fixed", bottom:mob?72:24, right:20, zIndex:2000,
+      width:50, height:50, borderRadius:25,
+      background:open?"rgba(124,58,237,0.9)":"linear-gradient(135deg,#7c3aed,#4f46e5)",
+      border:"none", cursor:"pointer",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      boxShadow:"0 4px 20px rgba(79,70,229,0.5)",
+      fontSize:22, transition:"all 0.2s", color:"#fff",
+    }}>{open?"✕":"🤖"}</button>
+
+    {/* Panou chat */}
+    {open&&<div style={{
+      position:"fixed", bottom:mob?0:82, right:mob?0:20,
+      width:mob?"100%":370, height:mob?"78vh":520,
+      background:th.c, border:`1px solid ${th.b}`,
+      borderRadius:mob?"16px 16px 0 0":16,
+      boxShadow:"0 8px 40px rgba(0,0,0,0.35)",
+      display:"flex", flexDirection:"column", zIndex:1999, overflow:"hidden",
+    }}>
+      {/* Header */}
+      <div style={{padding:"11px 14px",borderBottom:`1px solid ${th.b}`,display:"flex",alignItems:"center",gap:8,background:"rgba(124,58,237,0.08)"}}>
+        <span style={{fontSize:20}}>🤖</span>
+        <div style={{flex:1}}>
+          <div style={{fontSize:13,fontWeight:700}}>AI Assistant</div>
+          <div style={{fontSize:10,color:th.tm}}>{model==="claude"?"Claude 3.5 Haiku":"GPT-4o Mini"} {hasKey?"✓ conectat":"— fără API key"}</div>
+        </div>
+        <button onClick={()=>setShowS(true)} title="Setări" style={{padding:"4px 6px",border:`1px solid ${th.b}`,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}}>⚙️</button>
+        <button onClick={()=>setMsgs([])} title="Curăță" style={{padding:"4px 6px",border:`1px solid ${th.b}`,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}}>🗑</button>
+      </div>
+
+      {/* Mesaje */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 12px",display:"flex",flexDirection:"column",gap:8}}>
+        {msgs.length===0&&<div style={{textAlign:"center",color:th.tm,fontSize:12,marginTop:16}}>
+          <div style={{fontSize:36,marginBottom:8}}>🎸</div>
+          <div style={{fontWeight:700,fontSize:13,marginBottom:4}}>Salut! Sunt asistentul tău AI.</div>
+          <div style={{fontSize:11,lineHeight:1.5,marginBottom:14}}>Știu despre evenimentele și task-urile<br/>tale. Întreabă orice!</div>
+          {SUGGESTIONS.map(s=>(
+            <button key={s} onClick={()=>setInput(s)} style={{display:"block",width:"100%",marginBottom:5,padding:"7px 10px",borderRadius:8,border:`1px solid ${th.b}`,background:th.h,color:th.t,fontSize:11,cursor:"pointer",textAlign:"left"}}>💬 {s}</button>
+          ))}
+        </div>}
+        {msgs.map((m,i)=>(
+          <div key={i} style={{
+            alignSelf:m.role==="user"?"flex-end":"flex-start",
+            maxWidth:"88%", padding:"9px 12px",
+            borderRadius:m.role==="user"?"12px 12px 3px 12px":"12px 12px 12px 3px",
+            background:m.role==="user"?"linear-gradient(135deg,#7c3aed,#4f46e5)":th.h,
+            color:m.role==="user"?"#fff":th.t,
+            fontSize:12, lineHeight:1.6,
+            border:m.role==="assistant"?`1px solid ${th.b}`:"none",
+            whiteSpace:"pre-wrap",
+          }}>{m.content}</div>
+        ))}
+        {loading&&<div style={{alignSelf:"flex-start",padding:"9px 12px",borderRadius:12,background:th.h,border:`1px solid ${th.b}`,fontSize:12,color:th.tm}}>
+          ⏳ Se gândește...
+        </div>}
+        <div ref={bottomRef}/>
+      </div>
+
+      {/* Input */}
+      <div style={{padding:"10px 12px",borderTop:`1px solid ${th.b}`,display:"flex",gap:8}}>
+        <input
+          value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&sendMsg()}
+          placeholder="Scrie un mesaj..."
+          style={{flex:1,padding:"9px 12px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h,color:th.t,fontSize:12,outline:"none"}}
+        />
+        <button onClick={sendMsg} disabled={loading||!input.trim()} style={{
+          padding:"9px 14px",borderRadius:10,border:"none",
+          background:loading||!input.trim()?th.ab:"linear-gradient(135deg,#7c3aed,#4f46e5)",
+          color:"#fff",fontSize:16,cursor:loading||!input.trim()?"default":"pointer",
+        }}>➤</button>
+      </div>
+    </div>}
+
+    {/* Modal setări */}
+    {showSettings&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:3000}} onClick={()=>setShowS(false)}>
+      <SettingsAI th={th} apiKeys={apiKeys} model={model} onSave={saveSettings} onClose={()=>setShowS(false)}/>
+    </div>}
+  </>;
+}
+
 // ═══ MAIN APP ═══
 export default function App() {
   const [theme, setTheme] = useState(gTheme());
@@ -2099,6 +2304,7 @@ export default function App() {
         </div>;
       })()}
 
+      <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
       <Toast message={toast.message} visible={toast.visible}/>
     </div>
   );
