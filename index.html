@@ -976,8 +976,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
                 body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}
                 @media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}
                 img{max-width:100%;height:auto}
-                .print-break{break-before:page!important;page-break-before:always!important}
-              </style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+                              </style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
               printWin.document.close();
             }} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
               ↑ Trimite PDF
@@ -1110,8 +1109,11 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             </div>
 
             {/* Media / PHASER Live — după plată, cu video-uri selectate (doar afișare, fără input în PDF) */}
-            {isPriv&&videos.filter(v=>v.checked).length>0&&<div className="print-break" style={{background:"#fff",borderRadius:12,padding:"20px 24px",marginBottom:8,borderLeft:"4px solid #111"}}>
-              <div style={{fontSize:14,fontWeight:700,color:"#111",marginBottom:16}}>{mediaTitle||"PHASER Live"}</div>
+            {isPriv&&videos.filter(v=>v.checked).length>0&&<div style={{background:"#fff",borderRadius:12,padding:"20px 24px",marginBottom:8,borderLeft:"4px solid #111"}}>
+              <div style={{marginBottom:24,paddingBottom:20,borderBottom:"1px solid #f0f0f0"}}>
+                <div style={{fontSize:40,fontWeight:900,color:"#111",letterSpacing:-2,lineHeight:1,marginBottom:8}}>Feel the Show.</div>
+                <div style={{fontSize:13,color:"#999",fontStyle:"italic",letterSpacing:.3}}>Za good vibes with Phaser</div>
+              </div>
               {videos.filter(v=>v.checked).map((v,i)=>(
                 <div key={v.id} style={{marginBottom:i<videos.filter(x=>x.checked).length-1?20:0}}>
                   <div style={{position:"relative",paddingBottom:"56.25%",height:0,marginBottom:8}}>
@@ -1128,7 +1130,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             </div>}
 
             {/* Playlist — la final */}
-            {isPriv&&covers.filter(c=>c.checked).length>0&&showPlaylist&&<div className="print-break" style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
+            {isPriv&&covers.filter(c=>c.checked).length>0&&showPlaylist&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
                 <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999"}}>Playlist</div>
                 <button onClick={()=>setShowPlaylist(false)} style={{fontSize:10,color:"#bbb",background:"transparent",border:"none",cursor:"pointer"}}>Ascunde</button>
