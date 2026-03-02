@@ -970,12 +970,14 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               if(!offerEl) return;
               const printWin = window.open("","_blank","width=820,height=1000");
               if(!printWin) return;
-              printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Ofertă PHASER · ${ev.type||""}</title><style>
-                *{box-sizing:border-box;margin:0;padding:0}
+              let pHtml = offerEl.innerHTML.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,'').replace(/<iframe\b[^>]*\/>/gi,'');
+              printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${window.location.href}"><title>O${ev.offerNr||"?"} (Event ${ev.date||""})</title><style>
+                *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
                 body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}
                 @media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}
                 img{max-width:100%;height:auto}
-              </style></head><body>${offerEl.innerHTML}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+                [style*="padding-top:56"],[style*="padding-top: 56"]{display:none!important}
+              </style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
               printWin.document.close();
             }} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
               ↑ Trimite PDF
@@ -3266,6 +3268,22 @@ function App() {
 
               <div style={{display:"flex",gap:5,justifyContent:mob?"center":"flex-end",flexWrap:"wrap",marginTop:8}}>
                 <button onClick={()=>{closeModal();setTimeout(()=>openModal("oferta",ev.id),80);}} style={sty.b}><IcFile s={13}/> Ofertă</button>
+                <button onClick={()=>{
+                  // Deschide oferta și declanșează print după ce se randează
+                  closeModal();
+                  setTimeout(()=>{
+                    openModal("oferta",ev.id);
+                    setTimeout(()=>{
+                      const offerEl = document.getElementById("offer-print-content");
+                      if(!offerEl) return;
+                      const printWin = window.open("","_blank","width=820,height=1000");
+                      if(!printWin) return;
+                      let pHtml = offerEl.innerHTML.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,'').replace(/<iframe\b[^>]*\/>/gi,'');
+                      printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${window.location.href}"><title>O${ev.offerNr||"?"} (Event ${ev.date||""})</title><style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}@media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}img{max-width:100%;height:auto}[style*="padding-top:56"],[style*="padding-top: 56"]{display:none!important}</style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+                      printWin.document.close();
+                    }, 400);
+                  }, 80);
+                }} style={{...sty.bg,background:"#fbbf24",color:"#111",borderColor:"#fbbf24",fontWeight:700}}>↑ Trimite PDF</button>
                 {isConfirmed&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("finance",ev.id),80);}} style={sty.bg}><IcMoney s={13}/> Finanțe</button>}
                 {p.e&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}} style={sty.bg}><IcEdit s={13}/> Editează</button>}
                 {p.d&&<button onClick={()=>{if(window.confirm("Ștergi?"))delEv(ev.id)}} style={{...sty.bg,color:"#ef4444",borderColor:"#ef4444"}}><IcTrash s={13}/> Șterge</button>}
