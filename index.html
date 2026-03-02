@@ -654,7 +654,8 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
                     onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";}}>
                     <div style={{fontSize:10,color:th.tm,marginBottom:2}}>{ev.type} {ev.cat==="private"?"· ZGV":"· PHASER"}</div>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
-                    <div style={{fontSize:10,color:th.tm}}>{fD(ev.date)} · {f$(ev.fee)}</div>
+                    <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fD(ev.date)}</div>
+                    <div style={{fontSize:10,color:th.tm}}>{f$(ev.fee)}</div>
                   </div>;
                 })}
               </div>
@@ -1021,49 +1022,6 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
 
         {/* OFERTĂ */}
                 {tab==="oferta"&&<div style={{flex:1,overflow:"auto",background:"#f4f4f4"}}>
-          {/* Configurare — collapsibilă, ascunsă implicit după creare */}
-          {isPriv&&<div style={{maxWidth:560,margin:"0 auto",padding:mob?"16px":"24px 16px",marginBottom:20}}>
-            {!configVisible?<button onClick={()=>setConfigVisible(true)} style={{padding:"8px 14px",borderRadius:8,border:"1px dashed #ccc",background:"#fff",fontSize:11,color:"#888",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>+ Afișează configurare (media, playlist)</button>:<>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:700,color:"#666",textTransform:"uppercase",letterSpacing:1}}>Configurare ofertă</div>
-              <button onClick={()=>setConfigVisible(false)} style={{fontSize:10,color:"#888",background:"transparent",border:"none",cursor:"pointer"}}>Ascunde</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:12}}>
-              <div style={{background:"#fff",borderRadius:12,padding:"16px 20px",border:"1px solid #e5e5e5"}}>
-                <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Media — video-uri în ofertă</div>
-                <input value={mediaTitle} onChange={e=>{setMediaTitle(e.target.value);syncOffer({mediaTitle:e.target.value});}} placeholder="Titlu secțiune (ex: PHASER Live)" style={{width:"100%",padding:"8px 12px",borderRadius:8,border:"1px solid #e5e5e5",fontSize:12,marginBottom:12}}/>
-                {videos.map(v=>(
-                  <div key={v.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderBottom:"1px solid #eee"}}>
-                    <input type="checkbox" checked={v.checked} onChange={()=>{const nv=videos.map(x=>x.id===v.id?{...x,checked:!x.checked}:x);setVideos(nv);syncOffer({videos:nv});}} style={{accentColor:"#111",width:14,height:14,cursor:"pointer"}}/>
-                    <span style={{fontSize:11,flex:1,color:"#333"}}>{v.title||"Video"}</span>
-                    <input value={v.caption||""} onChange={e=>{const nv=videos.map(x=>x.id===v.id?{...x,caption:e.target.value}:x);setVideos(nv);syncOffer({videos:nv});}} placeholder="Caption" style={{flex:1,padding:"4px 8px",fontSize:11,borderRadius:6,border:"1px solid #e5e5e5"}}/>
-                  </div>
-                ))}
-              </div>
-              <div style={{background:"#fff",borderRadius:12,padding:"16px 20px",border:"1px solid #e5e5e5"}}>
-                <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Playlist — selectează piese</div>
-                <div style={{position:"relative",marginBottom:10}}>
-                  <IcSearch s={13} style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#aaa",pointerEvents:"none"}}/>
-                  <input value={playlistSearch} onChange={e=>setPlaylistSearch(e.target.value)} placeholder="Caută cântec sau artist..." style={{width:"100%",padding:"7px 12px 7px 32px",borderRadius:8,border:"1px solid #e5e5e5",fontSize:12}}/>
-                </div>
-                <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  <button onClick={()=>{const nv=covers.map(c=>({...c,checked:true}));setCovers(nv);syncOffer({covers:nv});}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #e5e5e5",background:"#fff",fontSize:11,cursor:"pointer",color:"#333"}}>Selectează tot</button>
-                  <button onClick={()=>{const nv=covers.map(c=>({...c,checked:false}));setCovers(nv);syncOffer({covers:nv});}} style={{padding:"3px 10px",borderRadius:6,border:"1px solid #e5e5e5",background:"#fff",fontSize:11,cursor:"pointer",color:"#333"}}>Deselectează tot</button>
-                </div>
-                <div style={{maxHeight:180,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
-                  {covers.filter(c=>!playlistSearch||c.title.toLowerCase().includes(playlistSearch.toLowerCase())||(c.artist||'').toLowerCase().includes(playlistSearch.toLowerCase())).map((c)=>(
-                    <div key={c.id} onClick={()=>{const nv=covers.map(x=>x.id===c.id?{...x,checked:!x.checked}:x);setCovers(nv);syncOffer({covers:nv});}}
-                      style={{display:"flex",alignItems:"center",gap:10,padding:"6px 10px",borderRadius:7,border:`1px solid ${c.checked?"#111":"#ebebeb"}`,background:c.checked?"#f0f0f0":"#fff",cursor:"pointer",fontSize:12}}>
-                      <div style={{width:14,height:14,borderRadius:4,border:`2px solid ${c.checked?"#111":"#ccc"}`,background:c.checked?"#111":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{c.checked&&<IcCheck s={8} style={{color:"#fff"}}/>}</div>
-                      <span style={{flex:1,fontWeight:600,color:"#222"}}>{c.title}</span>
-                      <span style={{fontSize:11,color:"#888"}}>— {c.artist}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-            </>}
-          </div>}
           {/* Ofertă stilizată — de trimis la client / PDF */}
           <div id="offer-print-content" style={{maxWidth:560,margin:"0 auto",padding:mob?"16px":"24px 16px"}}>
 
