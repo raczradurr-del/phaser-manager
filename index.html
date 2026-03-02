@@ -956,65 +956,22 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200}} onClick={onClose}>
       <div style={{background:"#fff",borderRadius:mob?0:16,width:mob?"100%":720,maxHeight:mob?"100vh":"93vh",height:mob?"100vh":"auto",display:"flex",flexDirection:"column",color:"#111",boxShadow:"0 32px 80px rgba(0,0,0,.5)"}} onClick={e=>e.stopPropagation()}>
         
-        {/* Header cu logo și status live — culori calde */}
+        {/* Header simplu — logo + trimite + close */}
         <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(251,191,36,.2)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:mob?"0":"16px 16px 0 0",flexShrink:0}}>
           <Logo height={42}/>
-          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-            {/* STATUS LIVE — se schimbă imediat vizibil */}
-            <div style={{display:"flex",gap:3,background:"rgba(255,255,255,.1)",borderRadius:8,padding:3}}>
-              {Object.entries(ST).map(([k,v])=>(
-                <button key={k} onClick={()=>handleStatus(k)} style={{
-                  padding:"3px 8px",borderRadius:6,border:"none",fontSize:10,fontWeight:700,cursor:"pointer",
-                  background:localSt===k?v.c:"transparent",
-                  color:localSt===k?"#fff":v.c,
-                  transition:"all .15s"
-                }}>{v.l}</button>
-              ))}
-            </div>
-            {onEdit&&<button onClick={()=>{onClose();setTimeout(()=>onEdit(ev),80);}} style={{padding:"6px 12px",borderRadius:6,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",fontWeight:600,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>✏️ Editează</button>}
+          <div style={{display:"flex",gap:10,alignItems:"center"}}>
             <button onClick={()=>{
-              // Generează link Google Calendar pre-completat
-              const title = `PHASER · ${ev.type||"Eveniment"}${ev.venue?" @ "+ev.venue:""}`;
-              const dateStr = (ev.date||"").replace(/-/g,"");
-              // Ora de start — Show Start dacă există, altfel 20:00 implicit
-              const startTime = (ev.ss||ev.li||"20:00").replace(":","");
-              // Durata: număr de reprize × durata reprize + pauze (estimare)
-              const totalMin = (ev.rep||1)*(ev.repDur||45) + Math.max(0,((ev.rep||1)-1)*20);
-              const startMinutes = parseInt(startTime.slice(0,2))*60 + parseInt(startTime.slice(2,4)||"0");
-              const endMinutes = startMinutes + totalMin;
-              const endH = String(Math.floor(endMinutes/60)%24).padStart(2,"0");
-              const endM = String(endMinutes%60).padStart(2,"0");
-              const dates = dateStr
-                ? `${dateStr}T${startTime}00/${dateStr}T${endH}${endM}00`
-                : "";
-              const desc = [
-                ev.cn?"Client: "+ev.cn:"",
-                ev.cp?"Tel: "+ev.cp:"",
-                ev.ce?"Email: "+ev.ce:"",
-                "Onorariu: "+f$(ev.fee||0),
-                ev.dep?"Avans: "+f$(ev.dep):"",
-                ev.desc?"\n"+ev.desc:""
-              ].filter(Boolean).join("\n");
-              const loc = [ev.venue, ev.city].filter(Boolean).join(", ");
-              const url = `https://calendar.google.com/calendar/r/eventedit?text=${encodeURIComponent(title)}&dates=${dates}&details=${encodeURIComponent(desc)}&location=${encodeURIComponent(loc)}`;
-              window.open(url,"_blank");
-            }} style={{padding:"6px 12px",borderRadius:6,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",fontWeight:600,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-              📅 Calendar
-            </button>
-            <button onClick={copyOffer} style={{padding:"6px 12px",borderRadius:6,border:"none",background:copied?"#22c55e":"rgba(255,255,255,.15)",color:"#fff",fontWeight:600,fontSize:11,cursor:"pointer"}}>{copied?"✓ Copiat!":"Copiază"}</button>
-            <button onClick={()=>{
-              // Open print dialog — browser saves as PDF
-              const printWin = window.open("","_blank","width=800,height=900");
               const offerEl = document.getElementById("offer-print-content");
-              if(offerEl && printWin) {
-                printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Oferta PHASER</title><style>*{box-sizing:border-box;margin:0;padding:0;font-family:'Helvetica Neue',Arial,sans-serif}body{background:#f4f4f4;padding:20px}@media print{body{padding:0;background:#fff}.no-print{display:none!important}}</style></head><body>${offerEl.innerHTML}</body></html>`);
-                printWin.document.close();
-                setTimeout(()=>printWin.print(), 500);
+              const text = offerEl ? offerEl.innerText : "";
+              if(navigator.share){
+                navigator.share({title:"Ofertă PHASER · "+(ev.type||""), text}).catch(()=>{});
+              } else {
+                navigator.clipboard.writeText(text).then(()=>alert("Ofertă copiată!")).catch(()=>{});
               }
-            }} style={{padding:"6px 12px",borderRadius:6,border:"none",background:"rgba(255,255,255,.15)",color:"#fff",fontWeight:600,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-              <IcFile s={12}/> PDF
+            }} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              ↑ Trimite
             </button>
-            <button onClick={onClose} style={{padding:4,border:"none",background:"transparent",color:"rgba(255,255,255,.6)",cursor:"pointer"}}><IcX s={16}/></button>
+            <button onClick={onClose} style={{padding:4,border:"none",background:"transparent",color:"rgba(255,255,255,.6)",cursor:"pointer"}}><IcX s={18}/></button>
           </div>
         </div>
 
@@ -1033,7 +990,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <div style={{position:"absolute",top:0,right:0,width:240,height:240,background:"radial-gradient(circle,rgba(245,158,11,.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
               <img src={LOGO_URL} alt="PHASER" style={{height:64,display:"block",marginBottom:24,objectFit:"contain",objectPosition:"left",filter:"brightness(1.1)"}}/>
               <div style={{fontSize:10,color:"rgba(251,191,36,.6)",letterSpacing:3,textTransform:"uppercase",marginBottom:8}}>Ofertă de colaborare</div>
-              <div style={{fontSize:22,fontWeight:700,color:"#fff",marginBottom:4}}>{ev.offerNr?"O"+ev.offerNr+" · ":""}{ev.type}</div>
+              <div style={{fontSize:22,fontWeight:700,color:"#fff",marginBottom:4}}>{ev.type}</div>
               <div style={{fontSize:13,color:"rgba(251,191,36,.5)"}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div>
               <div style={{marginTop:16,paddingTop:16,borderTop:"1px solid rgba(251,191,36,.12)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
@@ -1057,7 +1014,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Prestație artistică</div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <div>
-                  <div style={{fontWeight:700,fontSize:15,color:"#111"}}>PHASER — live</div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#111"}}>Prestație muzicală live</div>
                   <div style={{fontSize:12,color:"#888",marginTop:3}}>
                     {isPriv
                       ? ((ev.repDurs&&ev.repDurs.length>0)
@@ -2022,66 +1979,313 @@ function SettingsAI(props) {
   );
 }
 
-function processLocalCmd(input, evs, tasks, setEvs) {
-  var cmd = input.toLowerCase().trim();
+function processLocalCmd(input, evs, tasks) {
+  var cmd = input.trim();
   var norm = function(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); };
-  var ncmd = norm(cmd);
+  var nc = norm(cmd);
+  var cur = new Date(); cur.setHours(0,0,0,0);
+  var fmtE = function(e){ return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+(e.cn):"")+" | "+(e.date||"—")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(e.st||"—")+"]"; };
+  var PX = {r:{3:4100,2:3100,1:2350},sunet:350,lumini:500,ecran:600,scena:300,dj:600,pub:2000};
+  var ST_LABEL = {oferta:"Ofertă",asteptare:"Așt. contract",plata_avans:"Plată avans",confirmat:"Confirmat",respins:"Respins"};
+  var MEMBERS = [{id:"m1",n:"Carina Dumitru",r:"Vocal"},{id:"m2",n:"Radu Racz",r:"Bass"},{id:"m3",n:"Lucian Oprișan",r:"Clape"},{id:"m4",n:"Arnold Birta",r:"Tobe"},{id:"m5",n:"Sebastian Bârzeianu",r:"Chitară"}];
 
-  // ── RAPORT FINANCIAR ──
-  if(ncmd.match(/raport|financiar|venit|incasat|bani|total/)) {
-    var conf   = evs.filter(function(e){return e.st==="confirmat";});
-    var oferta = evs.filter(function(e){return e.st==="oferta";});
-    var ast    = evs.filter(function(e){return e.st==="asteptare";});
-    var totConf= conf.reduce(function(s,e){return s+(e.fee||0);},0);
-    var totOf  = oferta.reduce(function(s,e){return s+(e.fee||0);},0);
-    var totAst = ast.reduce(function(s,e){return s+(e.fee||0);},0);
-    var totAll = evs.reduce(function(s,e){return s+(e.fee||0);},0);
-    return "📊 RAPORT FINANCIAR\n\n✅ Confirmate: "+conf.length+" → "+totConf.toLocaleString("ro-RO")+" €\n🟡 În ofertă: "+oferta.length+" → "+totOf.toLocaleString("ro-RO")+" €\n🟣 Așteptare contract: "+ast.length+" → "+totAst.toLocaleString("ro-RO")+" €\n\n💰 Pipeline total: "+totAll.toLocaleString("ro-RO")+" €\n📁 Total oferte: "+evs.length;
+  // ── helpers ──
+  var evByNr = function(nr){ return evs.find(function(e){return String(e.offerNr)===String(nr);}); };
+  var getOfferNr = function(){ var m=nc.match(/o(\d+)/); return m?m[1]:null; };
+  var svcTot = function(e){ var p=e.svcp||PX; var t=0; ["sunet","lumini","ecran","scena","dj"].forEach(function(k){if(e.svc&&e.svc[k])t+=p[k]||0;}); return t; };
+  var evTot = function(e){ return (e.fee||0)+svcTot(e); };
+
+  // ══════════════════════════════════════════════
+  // 1. RAPORT FINANCIAR
+  // ══════════════════════════════════════════════
+  if(nc.match(/raport|financiar|incasat|bani total|situatie financiara/)) {
+    var conf=evs.filter(function(e){return e.st==="confirmat";}),
+        oferta=evs.filter(function(e){return e.st==="oferta";}),
+        ast=evs.filter(function(e){return e.st==="asteptare";}),
+        plata=evs.filter(function(e){return e.st==="plata_avans";}),
+        resp=evs.filter(function(e){return e.st==="respins";});
+    var tC=conf.reduce(function(s,e){return s+evTot(e);},0),
+        tO=oferta.reduce(function(s,e){return s+(e.fee||0);},0),
+        tA=ast.reduce(function(s,e){return s+(e.fee||0);},0),
+        tP=plata.reduce(function(s,e){return s+(e.fee||0);},0),
+        pipe=tO+tA+tP;
+    return "📊 RAPORT FINANCIAR\n\n✅ Confirmate: "+conf.length+" → "+tC.toLocaleString("ro-RO")+" €\n🟣 Așt. contract: "+ast.length+" → "+tA.toLocaleString("ro-RO")+" €\n🔵 Plată avans: "+plata.length+" → "+tP.toLocaleString("ro-RO")+" €\n🟡 În ofertă: "+oferta.length+" → "+tO.toLocaleString("ro-RO")+" €\n🔴 Respinse: "+resp.length+"\n\n💰 Pipeline activ: "+pipe.toLocaleString("ro-RO")+" €\n📁 Total oferte: "+evs.length;
   }
 
-  // ── STATISTICI ──
-  if(ncmd.match(/stat|eveniment|cate|numar|tip/)) {
-    var types = {}; var stati = {};
-    evs.forEach(function(e){
-      types[e.type||"—"]=(types[e.type||"—"]||0)+1;
-      stati[e.st||"—"]=(stati[e.st||"—"]||0)+1;
-    });
-    var byType = Object.entries(types).sort(function(a,b){return b[1]-a[1];}).map(function(x){return "  "+x[0]+": "+x[1];}).join("\n");
-    var bySt   = Object.entries(stati).map(function(x){return "  "+x[0]+": "+x[1];}).join("\n");
-    var viit   = evs.filter(function(e){return e.date&&new Date(e.date)>=new Date();}).length;
-    var trec   = evs.filter(function(e){return e.date&&new Date(e.date)<new Date();}).length;
-    return "📈 STATISTICI EVENIMENTE\n\nDupă tip:\n"+byType+"\n\nDupă status:\n"+bySt+"\n\n📅 Viitoare: "+viit+" | Trecute: "+trec;
+  // ══════════════════════════════════════════════
+  // 2. VENITURI (doar confirmate)
+  // ══════════════════════════════════════════════
+  if(nc.match(/venit|incasat|confirmat[e]? total|cat am facut/)) {
+    var c=evs.filter(function(e){return e.st==="confirmat";});
+    var tot=c.reduce(function(s,e){return s+evTot(e);},0);
+    var avTotal=c.reduce(function(s,e){return s+(e.dp?e.dep||0:0);},0);
+    return "💰 VENITURI CONFIRMATE\n\nEvenimente confirmate: "+c.length+"\nTotal valoare: "+tot.toLocaleString("ro-RO")+" €\nAvansuri încasate: "+avTotal.toLocaleString("ro-RO")+" €\nRest de încasat: "+(tot-avTotal).toLocaleString("ro-RO")+" €";
   }
 
-  // ── CĂUTARE ──
-  if(ncmd.match(/cauta|gaseste|gasesc|gasesc|arata|unde|care/)) {
-    var q = cmd.replace(/cauta|gaseste|arata|unde|care/gi,"").trim();
-    if(!q) return "Ce să caut? Ex: \"cauta nunta\" sau \"cauta festival\"";
-    var nq = norm(q);
-    var res = evs.filter(function(e){
-      return norm(e.type||"").includes(nq)||norm(e.cn||"").includes(nq)||norm(e.venue||"").includes(nq)||norm(e.city||"").includes(nq)||(e.offerNr&&("o"+e.offerNr).includes(nq));
-    });
-    if(res.length===0) return "🔍 Nimic găsit pentru \""+q+"\"";
-    return "🔍 "+res.length+" rezultate pentru \""+q+"\":\n\n"+res.map(function(e){return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+" — "+(e.date||"—")+" — "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(e.st||"—")+"]";}).join("\n");
+  // ══════════════════════════════════════════════
+  // 3. PIPELINE
+  // ══════════════════════════════════════════════
+  if(nc.match(/pipeline|potential|in asteptare|in oferta|neconfirmat/)) {
+    var pp=evs.filter(function(e){return ["oferta","asteptare","plata_avans"].indexOf(e.st)>-1;});
+    var tpp=pp.reduce(function(s,e){return s+(e.fee||0);},0);
+    return "🔄 PIPELINE ACTIV ("+pp.length+" oferte)\n\nValoare totală: "+tpp.toLocaleString("ro-RO")+" €\n\n"+pp.map(fmtE).join("\n");
   }
 
-  // ── NEXT EVENTS ──
-  if(ncmd.match(/urmatoare|viitoare|urmeaza|agenda|programul/)) {
-    var nxt = evs.filter(function(e){return e.date&&new Date(e.date)>=new Date();}).sort(function(a,b){return a.date>b.date?1:-1;}).slice(0,5);
-    if(nxt.length===0) return "📅 Niciun eveniment viitor confirmat.";
-    return "📅 URMĂTOARELE EVENIMENTE:\n\n"+nxt.map(function(e,i){return (i+1)+". "+(e.date||"—")+" | O"+(e.offerNr||"?")+" · "+(e.type||"—")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(e.st||"—")+"]";}).join("\n");
+  // ══════════════════════════════════════════════
+  // 4. STATISTICI
+  // ══════════════════════════════════════════════
+  if(nc.match(/statistici|stat |breakdown|distributie|structura/)) {
+    var types={}, stati={};
+    evs.forEach(function(e){ types[e.type||"—"]=(types[e.type||"—"]||0)+1; stati[e.st||"—"]=(stati[e.st||"—"]||0)+1; });
+    var viit=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).length;
+    var trec=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")<cur;}).length;
+    var byType=Object.entries(types).sort(function(a,b){return b[1]-a[1];}).map(function(x){return "  "+x[0]+": "+x[1];}).join("\n");
+    var bySt=Object.entries(stati).map(function(x){return "  "+(ST_LABEL[x[0]]||x[0])+": "+x[1];}).join("\n");
+    return "📈 STATISTICI\n\nDupă tip:\n"+byType+"\n\nDupă status:\n"+bySt+"\n\n📅 Viitoare: "+viit+" | Trecute: "+trec+" | Total: "+evs.length;
   }
 
-  // ── TASKS ──
-  if(ncmd.match(/task|taskuri|de facut|todo/)) {
-    var active = tasks.filter(function(t){return !t.done;});
+  // ══════════════════════════════════════════════
+  // 5. NUNȚI
+  // ══════════════════════════════════════════════
+  if(nc.match(/nunt[ăa]|nunti/)) {
+    var nn=evs.filter(function(e){return norm(e.type||"").includes("nunt");});
+    if(nn.length===0) return "Nicio nuntă găsită.";
+    var t=nn.reduce(function(s,e){return s+(e.fee||0);},0);
+    return "💍 NUNȚI ("+nn.length+")\n\n"+nn.map(fmtE).join("\n")+"\n\nTotal valoare: "+t.toLocaleString("ro-RO")+" €";
+  }
+
+  // ══════════════════════════════════════════════
+  // 6. FESTIVALURI
+  // ══════════════════════════════════════════════
+  if(nc.match(/festival/)) {
+    var ff=evs.filter(function(e){return norm(e.type||"").includes("festival");});
+    if(ff.length===0) return "Niciun festival găsit.";
+    return "🎪 FESTIVALURI ("+ff.length+")\n\n"+ff.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 7. CORPORATE
+  // ══════════════════════════════════════════════
+  if(nc.match(/corporate|corporat/)) {
+    var cc=evs.filter(function(e){return norm(e.type||"").includes("corporate");});
+    if(cc.length===0) return "Niciun eveniment corporate găsit.";
+    return "🏢 CORPORATE ("+cc.length+")\n\n"+cc.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 8. CONFIRMATE
+  // ══════════════════════════════════════════════
+  if(nc.match(/confirm[ae]t[e]?(?! total)|doar confirm/)) {
+    var ev_c=evs.filter(function(e){return e.st==="confirmat";});
+    if(ev_c.length===0) return "Niciun eveniment confirmat.";
+    return "✅ CONFIRMATE ("+ev_c.length+")\n\n"+ev_c.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 9. RESPINSE
+  // ══════════════════════════════════════════════
+  if(nc.match(/respins[e]?|pierdut[e]?|refuzat[e]?/)) {
+    var ev_r=evs.filter(function(e){return e.st==="respins";});
+    if(ev_r.length===0) return "Nicio ofertă respinsă.";
+    var lost=ev_r.reduce(function(s,e){return s+(e.fee||0);},0);
+    return "🔴 RESPINSE ("+ev_r.length+")\n\n"+ev_r.map(fmtE).join("\n")+"\n\nValoare pierdută: "+lost.toLocaleString("ro-RO")+" €";
+  }
+
+  // ══════════════════════════════════════════════
+  // 10. URMĂTOARELE EVENIMENTE
+  // ══════════════════════════════════════════════
+  if(nc.match(/urmat[oă]|urmeaz[aă]|agenda|programul|viitoare|urma/)) {
+    var nxt=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).sort(function(a,b){return a.date>b.date?1:-1;}).slice(0,8);
+    if(nxt.length===0) return "📅 Niciun eveniment viitor.";
+    return "📅 URMĂTOARELE EVENIMENTE:\n\n"+nxt.map(function(e,i){var d=Math.ceil((new Date(e.date+"T00:00:00")-cur)/864e5); return (i+1)+". "+(e.date)+" (în "+d+"z) | O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+e.cn:"")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(ST_LABEL[e.st]||e.st)+"]";}).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 11. DETALII OFERTĂ SPECIFICĂ (ex: "oferta O5" sau "o5")
+  // ══════════════════════════════════════════════
+  if(nc.match(/\bo\d+\b|oferta\s+\d+|detalii\s+o/)) {
+    var nr=getOfferNr(); if(!nr) return "Specifică numărul ofertei. Ex: O5";
+    var ev=evByNr(nr); if(!ev) return "Oferta O"+nr+" nu există.";
+    var svcs=[]; ["sunet","lumini","ecran","scena","dj"].forEach(function(k){if(ev.svc&&ev.svc[k])svcs.push(k);});
+    var tot=evTot(ev); var av=ev.dep||0; var rest=tot-av;
+    return "📋 OFERTA O"+nr+"\n\nTip: "+(ev.type||"—")+" ("+(ev.cat==="private"?"Privat":"Public")+")\nClient: "+(ev.cn||"—")+"\nData: "+(ev.date||"—")+"\nLocație: "+(ev.venue||"—")+(ev.city?", "+ev.city:"")+"\nStatus: "+(ST_LABEL[ev.st]||ev.st)+"\n\nTarif: "+(ev.fee||0).toLocaleString("ro-RO")+" €"+(svcs.length>0?"\nServicii: "+svcs.join(", ")+" (+"+svcTot(ev).toLocaleString("ro-RO")+" €)":"")+"\nTotal: "+tot.toLocaleString("ro-RO")+" €\nAvans: "+av.toLocaleString("ro-RO")+" € ("+(ev.dp?"✅ plătit":"⏳ nepreluat")+")\nRest: "+rest.toLocaleString("ro-RO")+" €"+(ev.rep?"\nReprezentații: "+ev.rep+"×"+(ev.repDur||45)+" min":"");
+  }
+
+  // ══════════════════════════════════════════════
+  // 12. AVANSURI (ce avansuri sunt de luat)
+  // ══════════════════════════════════════════════
+  if(nc.match(/avans|depozit|deposit/)) {
+    var pending=evs.filter(function(e){return !e.dp&&["confirmat","plata_avans","asteptare"].indexOf(e.st)>-1&&(e.dep||0)>0;});
+    if(pending.length===0) return "✅ Toate avansurile sunt încasate!";
+    var total=pending.reduce(function(s,e){return s+(e.dep||0);},0);
+    return "💳 AVANSURI DE ÎNCASAT ("+pending.length+")\n\n"+pending.map(function(e){return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+e.cn:"")+" → "+(e.dep||0).toLocaleString("ro-RO")+" €";}).join("\n")+"\n\nTotal de încasat: "+total.toLocaleString("ro-RO")+" €";
+  }
+
+  // ══════════════════════════════════════════════
+  // 13. PREȚURI / TARIFE
+  // ══════════════════════════════════════════════
+  if(nc.match(/pret|pret[u]?ri|tarif|cat cost[aă]|cat e/)) {
+    // "pret nunta 2" → preț nuntă 2 reprize
+    var mPret=nc.match(/(\d)/);
+    if(mPret&&nc.match(/nunt|priv|botez|party|corp/)) {
+      var sets=parseInt(mPret[1]); if(sets<1||sets>3)sets=2;
+      var p=PX.r[sets]||PX.r[2];
+      return "💰 Preț "+(sets)+" reprize: "+p.toLocaleString("ro-RO")+" €\nAvans (10%): "+(Math.round(p*0.1/10)*10).toLocaleString("ro-RO")+" €\nRest: "+(p-Math.round(p*0.1/10)*10).toLocaleString("ro-RO")+" €";
+    }
+    return "💰 LISTA PREȚURI\n\nNuntă/Privat:\n  1 repriză (45 min): "+PX.r[1].toLocaleString("ro-RO")+" €\n  2 reprize (90 min): "+PX.r[2].toLocaleString("ro-RO")+" €\n  3 reprize (135 min): "+PX.r[3].toLocaleString("ro-RO")+" €\n\nPublic (festival/concert): "+PX.pub.toLocaleString("ro-RO")+" €\n\nServicii extra:\n  Sunet: "+PX.sunet+" €\n  Lumini: "+PX.lumini+" €\n  Ecran LED: "+PX.ecran+" €\n  Scenă: "+PX.scena+" €\n  DJ: "+PX.dj+" €";
+  }
+
+  // ══════════════════════════════════════════════
+  // 14. MEMBRI TRUPĂ
+  // ══════════════════════════════════════════════
+  if(nc.match(/membr[iu]|trupa|componenta|cine canta|band/)) {
+    return "🎸 TRUPA PHASER\n\n"+MEMBERS.map(function(m){return "• "+m.n+" — "+m.r;}).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 15. SPLIT MEMBRI PE OFERTĂ
+  // ══════════════════════════════════════════════
+  if(nc.match(/split|impartit|impartire|cat primeste|platit membr/)) {
+    var nr2=getOfferNr();
+    if(!nr2){ // arată toate ofertele cu split
+      var cu_split=evs.filter(function(e){return e.sp&&Object.keys(e.sp).length>0;});
+      if(cu_split.length===0) return "Nicio ofertă nu are split configurat.";
+      return "Split configurat pe: "+cu_split.map(function(e){return "O"+(e.offerNr||"?");}).join(", ");
+    }
+    var ev2=evByNr(nr2); if(!ev2) return "Oferta O"+nr2+" nu există.";
+    if(!ev2.sp||Object.keys(ev2.sp).length===0) return "Oferta O"+nr2+" nu are split configurat.";
+    var lines=MEMBERS.map(function(m){ var v=ev2.sp[m.id]||0; return v>0?"  "+m.n+": "+v.toLocaleString("ro-RO")+" €":null; }).filter(Boolean);
+    return "💸 SPLIT O"+nr2+":\n\n"+lines.join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 16. TASKURI
+  // ══════════════════════════════════════════════
+  if(nc.match(/task|taskuri|de facut|todo|sarcin/)) {
+    var active=tasks.filter(function(t){return !t.done;});
     if(active.length===0) return "✅ Niciun task activ!";
-    return "📋 TASKURI ACTIVE ("+active.length+"):\n\n"+active.slice(0,10).map(function(t,i){return (i+1)+". ["+((t.priority==="high"?"🔴":t.priority==="low"?"🟢":"🟡"))+" "+t.text+(t.due?" · "+t.due:"");}).join("\n");
+    var byPrio={high:[],medium:[],low:[]};
+    active.forEach(function(t){(byPrio[t.priority||"medium"]).push(t);});
+    var out="📋 TASKURI ACTIVE ("+active.length+"):\n";
+    if(byPrio.high.length) out+="\n🔴 Urgente ("+byPrio.high.length+"):\n"+byPrio.high.map(function(t){return "  • "+t.text+(t.due?" ["+t.due+"]":"");}).join("\n");
+    if(byPrio.medium.length) out+="\n🟡 Normale ("+byPrio.medium.length+"):\n"+byPrio.medium.map(function(t){return "  • "+t.text+(t.due?" ["+t.due+"]":"");}).join("\n");
+    if(byPrio.low.length) out+="\n🟢 Low ("+byPrio.low.length+"):\n"+byPrio.low.map(function(t){return "  • "+t.text;}).join("\n");
+    return out;
   }
 
-  // ── AJUTOR ──
-  if(ncmd.match(/ajutor|help|comenzi|ce poti|ce faci/)) {
-    return "🤖 COMENZI DISPONIBILE:\n\n📊 \"raport\" → situație financiară\n📈 \"statistici\" → breakdown pe tipuri\n🔍 \"cauta nunta\" → caută în oferte\n📅 \"următoarele\" → evenimente viitoare\n📋 \"taskuri\" → taskuri active\n\nDacă ai API key AI, poți pune orice întrebare liberă!";
+  // ══════════════════════════════════════════════
+  // 17. TASKURI URGENTE
+  // ══════════════════════════════════════════════
+  if(nc.match(/urgent|prioritar|important|foc/)) {
+    var urg=tasks.filter(function(t){return !t.done&&t.priority==="high";});
+    if(urg.length===0) return "✅ Niciun task urgent!";
+    return "🔴 TASKURI URGENTE ("+urg.length+"):\n\n"+urg.map(function(t){return "• "+t.text+(t.due?" → "+t.due:"");}).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 18. LUNA / LUNĂ SPECIFICĂ
+  // ══════════════════════════════════════════════
+  if(nc.match(/luna|lun[aă]|in (ian|feb|mar|apr|mai|iun|iul|aug|sep|oct|nov|dec)/)) {
+    var MONTHS={ian:0,feb:1,mar:2,apr:3,mai:4,iun:5,iul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+    var mMatch=nc.match(/(ian|feb|mar|apr|mai|iun|iul|aug|sep|oct|nov|dec)/);
+    var targetM=mMatch?MONTHS[mMatch[1]]:cur.getMonth();
+    var yr=cur.getFullYear(); var mName=mMatch?mMatch[1]:"luna curentă";
+    var evL=evs.filter(function(e){if(!e.date)return false; var d=new Date(e.date+"T00:00:00"); return d.getMonth()===targetM&&d.getFullYear()===yr;});
+    if(evL.length===0) return "📅 Niciun eveniment în "+mName+" "+yr+".";
+    var tL=evL.reduce(function(s,e){return s+(e.fee||0);},0);
+    return "📅 EVENIMENTE ÎN "+mName.toUpperCase()+" "+yr+" ("+evL.length+"):\n\n"+evL.map(fmtE).join("\n")+"\n\nTotal: "+tL.toLocaleString("ro-RO")+" €";
+  }
+
+  // ══════════════════════════════════════════════
+  // 19. CĂUTARE
+  // ══════════════════════════════════════════════
+  if(nc.match(/caut[aă]|gasest[e]|gasesc|arata|g[aă]sest/)) {
+    var q=cmd.replace(/caut[aă]|gasest[e]|arata/gi,"").trim();
+    if(!q) return "Ce să caut? Ex: \"cauta Maria\" sau \"cauta Timisoara\"";
+    var nq=norm(q);
+    var res=evs.filter(function(e){ return norm(e.type||"").includes(nq)||norm(e.cn||"").includes(nq)||norm(e.venue||"").includes(nq)||norm(e.city||"").includes(nq)||norm(e.ce||"").includes(nq)||norm(e.cp||"").includes(nq)||(e.offerNr&&("o"+e.offerNr).includes(nq)); });
+    if(res.length===0) return "🔍 Nimic găsit pentru \""+q+"\"";
+    return "🔍 "+res.length+" rezultate pentru \""+q+"\":\n\n"+res.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 20. CLIENT
+  // ══════════════════════════════════════════════
+  if(nc.match(/client|cine a comandat|de la cine/)) {
+    var qc=cmd.replace(/client/gi,"").trim();
+    if(!qc) { var withClient=evs.filter(function(e){return e.cn;}); return "Clienți înregistrați ("+withClient.length+"): "+withClient.map(function(e){return e.cn;}).filter(function(v,i,a){return a.indexOf(v)===i;}).join(", "); }
+    var nqc=norm(qc); var rc=evs.filter(function(e){return norm(e.cn||"").includes(nqc);});
+    if(rc.length===0) return "Niciun client cu \""+qc+"\".";
+    return "👤 OFERTE CLIENT \""+qc+"\" ("+rc.length+"):\n\n"+rc.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 21. TRECUTE
+  // ══════════════════════════════════════════════
+  if(nc.match(/trecut[e]?|istoricul|istori[ck]|terminate|finalizat/)) {
+    var past=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")<cur;}).sort(function(a,b){return a.date<b.date?1:-1;}).slice(0,8);
+    if(past.length===0) return "Niciun eveniment trecut.";
+    return "⏮ ULTIMELE EVENIMENTE:\n\n"+past.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 22. CEL MAI APROPIAT EVENIMENT
+  // ══════════════════════════════════════════════
+  if(nc.match(/urmatorul|cel mai apropiat|cand e urmatorul|cand cantam/)) {
+    var next=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur&&["confirmat","plata_avans","asteptare"].indexOf(e.st)>-1;}).sort(function(a,b){return a.date>b.date?1:-1;})[0];
+    if(!next) return "Niciun eveniment confirmat în viitor.";
+    var zile=Math.ceil((new Date(next.date+"T00:00:00")-cur)/864e5);
+    return "🎯 URMĂTORUL EVENIMENT:\n\nO"+(next.offerNr||"?")+" · "+(next.type||"—")+"\nData: "+next.date+" (în "+zile+" zile)\nClient: "+(next.cn||"—")+"\nLocație: "+(next.venue||"—")+(next.city?", "+next.city:"")+"\nValoare: "+(next.fee||0).toLocaleString("ro-RO")+" €\nStatus: "+(ST_LABEL[next.st]||next.st);
+  }
+
+  // ══════════════════════════════════════════════
+  // 23. SERVICII EXTRA
+  // ══════════════════════════════════════════════
+  if(nc.match(/servicii|sunet|lumini|ecran|scena|dj service/)) {
+    var cuSvc=evs.filter(function(e){return e.svc&&(e.svc.sunet||e.svc.lumini||e.svc.ecran||e.svc.scena||e.svc.dj);});
+    if(cuSvc.length===0) return "Nicio ofertă cu servicii extra.";
+    return "🔊 OFERTE CU SERVICII EXTRA ("+cuSvc.length+"):\n\n"+cuSvc.map(function(e){ var s=[]; ["sunet","lumini","ecran","scena","dj"].forEach(function(k){if(e.svc&&e.svc[k])s.push(k);}); return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+" | "+s.join(", ")+" (+"+svcTot(e).toLocaleString("ro-RO")+" €)"; }).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 24. RATA DE CONVERSIE
+  // ══════════════════════════════════════════════
+  if(nc.match(/conversie|rata|procent|cat la suta|procent[a]/)) {
+    var tot_e=evs.length; if(tot_e===0) return "Nu există oferte.";
+    var ok=evs.filter(function(e){return e.st==="confirmat";}).length;
+    var nos=evs.filter(function(e){return e.st==="respins";}).length;
+    var pct=Math.round(ok/tot_e*100);
+    return "📊 RATĂ CONVERSIE\n\nOferte totale: "+tot_e+"\nConfirmate: "+ok+" ("+pct+"%)\nRespinse: "+nos+" ("+Math.round(nos/tot_e*100)+"%)\nÎn negociere: "+(tot_e-ok-nos);
+  }
+
+  // ══════════════════════════════════════════════
+  // 25. AZI
+  // ══════════════════════════════════════════════
+  if(nc.match(/^azi$|astazi|eveniment azi|ce avem azi/)) {
+    var azi=new Date(); var aziStr=azi.toISOString().split("T")[0];
+    var ev_azi=evs.filter(function(e){return e.date===aziStr;});
+    if(ev_azi.length===0) return "📅 Niciun eveniment azi ("+aziStr+").";
+    return "📅 AZI - "+aziStr+":\n\n"+ev_azi.map(fmtE).join("\n");
+  }
+
+  // ══════════════════════════════════════════════
+  // 26. REZUMAT / SUMAR RAPID
+  // ══════════════════════════════════════════════
+  if(nc.match(/rezumat|sumar|overview|pe scurt|summary/)) {
+    var tot_ev=evs.length, conf_=evs.filter(function(e){return e.st==="confirmat";}).length;
+    var pipe_=evs.filter(function(e){return ["oferta","asteptare","plata_avans"].indexOf(e.st)>-1;});
+    var vConf=evs.filter(function(e){return e.st==="confirmat";}).reduce(function(s,e){return s+evTot(e);},0);
+    var vPipe=pipe_.reduce(function(s,e){return s+(e.fee||0);},0);
+    var actTasks=tasks.filter(function(t){return !t.done;}).length;
+    var nxt_=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).sort(function(a,b){return a.date>b.date?1:-1;})[0];
+    return "⚡ REZUMAT RAPID\n\n📁 Oferte totale: "+tot_ev+"\n✅ Confirmate: "+conf_+" → "+vConf.toLocaleString("ro-RO")+" €\n🔄 Pipeline: "+pipe_.length+" → "+vPipe.toLocaleString("ro-RO")+" €\n📋 Tasks active: "+actTasks+"\n📅 Următor: "+(nxt_?"O"+(nxt_.offerNr||"?")+" · "+(nxt_.type||"—")+" | "+(nxt_.date||"—"):"—");
+  }
+
+  // ══════════════════════════════════════════════
+  // 27. AJUTOR
+  // ══════════════════════════════════════════════
+  if(nc.match(/ajutor|help|comenzi|ce poti|ce stii|ce faci|manual/)) {
+    return "🤖 COMENZI DISPONIBILE:\n\n📊 FINANCIAR:\n  raport · venituri · pipeline · avansuri · preturi · conversie\n\n📅 EVENIMENTE:\n  urmatoarele · azi · urmatorul · trecute\n  nunti · festivaluri · corporate\n  confirmate · respinse\n\n🔍 CĂUTARE:\n  cauta [text] · client [nume] · O5 (ofertă specifică)\n  in iun · in mar (events pe lună)\n\n💰 CALCULE:\n  pret nunta 2 · split O5 · servicii\n\n📋 TASKURI:\n  taskuri · urgente\n\n🎸 ALTELE:\n  membri · statistici · rezumat";
   }
 
   return null; // nu e comandă locală → merge la AI
@@ -2143,7 +2347,7 @@ function AIChatWidget(props) {
   }
 
   var hasKey=model==="claude"?(!!apiKeys.claude||!!CLAUDE_API_KEY):!!apiKeys.openai;
-  var SUGG=["raport","statistici","următoarele evenimente","cauta nunta","taskuri","ajutor"];
+  var SUGG=["rezumat","raport","urmatoarele","urgente","avansuri","ajutor"];
 
   return React.createElement("div",null,
     React.createElement("button",{onClick:function(){setOpen(function(o){return !o;});},title:"AI Assistant",style:{position:"fixed",bottom:mob?72:24,right:20,zIndex:9999,width:50,height:50,borderRadius:25,background:open?"#6d28d9":"linear-gradient(135deg,#7c3aed,#4f46e5)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(79,70,229,0.5)",fontSize:22,color:"#fff"}},open?"✕":"🤖"),
