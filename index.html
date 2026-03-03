@@ -8,9 +8,9 @@
   <script>
     window.onerror = function(msg, url, line, col, err) {
       var r = document.getElementById('root');
-      if (r && r.querySelector && r.querySelector('.loading')) {
+      if (r) {
         var txt = (err && err.message) ? String(err.message) : String(msg);
-        r.innerHTML = '<div style="padding:24px;max-width:480px;margin:40px auto;font-family:system-ui;background:#1a1a1a;color:#fff;border-radius:12px"><h2 style="color:#ef4444">Eroare</h2><pre style="margin:12px 0;font-size:12px;white-space:pre-wrap;color:#fca5a5">' + txt.replace(/</g,'&lt;') + '</pre><p style="margin-top:12px;color:#a1a1aa;font-size:12px">Deschide Consola (F12) pentru detalii.</p></div>';
+        r.innerHTML = '<div style="padding:24px;max-width:480px;margin:40px auto;font-family:system-ui;background:#1a1a1a;color:#fff;border-radius:12px;border:1px solid #333"><h2 style="color:#ef4444">Eroare</h2><pre style="margin:12px 0;font-size:12px;white-space:pre-wrap;color:#fca5a5">' + (txt||msg||'').replace(/</g,'&lt;') + '</pre><p style="margin-top:12px;color:#a1a1aa;font-size:12px">Deschide Consola (F12) pentru detalii.</p></div>';
       }
       return false;
     };
@@ -36,7 +36,7 @@
   </style>
 </head>
 <body>
-  <div id="root"><div class="loading" style="display:flex;align-items:center;justify-content:center;height:100vh;background:#0a0a0c;color:#888;font-family:system-ui;font-size:14px">Se încarcă Phaser Manager...</div></div>
+  <div id="root"><div class="loading" style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;background:#0a0a0c;color:#e5e5e5;font-family:system-ui;font-size:15px;font-weight:500;gap:12px;padding:24px"><span>Se încarcă Phaser Manager...</span><span style="font-size:11px;color:#888">Dacă rămâne negru, deschide http://localhost:8080</span></div></div>
   <script type="text/babel" data-presets="env,react">
 const { useState, useEffect, useMemo, useRef } = React;
 
@@ -3926,13 +3926,20 @@ function App() {
   );
 }
 
+// Error Boundary — prinde erori de randare React
+class AppErrorBoundary extends React.Component {
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(err){return{err};}
+  componentDidCatch(err,info){console.error("AppErrorBoundary:",err,info);}
+  render(){if(this.state.err){return <div style={{padding:24,maxWidth:480,margin:"40px auto",fontFamily:"system-ui",background:"#1a1a1a",color:"#fff",borderRadius:12,border:"1px solid #333"}}><h2 style={{color:"#ef4444"}}>Eroare aplicație</h2><pre style={{margin:"12px 0",fontSize:12,whiteSpace:"pre-wrap",color:"#fca5a5"}}>{String(this.state.err.message||this.state.err)}</pre><p style={{marginTop:12,color:"#a1a1aa",fontSize:12}}>Deschide Consola (F12) pentru detalii.</p></div>;}return this.props.children;}
+}
 // Mount the app — cu handler de erori pentru debug
 try {
   if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
     document.getElementById('root').innerHTML = '<div style="padding:24px;max-width:480px;margin:40px auto;font-family:system-ui;background:#1a1a1a;color:#fff;border-radius:12px"><h2 style="color:#ef4444">Scripturile nu s-au încărcat</h2><p style="margin:12px 0;line-height:1.6">Deschizi fișierul direct (file://). Unele browsere blochează încărcarea de pe CDN.</p><p style="margin:12px 0"><strong>Rezolvare:</strong> Rulează un server local în folderul proiectului:</p><pre style="background:#222;padding:12px;border-radius:6px;font-size:12px;overflow:auto">cd "/Users/raczradu/Downloads/Phaser Manager"\npython3 -m http.server 8080</pre><p style="margin:12px 0">Apoi deschide <a href="http://localhost:8080" style="color:#60a5fa">http://localhost:8080</a></p></div>';
   } else {
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App/>);
+    root.render(<AppErrorBoundary><App/></AppErrorBoundary>);
   }
 } catch (e) {
   document.getElementById('root').innerHTML = '<div style="padding:24px;font-family:monospace;color:#ef4444;white-space:pre-wrap;font-size:12px">Eroare: ' + (e.message||e) + '\n\n' + (e.stack||'') + '</div>';
