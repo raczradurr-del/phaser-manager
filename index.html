@@ -246,7 +246,7 @@ const RIDER_TEHNIC = {
 // STORAGE & SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 const PHASER_V = 3;
-const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", templates: "phaser_templates", riderVersions: "phaser_rider_versions", creative: "phaser_creative" };
+const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative" };
 const migrate = (data, key) => { if (!data) return data; if (Array.isArray(data)) return data; if (data._v === PHASER_V) return data; if (typeof data._v !== "number") data._v = 1; while (data._v < PHASER_V) { data._v++; } return data; };
 const loadEvs = () => { try { const s = localStorage.getItem(LS_KEYS.evs); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
 const loadTasks = () => { try { const s = localStorage.getItem(LS_KEYS.tasks); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
@@ -254,12 +254,13 @@ const loadGenExp = () => { try { const s = localStorage.getItem(LS_KEYS.genExp);
 const loadCreative = () => { try { const s=localStorage.getItem(LS_KEYS.creative); if(s) { const d=JSON.parse(s); return d&&typeof d==="object"?d:{}; } } catch(e){} return {ideas:[],songs:[],setlists:[]}; };
 // Assets press kit — poze din folder assets
 const PK_IMG_PUBLIC_HEAD = "assets/Poza Presskit Public Head.jpg";
+const PK_IMG_OFERTA_PUBLIC_HEAD = "assets/Poza Oferta Public Header.jpg"; // header ofertă publică
 const PK_IMG_PRIVAT_HEAD = "assets/Poza Presskit Privat.jpg";
 
 // Press Kit Public — structură editabilă pentru oferta publică (festivaluri, concerte)
 const DEFAULT_PRESS_KIT_PUBLIC = {
-  heroImage: PK_IMG_PUBLIC_HEAD,
-  heroImagePos: "center 20%", // object-position: arată toate cele 5 persoane (rândul din spate)
+  heroImage: PK_IMG_OFERTA_PUBLIC_HEAD,
+  heroImagePos: "center 50%",
   gallery: [],
   highlights: [
     { id: "h1", icon: "★", label: "Eurovision 2013" },
@@ -287,7 +288,7 @@ const normPressKitPublic = (v) => {
   const def = DEFAULT_PRESS_KIT_PUBLIC;
   const vid = (arr) => Array.isArray(arr) ? arr.map(x => ({ id: x.id || uid(), url: x.url ?? "", title: x.title ?? "", desc: x.desc ?? "" })) : [];
   return {
-    heroImage: v.heroImage ?? def.heroImage,
+    heroImage: (v.heroImage && v.heroImage !== PK_IMG_PUBLIC_HEAD) ? v.heroImage : PK_IMG_OFERTA_PUBLIC_HEAD,
     heroImagePos: v.heroImagePos ?? def.heroImagePos,
     gallery: Array.isArray(v.gallery) ? v.gallery : (def.gallery || []),
     highlights: Array.isArray(v.highlights) && v.highlights.length ? v.highlights.map(x => ({ id: x.id || uid(), icon: x.icon ?? "★", label: x.label ?? "" })) : JSON.parse(JSON.stringify(def.highlights || [])),
@@ -328,6 +329,14 @@ const loadTemplates = () => {
 const loadRiderVersions = () => {
   try {
     const s = localStorage.getItem(LS_KEYS.riderVersions);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return [];
+};
+// Versiuni press kit — phaser_presskit_versions: [{ id, ts, label, data }]
+const loadPressKitVersions = () => {
+  try {
+    const s = localStorage.getItem(LS_KEYS.pressKitVersions);
     if (s) return JSON.parse(s);
   } catch(e) {}
   return [];
@@ -1090,7 +1099,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
 
             {/* Imagine header — privat: poza fixă; public: din Press Kit Public (salvat în Docs) */}
             {(isPriv||pkPublic)&&<div style={{borderRadius:"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
-              <img src={isPriv?PK_IMG_PRIVAT_HEAD:(pkPublic?.heroImage||PK_IMG_PUBLIC_HEAD)} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:isPriv?"center 20%":(pkPublic?.heroImagePos||"center 20%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+              <img src={isPriv?PK_IMG_PRIVAT_HEAD:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:isPriv?"center 50%":(pkPublic?.heroImagePos||"center 50%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
             {/* Header card — culori calde, logo mare */}
             <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"28px 28px 24px",marginBottom:12,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
@@ -1111,10 +1120,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               </div>
             </div>
 
-            {/* Despre noi + Video — la început, înainte de ofertă */}
-            {isPriv&&(ev.poveste||templates?.poveste)&&<div style={{background:"#fff",borderRadius:12,padding:"20px 24px",marginBottom:8,borderLeft:"4px solid #111"}}>
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Despre noi</div>
-              <div style={{fontSize:14,color:"#333",lineHeight:1.8,fontStyle:"italic"}}>{ev.poveste||templates?.poveste}</div>
+            {/* Despre noi — editabil înainte de generare PDF (doar ofertă privată) */}
+            {isPriv&&<div style={{background:"#fff",borderRadius:12,padding:"20px 24px",marginBottom:8,borderLeft:"4px solid #111"}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Despre noi (Media)</div>
+              <textarea value={ev.poveste||templates?.poveste||""} onChange={e=>syncOffer({poveste:e.target.value})} placeholder="Povestea PHASER — modifică înainte de a genera PDF" style={{width:"100%",minHeight:100,resize:"vertical",fontSize:14,lineHeight:1.8,fontStyle:"italic",color:"#333",border:"1px solid #e5e5e5",borderRadius:8,padding:12}}/>
             </div>}
             {/* Prestație */}
             <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
@@ -1332,10 +1341,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
         {!isPriv&&pkPublic&&<div id="presskit-print-content" style={{flex:1,overflow:"auto",background:"#0a0a0a",display:tab==="pressKit"?"block":"none"}}>
           <div style={{maxWidth:560,margin:"0 auto"}}>
             <div style={{position:"relative",overflow:"hidden"}}>
-              <img src={pkPublic.heroImage||PK_IMG_PUBLIC_HEAD} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:pkPublic.heroImagePos||"center 20%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-              <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 50%)",display:"flex",flexDirection:"column",justifyContent:"flex-end",padding:24}}>
+              <img src={pkPublic.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:pkPublic.heroImagePos||"center 50%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+              <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 50%)",display:"flex",flexDirection:"column",justifyContent:"flex-end",alignItems:"center",padding:24}}>
                 <Logo height={36}/>
-                <div style={{fontSize:10,color:"rgba(255,255,255,.5)",letterSpacing:3,textTransform:"uppercase",marginTop:8}}>{pkPublic.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR EVENT"}</div>
+                <div style={{fontSize:10,color:"rgba(255,255,255,.5)",letterSpacing:3,textTransform:"uppercase",marginTop:8,textAlign:"center",width:"100%"}}>{pkPublic.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR EVENT"}</div>
               </div>
             </div>
             <div style={{padding:"24px 24px 16px"}}>
@@ -1370,6 +1379,37 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
           <ContractView ev={ev} th={th} contractFields={contractFields} onContractChange={setContractFields}/>
         </div>}
       </div>
+    </div>
+  );
+}
+
+// Imagine header draggabilă — trage poza în chenar pentru poziționare
+function HeroImageEditor({ src, position, onChange }) {
+  const parseY = (p) => { const s=String(p||""); if(s.includes("top"))return 0; if(s.includes("bottom"))return 100; const m=s.match(/(\d+\.?\d*)%?/); return m?Math.max(0,Math.min(100,parseFloat(m[1])||50)):50; };
+  const [drag, setDrag] = useState(null);
+  const posY = parseY(position);
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e) => {
+      const dy = (e.touches?.[0]?.clientY ?? e.clientY) - drag.startY;
+      const newY = Math.max(0, Math.min(100, drag.startPos - dy * 0.3));
+      onChange("center " + Math.round(newY) + "%");
+    };
+    const onEnd = () => setDrag(null);
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onEnd);
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onEnd);
+    return () => { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onEnd); window.removeEventListener("touchmove", onMove); window.removeEventListener("touchend", onEnd); };
+  }, [drag]);
+  return (
+    <div
+      onMouseDown={e=>setDrag({startY:e.clientY,startPos:posY})}
+      onTouchStart={e=>setDrag({startY:e.touches[0].clientY,startPos:posY})}
+      style={{position:"relative",overflow:"hidden",height:260,borderRadius:10,border:"1px solid #ccc",cursor:"grab",userSelect:"none"}}
+    >
+      <img src={src} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:position||"center 50%",pointerEvents:"none"}} onError={e=>{e.target.style.display="none";}}/>
+      <div style={{position:"absolute",bottom:8,left:"50%",transform:"translateX(-50%)",fontSize:10,color:"rgba(255,255,255,.7)",background:"rgba(0,0,0,.5)",padding:"4px 8px",borderRadius:6}}>Trage poza pentru poziționare</div>
     </div>
   );
 }
@@ -2518,7 +2558,9 @@ function App() {
   const [dashboardDateSearch, setDashboardDateSearch] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
   const [sectTab, setSectTab] = useState("playlist");
+  const docsSectTab = sectTab==="poveste" ? "playlist" : sectTab;
   const [riderVersions, setRiderVersions] = useState(loadRiderVersions);
+  const [pressKitVersions, setPressKitVersions] = useState(loadPressKitVersions);
   const { toast, showToast } = useToasts();
 
   // ─── GOOGLE CALENDAR STATE ───
@@ -2684,6 +2726,26 @@ function App() {
   const restoreRiderVersion = (ver) => {
     if (!ver?.data) return;
     setTemplates(t => ({ ...t, riderContent: ver.data.riderContent || {}, riderCustom: ver.data.riderCustom || [], riderStagePlot: ver.data.riderStagePlot || { image: null, notes: "" } }));
+    showToast(`Restaurat: ${ver.label}`);
+  };
+  const savePressKitToStorage = (asNewVersion) => {
+    try {
+      const label = asNewVersion ? (prompt("Nume versiune (ex: Festival 2025):") || "Versiune " + new Date().toLocaleDateString("ro")) : null;
+      const pkData = normPressKitPublic(templates.pressKitPublic);
+      if (asNewVersion) {
+        const versions = loadPressKitVersions();
+        const newVer = { id: uid(), ts: Date.now(), label, data: pkData };
+        const updated = [newVer, ...versions].slice(0, 20);
+        localStorage.setItem(LS_KEYS.pressKitVersions, JSON.stringify(updated));
+        setPressKitVersions(updated);
+      }
+      saveTemplates(tpl=>({...tpl,pressKitPublic:pkData}));
+      showToast(asNewVersion ? `Versiune "${label}" salvată` : "Press Kit salvat");
+    } catch(e) {}
+  };
+  const restorePressKitVersion = (ver) => {
+    if (!ver?.data) return;
+    setTemplates(t => ({ ...t, pressKitPublic: normPressKitPublic(ver.data) }));
     showToast(`Restaurat: ${ver.label}`);
   };
 
@@ -3051,19 +3113,19 @@ function App() {
               <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Docs</h1>
               <p style={{color:th.tm,fontSize:12,marginTop:2}}>Documente, rider, playlist și press kit — template-uri editabile pentru oferte.</p>
               <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
-                <button onClick={()=>{const blob=new Blob([JSON.stringify({_v:PHASER_V,evs,tasks,genExp,templates,riderVersions,creative:loadCreative()},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`phaser-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);showToast("Backup exportat");}} style={sty.bg}><IcFile s={14}/> Export JSON</button>
-                <label style={{...sty.bg,cursor:"pointer",margin:0,display:"inline-flex",alignItems:"center",gap:6}}><IcFile s={14}/> Import JSON<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||typeof d!=="object")throw new Error("JSON invalid");if(Array.isArray(d.evs)){setEvs(d.evs);}if(Array.isArray(d.tasks)){setTasks(d.tasks);}if(Array.isArray(d.genExp)){setGE(d.genExp);}if(d.templates){setTemplates(d.templates);try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(d.templates));}catch(x){}}if(Array.isArray(d.riderVersions)){setRiderVersions(d.riderVersions);try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(d.riderVersions));}catch(x){}}if(d.creative){try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(d.creative));}catch(x){}}showToast("Date importate");}catch(err){showToast("Eroare: "+(err?.message||String(err)));}e.target.value="";};r.readAsText(f);}}/></label>
+                <button onClick={()=>{const blob=new Blob([JSON.stringify({_v:PHASER_V,evs,tasks,genExp,templates,riderVersions,pressKitVersions:loadPressKitVersions(),creative:loadCreative()},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`phaser-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);showToast("Backup exportat");}} style={sty.bg}><IcFile s={14}/> Export JSON</button>
+                <label style={{...sty.bg,cursor:"pointer",margin:0,display:"inline-flex",alignItems:"center",gap:6}}><IcFile s={14}/> Import JSON<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||typeof d!=="object")throw new Error("JSON invalid");if(Array.isArray(d.evs)){setEvs(d.evs);}if(Array.isArray(d.tasks)){setTasks(d.tasks);}if(Array.isArray(d.genExp)){setGE(d.genExp);}if(d.templates){setTemplates(d.templates);try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(d.templates));}catch(x){}}if(Array.isArray(d.riderVersions)){setRiderVersions(d.riderVersions);try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(d.riderVersions));}catch(x){}}if(Array.isArray(d.pressKitVersions)){setPressKitVersions(d.pressKitVersions);try{localStorage.setItem(LS_KEYS.pressKitVersions,JSON.stringify(d.pressKitVersions));}catch(x){}}if(d.creative){try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(d.creative));}catch(x){}}showToast("Date importate");}catch(err){showToast("Eroare: "+(err?.message||String(err)));}e.target.value="";};r.readAsText(f);}}/></label>
               </div>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
-              {["rider","playlist","pressKitPublic","poveste"].map(s=>(
-                <button key={s} onClick={()=>setSectTab(s)} style={{padding:"6px 14px",borderRadius:7,border:"none",fontSize:12,fontWeight:sectTab===s?700:400,cursor:"pointer",background:sectTab===s?th.ab:"transparent",color:sectTab===s?th.t:th.tm}}>
-                  {{rider:"Rider",playlist:"Playlist",pressKitPublic:"Press Kit Public",poveste:"Poveste"}[s]}
+              {["rider","playlist","pressKitPublic"].map(s=>(
+                <button key={s} onClick={()=>setSectTab(s)} style={{padding:"6px 14px",borderRadius:7,border:"none",fontSize:12,fontWeight:docsSectTab===s?700:400,cursor:"pointer",background:docsSectTab===s?th.ab:"transparent",color:docsSectTab===s?th.t:th.tm}}>
+                  {{rider:"Rider",playlist:"Playlist",pressKitPublic:"Press Kit Public"}[s]}
                 </button>
               ))}
             </div>
             <div style={sty.cd}>
-              {sectTab==="rider"&&<div>
+              {docsSectTab==="rider"&&<div>
                 <label style={sty.l}>Rider Tehnic și Ospitalitate — conținut editabil</label>
                 <p style={{fontSize:11,color:th.tm,marginBottom:10}}>Conținut preluat în ofertele publice. <strong>Salvează rider</strong> = actualizează. <strong>Salvează ca versiune nouă</strong> = creează backup. <strong>Versiuni anterioare</strong> = încarcă o versiune salvată.</p>
                 {/* Subsecțiune Stage Plot */}
@@ -3116,7 +3178,7 @@ function App() {
                   </div>
                 </div>
               </div>}
-              {sectTab==="playlist"&&<div>
+              {docsSectTab==="playlist"&&<div>
                 <label style={sty.l}>Playlist — {((templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS).length} piese</label>
                 <p style={{fontSize:11,color:th.tm,marginBottom:10}}>Lista pentru oferte private. Download / Share.</p>
                 <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
@@ -3135,37 +3197,32 @@ function App() {
                   ))}
                 </div>
               </div>}
-              {sectTab==="pressKitPublic"&&<div>
+              {docsSectTab==="pressKitPublic"&&<div>
                 <label style={sty.l}>Press Kit Public — conținut pentru festivaluri, concerte</label>
-                <p style={{fontSize:11,color:th.tm,marginBottom:14}}>EPK editabil — imagine header, Music, Video oficiale, Videouri live, contact. <strong>Salvează automat</strong> la fiecare modificare — se aplică imediat la ofertele publice. Download pentru HTML.</p>
+                <p style={{fontSize:11,color:th.tm,marginBottom:10}}>EPK editabil — imagine header, Music, Video oficiale, Videouri live, contact. Se aplică la ofertele publice.</p>
+                <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:16}}>
+                  <button onClick={()=>savePressKitToStorage(false)} style={{...sty.b,padding:"6px 12px",fontSize:12}}>Salvează Press Kit</button>
+                  <button onClick={()=>savePressKitToStorage(true)} style={{...sty.bg,padding:"6px 12px",fontSize:12}}>Salvează ca versiune nouă</button>
+                  {pressKitVersions.length>0&&<select onChange={e=>{const v=pressKitVersions.find(x=>x.id===e.target.value);if(v)restorePressKitVersion(v);e.target.value="";}} style={{...sty.i,padding:"6px 12px",fontSize:12,maxWidth:220}} className="modernSel">
+                    <option value="">Versiuni anterioare...</option>
+                    {pressKitVersions.map(v=><option key={v.id} value={v.id}>{v.label} — {new Date(v.ts).toLocaleDateString("ro")}</option>)}
+                  </select>}
+                </div>
                 {(()=>{
                   const pk = normPressKitPublic(templates.pressKitPublic);
                   const up = (key, val) => saveTemplates(tpl=>({...tpl,pressKitPublic:{...normPressKitPublic(tpl.pressKitPublic),[key]:val}}));
                   const upArr = (key, arr) => saveTemplates(tpl=>({...tpl,pressKitPublic:{...normPressKitPublic(tpl.pressKitPublic),[key]:arr}}));
-                  const imgPos = pk.heroImagePos || "center 20%";
                   return (
                     <div style={{display:"flex",flexDirection:"column",gap:16}}>
-                      {/* Hero image + framing */}
+                      {/* Hero image — trage poza în chenar */}
                       <div style={{...sty.cd,padding:16}}>
-                        <div style={{fontSize:11,fontWeight:700,color:th.tm,marginBottom:8}}>Imagine header — incadrare (object-position)</div>
-                        <p style={{fontSize:10,color:th.tm,marginBottom:8}}>Alege cum se decupează imaginea ca să se vadă toate persoanele</p>
-                        <div style={{display:"flex",gap:12,alignItems:"flex-start",flexWrap:"wrap"}}>
-                          <img src={pk.heroImage||PK_IMG_PUBLIC_HEAD} alt="Header" style={{maxWidth:320,maxHeight:260,objectFit:"cover",objectPosition:imgPos,borderRadius:10,border:`1px solid ${th.b}`}} onError={e=>{e.target.style.display="none";}}/>
-                          <div style={{flex:1,minWidth:200}}>
-                            <label style={{...sty.l,fontSize:10}}>Poziție incadrare</label>
-                            <select value={imgPos} onChange={e=>up("heroImagePos",e.target.value)} style={{...sty.i,padding:"8px 12px",fontSize:12,marginBottom:8}}>
-                              <option value="center top">Sus (top) — toate capetele</option>
-                              <option value="center 15%">Centru-sus (15%)</option>
-                              <option value="center 20%">Centru-sus (20%) — recomandat</option>
-                              <option value="center 30%">Centru (30%)</option>
-                              <option value="center center">Centru</option>
-                              <option value="center 70%">Centru-jos (70%)</option>
-                              <option value="center bottom">Jos (bottom)</option>
-                            </select>
-                            <input value={pk.heroImage||""} onChange={e=>up("heroImage",e.target.value)} placeholder={PK_IMG_PUBLIC_HEAD} style={{...sty.i,padding:"8px 12px",fontSize:12,width:"100%"}}/>
-                            <label style={{display:"block",marginTop:8,fontSize:11,color:th.tm}}><input type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0];if(f){const r=new FileReader();r.onload=()=>up("heroImage",r.result);r.readAsDataURL(f);}}} style={{fontSize:11}}/> Încarcă altă imagine</label>
-                          </div>
+                        <div style={{fontSize:11,fontWeight:700,color:th.tm,marginBottom:8}}>Imagine header</div>
+                        <p style={{fontSize:10,color:th.tm,marginBottom:10}}>Trage poza în chenar pentru a o poziționa</p>
+                        <div style={{maxWidth:400,marginBottom:12}}>
+                          <HeroImageEditor src={pk.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD} position={pk.heroImagePos||"center 50%"} onChange={v=>up("heroImagePos",v)}/>
                         </div>
+                        <input value={pk.heroImage||""} onChange={e=>up("heroImage",e.target.value)} placeholder={PK_IMG_OFERTA_PUBLIC_HEAD} style={{...sty.i,padding:"8px 12px",fontSize:12,width:"100%",marginBottom:8}}/>
+                        <label style={{display:"block",fontSize:11,color:th.tm}}><input type="file" accept="image/*" onChange={e=>{const f=e.target.files?.[0];if(f){const r=new FileReader();r.onload=()=>up("heroImage",r.result);r.readAsDataURL(f);}}} style={{fontSize:11}}/> Încarcă altă imagine</label>
                       </div>
                       {/* Galerie */}
                       <div style={{...sty.cd,padding:16}}>
@@ -3290,7 +3347,7 @@ function App() {
                         <div style={{fontSize:11,fontWeight:700,color:th.tm,padding:"12px 16px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                           <span>Preview EPK</span>
                           <button onClick={()=>{
-                            const html=`<!DOCTYPE html><html lang="ro"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>PHASER — Press Kit</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#0a0a0a;color:#fff;line-height:1.5}a{color:#fff}.hero img{width:100%;height:300px;object-fit:cover;object-position:${(pk.heroImagePos||"center 20%").replace(/ /g," ")}}.hero{position:relative;overflow:hidden}.hero .grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.9),transparent 50%);display:flex;flex-direction:column;justify-content:flex-end;padding:24px}.tagline{font-size:10px;color:rgba(255,255,255,.6);letter-spacing:3px;text-transform:uppercase;margin-top:8px}.sect{max-width:640px;margin:0 auto;padding:24px}.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.links a{padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-decoration:none}.intro{font-size:14px;color:rgba(255,255,255,.8);font-style:italic;margin-bottom:20px}.hdr{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:12px}.members{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.memb{padding:10px;border-radius:8px;background:rgba(255,255,255,.06);text-align:center;border:1px solid rgba(255,255,255,.08)}.vid-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.1);margin-top:8px}.vid-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}.contact{background:#111;text-align:center;padding:24px;border-top:1px solid rgba(255,255,255,.08)}.spotify{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;background:#1DB954;color:#fff;font-size:12px;font-weight:600;text-decoration:none}</style></head><body><div class="hero"><img src="${(()=>{const u=(pk.heroImage||"").replace(/"/g,"&quot;");return (u.startsWith("data:")||u.startsWith("http"))?u:"https://placehold.co/800x400/1a1a1a/fff?text=PHASER";})()}" alt=""/><div class="grad"><img src="https://phaser.ro/logo.svg" alt="PHASER" height="36" onerror="this.style.display='none'"/><div class="tagline">${(pk.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR EVENT").replace(/</g,"&lt;")}</div></div></div><div class="sect"><p class="intro">${(pk.introText||"").replace(/</g,"&lt;").slice(0,400)}</p><div class="links">${(pk.links||[]).filter(l=>l.url).map(l=>`<a href="${l.url.replace(/"/g,"&quot;")}" target="_blank" rel="noreferrer">${(l.l||"Link").replace(/</g,"&lt;")}</a>`).join("")}</div></div><div class="sect"><div class="hdr">Componență trupă</div><div class="members">${(pk.members||[]).slice(0,5).map(m=>`<div class="memb"><div style="font-weight:700;font-size:12px">${(m.n||"").split(" ")[0]}</div><div style="font-size:10px;color:rgba(255,255,255,.5)">${(m.r||"").replace(/</g,"&lt;")}</div></div>`).join("")}</div></div>${(pk.highlights||[]).length?`<div class="sect"><div class="hdr">Highlights</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8">${(pk.highlights||[]).slice(0,6).map(h=>`<div class="memb" style="display:flex;align-items:center;gap:6"><span>${(h.icon||"★").replace(/</g,"&lt;")}</span><span>${(h.label||"").replace(/</g,"&lt;")}</span></div>`).join("")}</div></div>`:""}${pk.showReelUrl?`<div class="sect"><div class="hdr">Show Reel</div><div class="vid-wrap"><iframe src="${pk.showReelUrl}" allowfullscreen></iframe></div></div>`:""}${(pk.musicSpotify||"").trim()?`<div class="sect"><div class="hdr">Music</div><a href="${pk.musicSpotify}" target="_blank" rel="noreferrer" class="spotify">▶ Ascultă pe Spotify</a></div>`:""}${(pk.videoOficiale||[]).filter(v=>v.url).length?`<div class="sect"><div class="hdr">Video oficiale</div>${(pk.videoOficiale||[]).filter(v=>v.url).map(v=>`<div style="margin-bottom:16px">${v.title?`<div style="font-weight:600;margin-bottom:4px">${v.title.replace(/</g,"&lt;")}</div>`:""}${v.desc?`<div style="font-size:11px;color:rgba(255,255,255,.6);margin-bottom:6px">${v.desc.replace(/</g,"&lt;")}</div>`:""}<div class="vid-wrap"><iframe src="${v.url}" allowfullscreen></iframe></div></div>`).join("")}</div>`:""}${(pk.videoLive||[]).filter(v=>v.url).length?`<div class="sect"><div class="hdr">Videouri live</div>${(pk.videoLive||[]).filter(v=>v.url).map(v=>`<div style="margin-bottom:16px">${v.title?`<div style="font-weight:600;margin-bottom:4px">${v.title.replace(/</g,"&lt;")}</div>`:""}${v.desc?`<div style="font-size:11px;color:rgba(255,255,255,.6);margin-bottom:6px">${v.desc.replace(/</g,"&lt;")}</div>`:""}<div class="vid-wrap"><iframe src="${v.url}" allowfullscreen></iframe></div></div>`).join("")}</div>`:""}${(pk.gallery||[]).length?`<div class="sect"><div class="hdr">Galerie</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8">${(pk.gallery||[]).slice(0,8).map(g=>`<img src="${(typeof g==="string"?g:g.url||"").replace(/"/g,"&quot;")}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8;border:1px solid rgba(255,255,255,.1)"/>`).join("")}</div></div>`:""}<div class="contact"><div class="hdr">Contact booking</div><div style="font-size:16px;font-weight:700">${(pk.contact?.name||"Radu Racz").replace(/</g,"&lt;")} — ${(pk.contact?.phone||"0744 771 488").replace(/</g,"&lt;")}</div><div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:6px">${(pk.contact?.email||"contact@phaser.ro").replace(/</g,"&lt;")} · ${(pk.contact?.website||"www.phaser.ro").replace(/</g,"&lt;")}</div></div></body></html>`;
+                            const html=`<!DOCTYPE html><html lang="ro"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>PHASER — Press Kit</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,sans-serif;background:#0a0a0a;color:#fff;line-height:1.5}a{color:#fff}.hero img{width:100%;height:300px;object-fit:cover;object-position:${(pk.heroImagePos||"center 50%").replace(/ /g," ")}}.hero{position:relative;overflow:hidden}.hero .grad{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.9),transparent 50%);display:flex;flex-direction:column;justify-content:flex-end;padding:24px}.tagline{font-size:10px;color:rgba(255,255,255,.6);letter-spacing:3px;text-transform:uppercase;margin-top:8px;text-align:center}.sect{max-width:640px;margin:0 auto;padding:24px}.links{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.links a{padding:6px 14px;border-radius:20px;background:rgba(255,255,255,.12);color:rgba(255,255,255,.9);font-size:11px;font-weight:600;text-decoration:none}.intro{font-size:14px;color:rgba(255,255,255,.8);font-style:italic;margin-bottom:20px}.hdr{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:rgba(255,255,255,.4);margin-bottom:12px}.members{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.memb{padding:10px;border-radius:8px;background:rgba(255,255,255,.06);text-align:center;border:1px solid rgba(255,255,255,.08)}.vid-wrap{position:relative;padding-bottom:56.25%;height:0;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.1);margin-top:8px}.vid-wrap iframe{position:absolute;top:0;left:0;width:100%;height:100%;border:none}.contact{background:#111;text-align:center;padding:24px;border-top:1px solid rgba(255,255,255,.08)}.spotify{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:10px;background:#1DB954;color:#fff;font-size:12px;font-weight:600;text-decoration:none}</style></head><body><div class="hero"><img src="${(()=>{const u=(pk.heroImage||"").replace(/"/g,"&quot;");return (u.startsWith("data:")||u.startsWith("http"))?u:"https://placehold.co/800x400/1a1a1a/fff?text=PHASER";})()}" alt=""/><div class="grad"><img src="https://phaser.ro/logo.svg" alt="PHASER" height="36" onerror="this.style.display='none'"/><div class="tagline">${(pk.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR EVENT").replace(/</g,"&lt;")}</div></div></div><div class="sect"><p class="intro">${(pk.introText||"").replace(/</g,"&lt;").slice(0,400)}</p><div class="links">${(pk.links||[]).filter(l=>l.url).map(l=>`<a href="${l.url.replace(/"/g,"&quot;")}" target="_blank" rel="noreferrer">${(l.l||"Link").replace(/</g,"&lt;")}</a>`).join("")}</div></div><div class="sect"><div class="hdr">Componență trupă</div><div class="members">${(pk.members||[]).slice(0,5).map(m=>`<div class="memb"><div style="font-weight:700;font-size:12px">${(m.n||"").split(" ")[0]}</div><div style="font-size:10px;color:rgba(255,255,255,.5)">${(m.r||"").replace(/</g,"&lt;")}</div></div>`).join("")}</div></div>${(pk.highlights||[]).length?`<div class="sect"><div class="hdr">Highlights</div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8">${(pk.highlights||[]).slice(0,6).map(h=>`<div class="memb" style="display:flex;align-items:center;gap:6"><span>${(h.icon||"★").replace(/</g,"&lt;")}</span><span>${(h.label||"").replace(/</g,"&lt;")}</span></div>`).join("")}</div></div>`:""}${pk.showReelUrl?`<div class="sect"><div class="hdr">Show Reel</div><div class="vid-wrap"><iframe src="${pk.showReelUrl}" allowfullscreen></iframe></div></div>`:""}${(pk.musicSpotify||"").trim()?`<div class="sect"><div class="hdr">Music</div><a href="${pk.musicSpotify}" target="_blank" rel="noreferrer" class="spotify">▶ Ascultă pe Spotify</a></div>`:""}${(pk.videoOficiale||[]).filter(v=>v.url).length?`<div class="sect"><div class="hdr">Video oficiale</div>${(pk.videoOficiale||[]).filter(v=>v.url).map(v=>`<div style="margin-bottom:16px">${v.title?`<div style="font-weight:600;margin-bottom:4px">${v.title.replace(/</g,"&lt;")}</div>`:""}${v.desc?`<div style="font-size:11px;color:rgba(255,255,255,.6);margin-bottom:6px">${v.desc.replace(/</g,"&lt;")}</div>`:""}<div class="vid-wrap"><iframe src="${v.url}" allowfullscreen></iframe></div></div>`).join("")}</div>`:""}${(pk.videoLive||[]).filter(v=>v.url).length?`<div class="sect"><div class="hdr">Videouri live</div>${(pk.videoLive||[]).filter(v=>v.url).map(v=>`<div style="margin-bottom:16px">${v.title?`<div style="font-weight:600;margin-bottom:4px">${v.title.replace(/</g,"&lt;")}</div>`:""}${v.desc?`<div style="font-size:11px;color:rgba(255,255,255,.6);margin-bottom:6px">${v.desc.replace(/</g,"&lt;")}</div>`:""}<div class="vid-wrap"><iframe src="${v.url}" allowfullscreen></iframe></div></div>`).join("")}</div>`:""}${(pk.gallery||[]).length?`<div class="sect"><div class="hdr">Galerie</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8">${(pk.gallery||[]).slice(0,8).map(g=>`<img src="${(typeof g==="string"?g:g.url||"").replace(/"/g,"&quot;")}" alt="" style="width:100%;aspect-ratio:1;object-fit:cover;border-radius:8;border:1px solid rgba(255,255,255,.1)"/>`).join("")}</div></div>`:""}<div class="contact"><div class="hdr">Contact booking</div><div style="font-size:16px;font-weight:700">${(pk.contact?.name||"Radu Racz").replace(/</g,"&lt;")} — ${(pk.contact?.phone||"0744 771 488").replace(/</g,"&lt;")}</div><div style="font-size:12px;color:rgba(255,255,255,.5);margin-top:6px">${(pk.contact?.email||"contact@phaser.ro").replace(/</g,"&lt;")} · ${(pk.contact?.website||"www.phaser.ro").replace(/</g,"&lt;")}</div></div></body></html>`;
                             const blob=new Blob([html],{type:"text/html;charset=utf-8"});
                             const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="phaser-press-kit.html";a.click();URL.revokeObjectURL(a.href);
                             if(typeof showToast==="function")showToast("Press kit descărcat");
@@ -3299,10 +3356,10 @@ function App() {
                         <div style={{maxWidth:560,margin:"0 auto",background:"#0a0a0a"}}>
                           {/* Hero */}
                           <div style={{position:"relative",overflow:"hidden"}}>
-                            <img src={pk.heroImage||PK_IMG_PUBLIC_HEAD} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:pk.heroImagePos||"center 20%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-                            <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 50%)",display:"flex",flexDirection:"column",justifyContent:"flex-end",padding:24}}>
+                            <img src={pk.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:pk.heroImagePos||"center 50%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+                            <div style={{position:"absolute",inset:0,background:"linear-gradient(to top,rgba(0,0,0,.85) 0%,transparent 50%)",display:"flex",flexDirection:"column",justifyContent:"flex-end",alignItems:"center",padding:24}}>
                               <Logo height={36}/>
-                              <div style={{fontSize:10,color:"rgba(255,255,255,.5)",letterSpacing:3,textTransform:"uppercase",marginTop:8}}>{pk.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR PARTY"}</div>
+                              <div style={{fontSize:10,color:"rgba(255,255,255,.5)",letterSpacing:3,textTransform:"uppercase",marginTop:8,textAlign:"center",width:"100%"}}>{pk.tagline||"FROM ROCKING THE STAGE TO ROCKING YOUR EVENT"}</div>
                             </div>
                           </div>
                           {/* Intro + links */}
@@ -3391,10 +3448,6 @@ function App() {
                     </div>
                   );
                 })()}
-              </div>}
-              {sectTab==="poveste"&&<div>
-                <label style={sty.l}>Poveste — text în oferta privată</label>
-                <textarea value={templates.poveste||""} onChange={e=>saveTemplates({poveste:e.target.value})} style={{...sty.i,minHeight:120,resize:"vertical"}} placeholder="Povestea PHASER..."/>
               </div>}
             </div>
           </div>}
