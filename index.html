@@ -93,7 +93,7 @@ const gTheme = () => {
 };
 
 const TH = {
-  light: { bg:"#f5f5f5",c:"#ffffff",h:"#f0f0f0",i:"#ffffff",b:"#e0e0e0",bl:"#ebebeb",t:"#111111",ts:"#444444",tm:"#888888",sb:"#111111",sbb:"#222222",sbt:"#888888",sba:"#ffffff",a:"#111111",ab:"rgba(0,0,0,.07)",ov:"rgba(0,0,0,.55)" },
+  light: { bg:"#f5f5f5",c:"#ffffff",h:"#f0f0f0",i:"#ffffff",b:"#e0e0e0",bl:"#ebebeb",t:"#111111",ts:"#444444",tm:"#888888",sb:"#e8e8e8",sbb:"#d4d4d4",sbt:"#444444",sba:"#111111",a:"#111111",ab:"rgba(0,0,0,.07)",ov:"rgba(0,0,0,.55)" },
   dark:  { bg:"#09090b",c:"#141414",h:"#1c1c1c",i:"#1a1a1a",b:"#27272a",bl:"#1f1f1f",t:"#fafafa",ts:"#a1a1aa",tm:"#52525b",sb:"#0a0a0c",sbb:"#1a1a1a",sbt:"#a1a1aa",sba:"#fafafa",a:"#fafafa",ab:"rgba(255,255,255,.06)",ov:"rgba(0,0,0,.75)" }
 };
 
@@ -248,11 +248,13 @@ const RIDER_TEHNIC = {
 // STORAGE & SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 const PHASER_V = 3;
-const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative" };
+const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative" };
 const migrate = (data, key) => { if (!data) return data; if (Array.isArray(data)) return data; if (data._v === PHASER_V) return data; if (typeof data._v !== "number") data._v = 1; while (data._v < PHASER_V) { data._v++; } return data; };
 const loadEvs = () => { try { const s = localStorage.getItem(LS_KEYS.evs); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
 const loadTasks = () => { try { const s = localStorage.getItem(LS_KEYS.tasks); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
 const loadGenExp = () => { try { const s = localStorage.getItem(LS_KEYS.genExp); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
+const DEFAULT_ANNUAL_COSTS = [{id:"ac1",n:"Contabilă",a:4200,v:"lei"},{id:"ac2",n:"Taxe salariu minim",a:7200,v:"lei"},{id:"ac3",n:"ING",a:420,v:"lei"},{id:"ac4",n:"Google Drive",a:600,v:"lei"}];
+const loadAnnualCosts = () => { try { const s = localStorage.getItem(LS_KEYS.annualCosts); if (s) { const d = JSON.parse(s); return Array.isArray(d) && d.length>0 ? d : [...DEFAULT_ANNUAL_COSTS]; } } catch(e){} return [...DEFAULT_ANNUAL_COSTS]; };
 const loadCreative = () => { try { const s=localStorage.getItem(LS_KEYS.creative); if(s) { const d=JSON.parse(s); return d&&typeof d==="object"?d:{}; } } catch(e){} return {ideas:[],songs:[],setlists:[]}; };
 // Assets press kit — poze din folder assets
 const PK_IMG_PUBLIC_HEAD = "assets/Poza Presskit Public Head.jpg";
@@ -668,7 +670,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
 }
 
 // ─── Offers board, contract, offer preview ───
-function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, onDeleteSelected }) {
+function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, onDeleteSelected, showSelection }) {
   const [sortBy, setSortBy] = useState("date");
   const [filterSt, setFilterSt] = useState("");
   const [filterCat, setFilterCat] = useState("");
@@ -733,9 +735,9 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
           <option value="client">Client A-Z</option>
           <option value="status">Status</option>
         </select>
-        {onDeleteSelected&&<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
+        {(showSelection||onDeleteSelected)&&<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
           <button onClick={selectAll} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allSelected?"Deselectează":"Selectează toate"}</button>
-          {selectedIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedIds.length} selectate</span><button onClick={delSelected} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
+          {selectedIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedIds.length} selectate</span>{onDeleteSelected&&<button onClick={delSelected} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button>}</>}
         </div>}
       </div>
       {viewMode==="kanban" ? (
@@ -752,7 +754,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                     style={{background:th.c,borderRadius:8,padding:12,cursor:"grab",border:`${selectedIds.includes(ev.id)?2:1}px solid ${selectedIds.includes(ev.id)?th.a:th.b}`,boxShadow:"0 1px 3px rgba(0,0,0,.1)",transition:"transform .15s",position:"relative"}}
                     onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.cursor="grab";}}
                     onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";}}>
-                    {onDeleteSelected&&<div style={{position:"absolute",top:8,right:8}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:14,height:14}}/></div>}
+                    {(showSelection||onDeleteSelected)&&<div style={{position:"absolute",top:8,right:8}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:14,height:14}}/></div>}
                     <div style={{fontSize:10,color:th.tm,marginBottom:2}}>{ev.type} {ev.cat==="private"?"· ZGV":"· PHASER"}</div>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
                     <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fD(ev.date)}</div>
@@ -769,12 +771,12 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
       <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
-            {onDeleteSelected&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={allSelected} onChange={selectAll} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
+            {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={allSelected} onChange={selectAll} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
             {["Nr","Ofertă","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
           </tr></thead>
           <tbody>{active.map((ev,i)=>(
             <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
-              {onDeleteSelected&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
+              {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
               <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{(ev.offerNr?"O"+ev.offerNr:"—")}</td>
               <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
               <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
@@ -798,7 +800,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
             style={{...sty.cd,cursor:"pointer",borderColor:urgent?ST[ev.st].c:th.b,padding:16,transition:"all .15s",position:"relative",borderWidth:selectedIds.includes(ev.id)?2:1}}
             onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"}
             onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
-            {onDeleteSelected&&<div style={{position:"absolute",top:12,right:12}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:16,height:16}}/></div>}
+            {(showSelection||onDeleteSelected)&&<div style={{position:"absolute",top:12,right:12}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:16,height:16}}/></div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
               <div>
                 <span style={{fontSize:10,fontWeight:600,color:th.tm,textTransform:"uppercase",display:"block",marginBottom:2}}>{ev.cat==="private"?"Privat":"Public"} · {ev.type}</span>
@@ -1634,7 +1636,8 @@ function EventForm({ th, sty, isE, isP, mData, onSave, onClose, mob, templates }
     fee: mData?.fee||(isP?PX.r[1]:PX.pub),
     dep: mData?.dep||Math.round((mData?.fee||PX.r[1])*0.1/10)*10, dp: mData?.dp||false, zileRest: mData?.zileRest??5,
     sp: mData?.sp||{}, svc: mData?.svc||{}, svcp: mData?.svcp||{sunet:350,lumini:500,ecran:600,scena:300,dj:600},
-    ex: mData?.ex||[], ven: mData?.ven||[], notes: mData?.notes||"",
+    ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu"},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu"},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu"}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"",
+    impozitVenit: mData?.impozitVenit??10, plataDirect: mData?.plataDirect!==false, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", valutaAvans: mData?.valutaAvans||"EUR", valutaRest: mData?.valutaRest||"EUR", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10,
     videos: mData?.videos||DEFAULT_VIDEOS, covers: mData?.covers||tplCovers,
     desc: mData?.desc||"",
     poveste: mData?.poveste||"",
@@ -2544,6 +2547,8 @@ function App() {
   const [tab, setTab]     = useState("acasa");
   const [evs, setEvs]     = useLocalStorageState(LS_KEYS.evs, loadEvs);
   const [genExp, setGE]   = useLocalStorageState(LS_KEYS.genExp, loadGenExp);
+  const [annualCosts, setAC] = useLocalStorageState(LS_KEYS.annualCosts, loadAnnualCosts);
+  const [gigsPerYear, setGigsPerYear] = useLocalStorageState(LS_KEYS.gigsPerYear, ()=>12);
   const [tasks, setTasks] = useLocalStorageState(LS_KEYS.tasks, loadTasks);
   const [templates, setTemplates] = useState(loadTemplates);
   const { modal, payload, openModal, closeModal } = useModal();
@@ -2665,10 +2670,11 @@ function App() {
     const sg = evs.filter(e=>e.st==="confirmat");
     const rev = sg.reduce((s,e)=>s+(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0),0);
     const exp = sg.reduce((s,e)=>s+(e.ex||[]).reduce((a,x)=>a+x.a,0),0);
+    const fondTotal = sg.reduce((s,e)=>{const tot=(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0);const ex=(e.ex||[]).reduce((a,x)=>a+x.a,0);return s+getProfitWithFond(tot,ex,e).fond;},0);
     const ge  = genExp.reduce((s,e)=>s+e.a,0);
     const pipe= evs.filter(e=>["oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.fee||0),0);
     const pd  = sg.filter(e=>!e.dp).reduce((s,e)=>s+(e.dep||0),0);
-    return {rev,exp,ge,net:rev-exp-ge,pipe,pd,sc:sg.length,tc:evs.length};
+    return {rev,exp,ge,fondTotal,net:rev-exp-ge-fondTotal,pipe,pd,sc:sg.length,tc:evs.length};
   },[evs,genExp]);
 
   const repStr = (d) => {
@@ -2771,6 +2777,7 @@ function App() {
 
   const getSvcTotal = ev => Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
   const getExpTotal = ev => (ev.ex||[]).reduce((s,x)=>s+x.a,0);
+  const getProfitWithFond = (tot,exp,ev)=>{const brut=Math.max(0,tot-exp);const cuFond=ev?.cuFond!==false;const pct=ev?.fondPct??10;const fond=cuFond?Math.round(brut*pct/100):0;return{brut,fond,net:brut-fond};};
   const pendingCount = evs.filter(e=>["oferta","asteptare"].includes(e.st)).length;
   const activeTaskCount = tasks.filter(t=>!t.done).length;
 
@@ -2895,11 +2902,11 @@ function App() {
     >
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:${th.b};border-radius:3px}input,select,textarea{font-family:inherit}input:focus,select:focus,textarea:focus{outline:none;border-color:${th.tm}!important}select.modernSel{appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px;cursor:pointer;border-radius:8px;border:1px solid ${th.b};background-color:${th.i};color:${th.t};font-size:13px;transition:border-color .15s,box-shadow .15s}select.modernSel:hover{border-color:${th.tm}}select.modernSel:focus{box-shadow:0 0 0 2px ${th.ab}}@keyframes su{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}button:hover{opacity:.85}table{border-collapse:collapse}`}</style>
 
-      {/* SIDEBAR — fundal întunecat mereu, logo alb */}
-      <div style={{width:sbW,background:"#0a0a0c",borderRight:"1px solid #1a1a1a",display:"flex",flexDirection:"column",flexShrink:0,transition:"width .25s ease",overflow:"hidden"}}>
-        <div style={{padding:sbMode==="full"?"16px 16px":"8px",borderBottom:"1px solid #1a1a1a",display:"flex",alignItems:"center",justifyContent:sbMode==="mini"?"center":"space-between",minHeight:62}}>
-          {sbMode==="full"&&<Logo height={28}/>}
-          <button onClick={()=>setSbMode(sbMode==="full"?"mini":"full")} style={{padding:8,border:"none",background:sbMode==="mini"?"rgba(255,255,255,.08)":"transparent",color:"#888",cursor:"pointer",flexShrink:0,borderRadius:8}} title={sbMode==="mini"?"Deschide meniu":"Închide meniu"}>
+      {/* SIDEBAR — urmărește tema day/night */}
+      <div style={{width:sbW,background:th.sb,borderRight:`1px solid ${th.sbb}`,display:"flex",flexDirection:"column",flexShrink:0,transition:"width .25s ease",overflow:"hidden"}}>
+        <div style={{padding:sbMode==="full"?"16px 16px":"8px",borderBottom:`1px solid ${th.sbb}`,display:"flex",alignItems:"center",justifyContent:sbMode==="mini"?"center":"space-between",minHeight:62}}>
+          {sbMode==="full"&&<Logo height={28} dark={effectiveTheme==="light"}/>}
+          <button onClick={()=>setSbMode(sbMode==="full"?"mini":"full")} style={{padding:8,border:"none",background:sbMode==="mini"?(effectiveTheme==="light"?"rgba(0,0,0,.08)":"rgba(255,255,255,.08)"):"transparent",color:th.sbt,cursor:"pointer",flexShrink:0,borderRadius:8}} title={sbMode==="mini"?"Deschide meniu":"Închide meniu"}>
             {sbMode==="full"?<IcChevL s={14}/>:<IcChevR s={14}/>}
           </button>
         </div>
@@ -2908,7 +2915,7 @@ function App() {
 
         <nav style={{flex:1,padding:"8px 6px",display:"flex",flexDirection:"column",gap:1}}>
           {navItems.map(it=><button key={it.id} onClick={()=>{ setTab(it.id); if(mob) setSbMode("mini"); }} title={sbMode==="mini"?it.l:undefined}
-            style={{display:"flex",alignItems:"center",gap:9,padding:sbMode==="full"?"8px 10px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:7,border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===it.id?700:400,background:tab===it.id?"rgba(255,255,255,.1)":"transparent",color:tab===it.id?"#fff":"#888",transition:"all .15s",whiteSpace:"nowrap",position:"relative"}}>
+            style={{display:"flex",alignItems:"center",gap:9,padding:sbMode==="full"?"8px 10px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:7,border:"none",cursor:"pointer",fontSize:12,fontWeight:tab===it.id?700:400,background:tab===it.id?(effectiveTheme==="light"?"rgba(0,0,0,.1)":"rgba(255,255,255,.1)"):"transparent",color:tab===it.id?th.sba:th.sbt,transition:"all .15s",whiteSpace:"nowrap",position:"relative"}}>
             <it.Ic s={16}/>
             {sbMode==="full"&&<><span style={{flex:1,textAlign:"left"}}>{it.l}</span>{it.badge>0&&<span style={{background:"#f59e0b",color:"#000",borderRadius:10,fontSize:9,fontWeight:700,padding:"1px 6px"}}>{it.badge}</span>}</>}
             {sbMode==="mini"&&it.badge>0&&<span style={{position:"absolute",top:4,right:4,width:7,height:7,borderRadius:"50%",background:"#f59e0b"}}/>}
@@ -2916,31 +2923,31 @@ function App() {
         </nav>
 
         {/* Theme toggle — Day / Night / Auto */}
-        <div style={{padding:"6px 6px 0",borderTop:"1px solid #1a1a1a"}}>
-          <div style={{display:"flex",alignItems:"center",gap:2,padding:4,borderRadius:8,background:"rgba(255,255,255,.06)",border:"1px solid rgba(255,255,255,.08)"}} title="Tema: Auto (dispozitiv) / Zi / Noapte">
-            <button onClick={()=>applyTheme("auto")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 8px",border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="auto"?"rgba(255,255,255,.15)":"transparent",color:themeMode==="auto"?"#fff":"#666",fontSize:10,fontWeight:600}} title="Urmărește dispozitivul">
+        <div style={{padding:"6px 6px 0",borderTop:`1px solid ${th.sbb}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:2,padding:4,borderRadius:8,background:effectiveTheme==="light"?"rgba(0,0,0,.06)":"rgba(255,255,255,.06)",border:`1px solid ${th.sbb}`}} title="Tema: Auto (dispozitiv) / Zi / Noapte">
+            <button onClick={()=>applyTheme("auto")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"6px 8px",border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="auto"?(effectiveTheme==="light"?"rgba(0,0,0,.12)":"rgba(255,255,255,.15)"):"transparent",color:themeMode==="auto"?th.sba:th.sbt,fontSize:10,fontWeight:600}} title="Urmărește dispozitivul">
               {sbMode==="full"?"Auto":"A"}
             </button>
-            <button onClick={()=>applyTheme("light")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:6,border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="light"?"rgba(255,255,255,.15)":"transparent",color:themeMode==="light"?"#fff":"#666"}} title="Mod zi">
+            <button onClick={()=>applyTheme("light")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:6,border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="light"?(effectiveTheme==="light"?"rgba(0,0,0,.12)":"rgba(255,255,255,.15)"):"transparent",color:themeMode==="light"?th.sba:th.sbt}} title="Mod zi">
               <IcSun s={14}/>
             </button>
-            <button onClick={()=>applyTheme("dark")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:6,border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="dark"?"rgba(255,255,255,.15)":"transparent",color:themeMode==="dark"?"#fff":"#666"}} title="Mod noapte">
+            <button onClick={()=>applyTheme("dark")} style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",padding:6,border:"none",borderRadius:6,cursor:"pointer",background:themeMode==="dark"?(effectiveTheme==="light"?"rgba(0,0,0,.12)":"rgba(255,255,255,.15)"):"transparent",color:themeMode==="dark"?th.sba:th.sbt}} title="Mod noapte">
               <IcMoon s={14}/>
             </button>
           </div>
         </div>
 
         {/* Google Calendar connect */}
-        <div style={{padding:"6px 6px 0",borderTop:"1px solid #1a1a1a"}}>
+        <div style={{padding:"6px 6px 0",borderTop:`1px solid ${th.sbb}`}}>
           <button onClick={gcalToken ? disconnectGCal : connectGCal}
             title={sbMode==="mini"?(gcalToken?"Calendar conectat ✓":"Conectează Calendar Google"):undefined}
-            style={{display:"flex",alignItems:"center",gap:6,padding:sbMode==="full"?"6px 10px":"6px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:6,border:"none",background:gcalToken?"rgba(34,197,94,.12)":"transparent",color:gcalToken?"#22c55e":"#555",fontSize:11,cursor:"pointer",width:"100%",transition:"all .2s"}}>
+            style={{display:"flex",alignItems:"center",gap:6,padding:sbMode==="full"?"6px 10px":"6px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:6,border:"none",background:gcalToken?"rgba(34,197,94,.12)":"transparent",color:gcalToken?"#22c55e":th.sbt,fontSize:11,cursor:"pointer",width:"100%",transition:"all .2s"}}>
             <span style={{fontSize:13}}>📅</span>
             {sbMode==="full"&&<span>{gcalToken?"Calendar conectat ✓":"Conectează Calendar"}</span>}
           </button>
         </div>
         <div style={{padding:"4px 6px 10px"}}>
-          <button onClick={()=>setUser(null)} style={{display:"flex",alignItems:"center",gap:6,padding:sbMode==="full"?"6px 10px":"6px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:6,border:"none",background:"transparent",color:"#555",fontSize:11,cursor:"pointer",width:"100%"}}>
+          <button onClick={()=>setUser(null)} style={{display:"flex",alignItems:"center",gap:6,padding:sbMode==="full"?"6px 10px":"6px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:6,border:"none",background:"transparent",color:th.sbt,fontSize:11,cursor:"pointer",width:"100%"}}>
             <IcOut s={14}/>{sbMode==="full"&&<span>{user.n} · <span style={{textTransform:"uppercase",fontSize:9,letterSpacing:1}}>{user.rl}</span></span>}
           </button>
         </div>
@@ -2949,7 +2956,7 @@ function App() {
       {/* MAIN */}
       <div style={{flex:1,overflow:"auto",display:"flex",flexDirection:"column",position:"relative"}}>
         {sbMode==="mini"&&<button onClick={()=>setSbMode("full")} style={{position:"absolute",left:12,top:16,zIndex:100,padding:10,borderRadius:10,border:`1px solid ${th.b}`,background:th.c,color:th.t,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.15)"}} title="Deschide meniu"><IcChevR s={18}/></button>}
-        <div style={{flex:1,minHeight:0,overflow:"auto",padding:mob?"14px 12px":"22px 26px",paddingLeft:sbMode==="mini"?52:undefined}}>
+        <div style={{flex:1,minHeight:0,overflow:"auto",padding:mob?"14px 12px":"22px 36px",paddingLeft:sbMode==="mini"?52:undefined}}>
 
           {/* GLOBAL SEARCH — mereu vizibil */}
           <div style={{position:"relative",marginBottom:16,maxWidth:400}}>
@@ -3053,13 +3060,13 @@ function App() {
                 <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:th.tm}}><IcSearch s={14}/></span>
                 <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Caută eveniment..." style={{...sty.i,paddingLeft:30,fontSize:mob?"16px":"14px"}}/>
               </div>
-              {p.d&&(()=>{
+              {(p.d||p.e)&&(()=>{
                 const allEvIds = search ? fEvs.map(e=>e.id) : [...viitoare,...trecute].map(e=>e.id);
                 const allEvSelected = allEvIds.length>0&&allEvIds.every(id=>selectedEvIds.includes(id));
                 return (
                   <div style={{display:"flex",gap:6,alignItems:"center"}}>
                     <button onClick={()=>setSelectedEvIds(allEvSelected?[]:allEvIds)} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allEvSelected?"Deselectează":"Selectează toate"}</button>
-                    {selectedEvIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedEvIds.length} selectate</span><button onClick={()=>{if(!window.confirm(`Ștergi ${selectedEvIds.length} eveniment/e?`))return;setEvs(prev=>prev.filter(e=>!selectedEvIds.includes(e.id)));setSelectedEvIds([]);showToast(`Șterse ${selectedEvIds.length} eveniment/e`);}} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
+                    {selectedEvIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedEvIds.length} selectate</span>{p.d&&<button onClick={()=>{if(!window.confirm(`Ștergi ${selectedEvIds.length} eveniment/e?`))return;setEvs(prev=>prev.filter(e=>!selectedEvIds.includes(e.id)));setSelectedEvIds([]);showToast(`Șterse ${selectedEvIds.length} eveniment/e`);}} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button>}</>}
                   </div>
                 );
               })()}
@@ -3068,14 +3075,14 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
                 <table style={{width:"100%"}}>
                   <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
-                    {p.d&&<th style={{padding:"9px 12px",width:36}}><input type="checkbox" checked={fEvs.length>0&&fEvs.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=fEvs.map(e=>e.id);const all=fEvs.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}
+                    {(p.d||p.e)&&<th style={{padding:"9px 12px",width:36}}><input type="checkbox" checked={fEvs.length>0&&fEvs.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=fEvs.map(e=>e.id);const all=fEvs.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}
                     {["Client","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"9px 12px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                   </tr></thead>
                   <tbody>{fEvs.map(ev=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
                       onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
-                      {p.d&&<td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
+                      {(p.d||p.e)&&<td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div></td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -3092,12 +3099,12 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:"hidden",marginBottom:20}}>
                 {viitoare.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment confirmat viitor</div>}
                 {viitoare.length>0&&<table style={{width:"100%"}}>
-                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{p.d&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={viitoare.length>0&&viitoare.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=viitoare.map(e=>e.id);const all=viitoare.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}{p.e&&<th style={{width:44}}/>}</tr></thead>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={viitoare.length>0&&viitoare.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=viitoare.map(e=>e.id);const all=viitoare.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}{p.e&&<th style={{width:44}}/>}</tr></thead>
                   <tbody>{viitoare.map((ev,i)=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<viitoare.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
                       onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
-                      {p.d&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
+                      {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:700}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:10,color:th.tm}}>{ev.cat==="private"?"ZGV":"PHASER"}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div></td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -3113,12 +3120,12 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
                 {trecute.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment trecut</div>}
                 {trecute.length>0&&<table style={{width:"100%"}}>
-                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{p.d&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={trecute.length>0&&trecute.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=trecute.map(e=>e.id);const all=trecute.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={trecute.length>0&&trecute.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=trecute.map(e=>e.id);const all=trecute.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}</tr></thead>
                   <tbody>{trecute.map((ev,i)=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<trecute.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",opacity:.7,background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
                       onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{e.currentTarget.style.opacity=".7";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
-                      {p.d&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
+                      {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -3132,7 +3139,7 @@ function App() {
           </div>}
 
           {/* OFERTE */}
-          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pick",null):undefined} onStatusChange={updSt} onDeleteSelected={p.d?ids=>{setEvs(prev=>prev.filter(e=>!ids.includes(e.id)));showToast(`Șterse ${ids.length} ofertă/oferte`);}:undefined}/>}
+          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pick",null):undefined} onStatusChange={updSt} onDeleteSelected={p.d?ids=>{setEvs(prev=>prev.filter(e=>!ids.includes(e.id)));showToast(`Șterse ${ids.length} ofertă/oferte`);}:undefined} showSelection={p.d||p.e}/>}
 
           {/* DOCS — Documente, rider, playlist, press kit — template pentru oferte */}
           {tab==="docs"&&<div style={{animation:"su .3s ease"}}>
@@ -3140,8 +3147,8 @@ function App() {
               <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Docs</h1>
               <p style={{color:th.tm,fontSize:12,marginTop:2}}>Documente, rider, playlist și press kit — template-uri editabile pentru oferte.</p>
               <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
-                <button onClick={()=>{const blob=new Blob([JSON.stringify({_v:PHASER_V,evs,tasks,genExp,templates,riderVersions,pressKitVersions:loadPressKitVersions(),creative:loadCreative()},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`phaser-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);showToast("Backup exportat");}} style={sty.bg}><IcFile s={14}/> Export JSON</button>
-                <label style={{...sty.bg,cursor:"pointer",margin:0,display:"inline-flex",alignItems:"center",gap:6}}><IcFile s={14}/> Import JSON<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||typeof d!=="object")throw new Error("JSON invalid");if(Array.isArray(d.evs)){setEvs(d.evs);}if(Array.isArray(d.tasks)){setTasks(d.tasks);}if(Array.isArray(d.genExp)){setGE(d.genExp);}if(d.templates){setTemplates(d.templates);try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(d.templates));}catch(x){}}if(Array.isArray(d.riderVersions)){setRiderVersions(d.riderVersions);try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(d.riderVersions));}catch(x){}}if(Array.isArray(d.pressKitVersions)){setPressKitVersions(d.pressKitVersions);try{localStorage.setItem(LS_KEYS.pressKitVersions,JSON.stringify(d.pressKitVersions));}catch(x){}}if(d.creative){try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(d.creative));}catch(x){}}showToast("Date importate");}catch(err){showToast("Eroare: "+(err?.message||String(err)));}e.target.value="";};r.readAsText(f);}}/></label>
+                <button onClick={()=>{const blob=new Blob([JSON.stringify({_v:PHASER_V,evs,tasks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions:loadPressKitVersions(),creative:loadCreative()},null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`phaser-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(a.href);showToast("Backup exportat");}} style={sty.bg}><IcFile s={14}/> Export JSON</button>
+                <label style={{...sty.bg,cursor:"pointer",margin:0,display:"inline-flex",alignItems:"center",gap:6}}><IcFile s={14}/> Import JSON<input type="file" accept=".json,application/json" style={{display:"none"}} onChange={e=>{const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d||typeof d!=="object")throw new Error("JSON invalid");if(Array.isArray(d.evs)){setEvs(d.evs);}if(Array.isArray(d.tasks)){setTasks(d.tasks);}if(Array.isArray(d.genExp)){setGE(d.genExp);}if(Array.isArray(d.annualCosts)){setAC(d.annualCosts);}if(typeof d.gigsPerYear==="number"&&d.gigsPerYear>0){setGigsPerYear(d.gigsPerYear);}if(d.templates){setTemplates(d.templates);try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(d.templates));}catch(x){}}if(Array.isArray(d.riderVersions)){setRiderVersions(d.riderVersions);try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(d.riderVersions));}catch(x){}}if(Array.isArray(d.pressKitVersions)){setPressKitVersions(d.pressKitVersions);try{localStorage.setItem(LS_KEYS.pressKitVersions,JSON.stringify(d.pressKitVersions));}catch(x){}}if(d.creative){try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(d.creative));}catch(x){}}showToast("Date importate");}catch(err){showToast("Eroare: "+(err?.message||String(err)));}e.target.value="";};r.readAsText(f);}}/></label>
               </div>
             </div>
             <div style={{display:"flex",gap:6,marginBottom:16,flexWrap:"wrap"}}>
@@ -3594,6 +3601,27 @@ function App() {
                 </tr>
               )}</tbody></table>}
             </div>
+            <div style={{...sty.cd,marginTop:16}}>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Cheltuieli anuale fixe (firmă)</div>
+              <div style={{fontSize:11,color:th.tm,marginBottom:12}}>Costuri fixe pe an — pune deoparte un procent din fiecare concert ca să le acoperi</div>
+              {annualCosts.map((x,i)=><div key={x.id} style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr auto":"2fr 1fr 80px auto",gap:6,marginBottom:6,alignItems:"center"}}>
+                <input value={x.n} onChange={e=>{const ac=[...annualCosts];ac[i]={...ac[i],n:e.target.value};setAC(ac);}} style={{...sty.i,padding:8,fontSize:12}} placeholder="Ex: Contabilă"/>
+                <input type="number" value={x.a} onChange={e=>{const ac=[...annualCosts];ac[i]={...ac[i],a:Number(e.target.value)||0};setAC(ac);}} style={{...sty.i,padding:8,fontSize:12}} placeholder="0"/>
+                <select value={x.v||"lei"} onChange={e=>{const ac=[...annualCosts];ac[i]={...ac[i],v:e.target.value};setAC(ac);}} style={{...sty.i,padding:8,fontSize:11}}><option value="lei">lei</option><option value="eur">€</option></select>
+                <button onClick={()=>setAC(annualCosts.filter((_,j)=>j!==i))} style={{padding:4,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button>
+              </div>)}
+              <button onClick={()=>setAC([...annualCosts,{id:uid(),n:"",a:0,v:"lei"}])} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginBottom:12}}>+ Adaugă</button>
+              {(()=>{const CURS=5;const totLei=annualCosts.filter(x=>(x.v||"lei")==="lei").reduce((s,x)=>s+(x.a||0),0);const totEur=annualCosts.filter(x=>x.v==="eur").reduce((s,x)=>s+(x.a||0),0);const totAnualLei=totLei+totEur*CURS;const gigsAn=Math.max(1,typeof gigsPerYear==="number"?gigsPerYear:12);const perGigLei=totAnualLei/gigsAn;const avgFee=evs.filter(e=>e.st==="confirmat").length>0?evs.filter(e=>e.st==="confirmat").reduce((s,e)=>s+(e.fee||0),0)/evs.filter(e=>e.st==="confirmat").length:2500;const avgFeeLei=avgFee*CURS;const pct=avgFeeLei>0?Math.round(perGigLei/avgFeeLei*100):0;return <div style={{padding:12,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                <div style={{fontSize:11,fontWeight:600,marginBottom:6}}>Total anual: {totLei>0&&<span>{totLei.toLocaleString("ro-RO")} lei</span>}{totLei>0&&totEur>0&&" + "}{totEur>0&&<span>{f$(totEur)} (≈{Math.round(totEur*CURS).toLocaleString("ro-RO")} lei)</span>}</div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                  <span style={{fontSize:10,color:th.tm}}>Concerte estimate/an:</span>
+                  <input type="number" value={gigsPerYear} onChange={e=>setGigsPerYear(Math.max(1,Number(e.target.value)||12))} style={{...sty.i,width:50,padding:4,fontSize:12}} min={1} max={365}/>
+                </div>
+                <div style={{fontSize:10,color:th.tm,marginBottom:4}}>→ <strong>{Math.round(perGigLei).toLocaleString("ro-RO")} lei</strong> de pus deoparte per concert</div>
+                <div style={{fontSize:10,color:th.tm}}>Dacă onorariu mediu e {f$(avgFee)} (≈{Math.round(avgFeeLei).toLocaleString("ro-RO")} lei): <strong style={{color:th.t}}>~{pct}%</strong> din fiecare concert pentru costuri firmă</div>
+                <div style={{fontSize:9,color:th.tm,marginTop:6}}>+ 16% dividende când plătești prin firmă</div>
+              </div>;})()}
+            </div>
           </div>}
 
         </div>
@@ -3648,55 +3676,79 @@ function App() {
             </div>
             <div style={{padding:"16px 22px"}}>
 
-              {/* FIȘA EVENIMENTULUI — doar dacă e confirmat */}
-              {isConfirmed&&<div style={{marginBottom:16,padding:16,borderRadius:10,background:th.h,border:`2px solid #22c55e`}}>
-                <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:12,color:"#22c55e",display:"flex",alignItems:"center",gap:6}}>
-                  <IcDoc s={14}/> Fișa evenimentului
-                </div>
-                {/* Program pe ore */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Program pe ore</div>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
-                    {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=>
-                      <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
-                        <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
-                        <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div>
-                        <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{x.v||"—"}</div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {/* Client + Financiar */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                  <div style={{padding:10,borderRadius:7,background:th.c,border:`1px solid ${th.b}`}}>
-                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:5}}>Client</div>
-                    <div style={{fontSize:12,fontWeight:700}}>{ev.cn||"—"}</div>
-                    {ev.cp&&<div style={{fontSize:11,color:th.ts,marginTop:2}}>{ev.cp}</div>}
+              {/* OFERTĂ REALIZATĂ (read-only) + FIȘA EVENIMENTULUI — doar când e confirmat */}
+              {isConfirmed&&<>
+                {/* 1. Ofertă realizată — read-only, fără media/playlist */}
+                <div style={{marginBottom:16,padding:16,borderRadius:10,background:th.h,border:`1px solid ${th.b}`,opacity:0.95}}>
+                  <div style={{fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Ofertă realizată</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                    <div><div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:2}}>Client</div><div style={{fontSize:13,fontWeight:700}}>{ev.cn||"—"}</div>
+                    {ev.cp&&<div style={{fontSize:11,color:th.ts}}>{ev.cp}</div>}
                     {ev.ce&&<div style={{fontSize:11,color:th.ts}}>{ev.ce}</div>}
-                    {ev.platform&&<div style={{fontSize:11,color:th.tm,marginTop:4,display:"flex",alignItems:"center",gap:4}}>
-                      <span style={{fontSize:9,padding:"1px 6px",borderRadius:8,background:th.ab,fontWeight:600,textTransform:"uppercase"}}>{ev.platform}</span>
-                      <span style={{color:th.ts}}>{ev.platformId||""}</span>
-                    </div>}
+                    </div>
+                    <div><div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:2}}>Dată · Locație</div><div style={{fontSize:13,fontWeight:700}}>{fD(ev.date)}</div>
+                    <div style={{fontSize:11,color:th.ts}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
+                    </div>
                   </div>
-                  <div style={{padding:10,borderRadius:7,background:th.c,border:`1px solid ${th.b}`}}>
-                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:5}}>Financiar</div>
-                    <div style={{fontSize:16,fontWeight:800}}>{f$(ev.fee+svc)}</div>
-                    <div style={{fontSize:10,color:ev.dp?"#22c55e":"#ef4444",marginTop:2}}>Avans {f$(ev.dep)} {ev.dp?"✓":"✗"}</div>
-                    <div style={{fontSize:10,color:th.tm}}>Profit: {f$(ev.fee+svc-exp)}</div>
+                  <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${th.b}`}}>
+                    <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:2}}>Tip · Onorariu</div>
+                    <div style={{fontSize:15,fontWeight:800}}>{ev.type||"—"} · {f$(ev.fee+svc)}</div>
                   </div>
                 </div>
-                {!isP&&<div style={{marginTop:10,padding:10,borderRadius:7,background:th.c,border:`1px solid ${th.b}`}}>
-                  <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Rider Tehnic</div>
-                  <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
-                    {RIDER_TEHNIC.backstage.slice(0,5).map((item,i)=><span key={i} style={{padding:"2px 8px",borderRadius:10,background:th.ab,fontSize:10,color:th.ts}}>{item}</span>)}
-                    <span style={{fontSize:10,color:th.tm}}>+{RIDER_TEHNIC.backstage.length-5} mai mult</span>
+                {/* 2. Fișa de evenimente */}
+                <div style={{marginBottom:16,padding:16,borderRadius:10,background:th.h,border:`2px solid #22c55e`}}>
+                  <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:12,color:"#22c55e",display:"flex",alignItems:"center",gap:6}}>
+                    <IcDoc s={14}/> Fișa evenimentului
                   </div>
-                </div>}
-                {ev.notes&&<div style={{marginTop:10,padding:10,borderRadius:7,background:th.c,border:`1px solid ${th.b}`}}>
-                  <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:4}}>Note interne</div>
-                  <div style={{fontSize:11,color:th.ts}}>{ev.notes}</div>
-                </div>}
-              </div>}
+                  {/* Timing tehnic */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing tehnic</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                      {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=>
+                        <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
+                          <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
+                          <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div>
+                          <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{x.v||"—"}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Timing show — reprize */}
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing show</div>
+                    <div style={{padding:10,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
+                      {(ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45)).map((d,i)=><span key={i} style={{padding:"4px 10px",borderRadius:6,background:th.ab,fontSize:11,fontWeight:600,marginRight:6,marginBottom:4,display:"inline-block"}}>R{i+1}: {d} min</span>)}
+                      {(!ev.repDurs||ev.repDurs.length===0)&&(!ev.rep||ev.rep<2)&&<span style={{fontSize:11,color:th.tm}}>{(ev.rep||1)} repriză × {(ev.repDur||45)} min</span>}
+                    </div>
+                  </div>
+                  {/* Contacte furnizori */}
+                  {((ev.ven||[]).length>0)&&<div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Contacte furnizori</div>
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      {(ev.ven||[]).map(v=><div key={v.id} style={{padding:10,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
+                        <div style={{fontSize:12,fontWeight:700}}>{v.n||"—"}</div>
+                        {v.role&&<div style={{fontSize:10,color:th.tm}}>{v.role}</div>}
+                        {v.fee>0&&<div style={{fontSize:11,color:th.ts,marginTop:2}}>{f$(v.fee)}</div>}
+                      </div>)}
+                    </div>
+                  </div>}
+                  {/* Note */}
+                  {ev.notes&&<div style={{marginBottom:12}}>
+                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Note</div>
+                    <div style={{padding:10,borderRadius:8,background:th.c,border:`1px solid ${th.b}`,fontSize:11,color:th.ts}}>{ev.notes}</div>
+                  </div>}
+                  {/* Finanțe — rezumat */}
+                  <div style={{padding:10,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
+                    <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Finanțe</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      <div><div style={{fontSize:10,color:th.tm}}>Suma totală</div><div style={{fontSize:16,fontWeight:800}}>{f$(ev.fee+svc)}</div></div>
+                      <div><div style={{fontSize:10,color:th.tm}}>Avans</div><div style={{fontSize:14,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{f$(ev.dep)} {ev.dp?"✓":"✗"}</div></div>
+                    </div>
+                    {(()=>{const tot=ev.fee+svc;const {fond,net}=getProfitWithFond(tot,exp,ev);return <><div style={{marginTop:8,fontSize:14,fontWeight:700,color:net>=0?"#22c55e":"#ef4444"}}>Profit net: {f$(net)}</div>{ev.cuFond!==false&&fond>0&&<div style={{fontSize:10,color:th.tm,marginTop:2}}>Fond {(ev.fondPct??10)}%: {f$(fond)}</div>}</>;})()}
+                    {Object.keys(ev.sp||{}).length>0&&<div style={{marginTop:8,fontSize:10,color:th.tm}}>Split: {MEMBERS.filter(m=>ev.sp[m.id]).map(m=>`${m.n.split(" ")[0]} ${f$(ev.sp[m.id])}`).join(" · ")}</div>}
+                  </div>
+                </div>
+              </>}
 
               {/* Dacă NU e confirmat — arată info basic */}
               {!isConfirmed&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
@@ -3739,22 +3791,23 @@ function App() {
         </div>;
       })()}
 
-      {/* FINANCE POPUP */}
+      {/* FINANCE POPUP — Fișa financiară detaliată */}
       {modal==="finance"&&(()=>{
         if(!mData) return null;
         const ev=mData; const svc=getSvcTotal(ev); const exp=getExpTotal(ev); const tot=ev.fee+svc;
+        const upd=(patch)=>setEvs(p=>p.map(e=>e.id===ev.id?{...e,...patch}:e));
         return <div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100}} onClick={closeModal}>
-          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"90%":400}} onClick={e=>e.stopPropagation()}>
+          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"95%":480,maxHeight:"90vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
             <div style={{padding:"16px 20px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between"}}>
-              <h3 style={{fontSize:15,fontWeight:700}}>Fișa financiară</h3>
+              <h3 style={{fontSize:15,fontWeight:700}}>Fișa financiară · {ev.offerNr?"O"+ev.offerNr:"???"}</h3>
               <button onClick={closeModal} style={{padding:3,border:"none",background:"transparent",color:th.tm,cursor:"pointer"}}><IcX s={14}/></button>
             </div>
             <div style={{padding:"16px 20px"}}>
-              <div style={{textAlign:"center",marginBottom:14}}>
-                <div style={{fontSize:12,color:th.tm}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
+              <div style={{textAlign:"center",marginBottom:16}}>
+                <div style={{fontSize:12,color:th.tm}}>{ev.type}</div>
                 <div style={{fontSize:26,fontWeight:800,marginTop:3}}>{f$(tot)}</div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
                 <div style={{padding:10,borderRadius:6,background:th.h,textAlign:"center"}}>
                   <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Avans</div>
                   <div style={{fontSize:15,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{f$(ev.dep)}</div>
@@ -3765,13 +3818,57 @@ function App() {
                   <div style={{fontSize:15,fontWeight:700}}>{f$(tot-(ev.dp?ev.dep:0))}</div>
                 </div>
               </div>
-              {ev.ex?.length>0&&<div style={{padding:10,borderRadius:6,background:th.h,marginBottom:10}}>
-                {ev.ex.map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"2px 0"}}><span>{x.n}</span><span style={{fontWeight:600,color:"#ef4444"}}>{f$(x.a)}</span></div>)}
-              </div>}
-              <div style={{padding:10,borderRadius:6,background:th.ab,textAlign:"center"}}>
-                <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Profit net</div>
-                <div style={{fontSize:20,fontWeight:800,color:tot-exp>=0?"#22c55e":"#ef4444"}}>{f$(tot-exp)}</div>
+              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Plată</div>
+              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="plata" checked={ev.plataDirect!==false} onChange={()=>upd({plataDirect:true})}/><span style={{fontSize:12}}>Direct</span></label>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="plata" checked={ev.plataDirect===false} onChange={()=>upd({plataDirect:false})}/><span style={{fontSize:12}}>Firmă</span></label>
               </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Modalitate plată avans</label><input value={ev.modalitatePlataAvans||""} onChange={e=>upd({modalitatePlataAvans:e.target.value})} placeholder="ex. Transfer" style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
+                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Modalitate plată rest</label><input value={ev.modalitatePlataRest||""} onChange={e=>upd({modalitatePlataRest:e.target.value})} placeholder="ex. Numerar" style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Valuta avans</label><input value={ev.valutaAvans||"EUR"} onChange={e=>upd({valutaAvans:e.target.value})} style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
+                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Valuta rest</label><input value={ev.valutaRest||"EUR"} onChange={e=>upd({valutaRest:e.target.value})} style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
+              </div>
+              {ev.plataDirect===false&&<><div style={{marginBottom:12}}>
+                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Impozit venit (%)</div>
+                <input type="number" value={ev.impozitVenit??10} onChange={e=>upd({impozitVenit:Number(e.target.value)||0})} style={{...sty.i,width:80,padding:8,fontSize:14}}/> %
+              </div>
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Dividende (%)</div>
+                <input type="number" value={ev.dividende??16} onChange={e=>upd({dividende:Number(e.target.value)||0})} style={{...sty.i,width:80,padding:8,fontSize:14}}/> %
+              </div></>}
+              {ev.plataDirect!==false&&<div style={{fontSize:11,color:th.tm,marginBottom:12,padding:8,borderRadius:6,background:th.h}}>Plată directă / la negru — impozit și dividende nu se aplică</div>}
+              <div style={{marginBottom:12}}>
+                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Fond</div>
+                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
+                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="fond" checked={ev.cuFond!==false} onChange={()=>upd({cuFond:true})}/><span style={{fontSize:12}}>Da (10% din oficiu)</span></label>
+                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="fond" checked={ev.cuFond===false} onChange={()=>upd({cuFond:false})}/><span style={{fontSize:12}}>Nu</span></label>
+                  {ev.cuFond!==false&&<><input type="number" value={ev.fondPct??10} onChange={e=>upd({fondPct:Number(e.target.value)||0})} style={{...sty.i,width:60,padding:6,fontSize:13}} min={0} max={100}/><span style={{fontSize:12,color:th.tm}}>%</span></>}
+                </div>
+              </div>
+              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Split per membru</div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
+                {MEMBERS.map(m=>(
+                  <div key={m.id} style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:12,flex:1}}>{m.n.split(" ")[0]}</span>
+                    <input type="number" value={ev.sp?.[m.id]||""} onChange={e=>upd({sp:{...ev.sp,[m.id]:Number(e.target.value)}})} placeholder="€" style={{...sty.i,width:90,padding:8,fontSize:12,textAlign:"right"}}/>
+                    <span style={{fontSize:11,color:th.tm}}>€</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Plăți servicii</div>
+              {Object.entries(ev.svcp||{}).filter(([k])=>ev.svc?.[k]).map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 0"}}><span style={{textTransform:"capitalize"}}>{k}</span><span style={{fontWeight:600}}>{f$(v)}</span></div>)}
+              {ev.ex?.length>0&&<div style={{marginTop:10}}>
+                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Alte cheltuieli</div>
+                {ev.ex.map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"4px 0"}}><span>{x.n||"Cheltuială"}</span><span style={{fontWeight:600,color:"#ef4444"}}>{f$(x.a)}</span></div>)}
+              </div>}
+              {(()=>{const {brut,fond,net}=getProfitWithFond(tot,exp,ev);return <div style={{marginTop:16,padding:12,borderRadius:8,background:th.ab,textAlign:"center"}}>
+                {ev.cuFond!==false&&fond>0&&<div style={{fontSize:10,color:th.tm,marginBottom:4}}>Fond {(ev.fondPct??10)}%: {f$(fond)}</div>}
+                <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Profit net</div>
+                <div style={{fontSize:20,fontWeight:800,color:net>=0?"#22c55e":"#ef4444"}}>{f$(net)}</div>
+              </div>;})()}
             </div>
           </div>
         </div>;
