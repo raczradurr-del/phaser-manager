@@ -411,11 +411,14 @@ const delInTree = (tasks, id) => tasks.filter(t=>t.id!==id).map(t=>({...t,subtas
 const addSubInTree = (tasks, parentId, sub) => tasks.map(t=>t.id===parentId?{...t,subtasks:[...(t.subtasks||[]),sub]}:{...t,subtasks:addSubInTree(t.subtasks||[],parentId,sub)});
 const updInTree = (tasks, id, upd) => tasks.map(t=>t.id===id?(typeof upd==="function"?upd(t):{...t,...upd}):{...t,subtasks:updInTree(t.subtasks||[],id,upd)});
 
+const delMultipleInTree = (tasks, ids) => tasks.filter(t=>!ids.includes(t.id)).map(t=>({...t,subtasks:delMultipleInTree(t.subtasks||[],ids)}));
+
 function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
   const [newText, setNewText] = useState("");
   const [newPrio, setNewPrio] = useState("medium");
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [viewMode, setViewMode] = useState("list"); // list | calendar | kanban
+  const [selectedIds, setSelectedIds] = useState([]);
   const [kanbanDragCol, setKanbanDragCol] = useState(null);
   const [calendarDate, setCalendarDate] = useState(()=>{const n=new Date(); return {y:n.getFullYear(),m:n.getMonth()};});
   const calendarScrollRef = useRef(null);
@@ -446,6 +449,10 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
   const taskStatus = t => (t.taskStatus==="done"||t.done)?"done":(t.taskStatus||"in_proces");
   const active = tasks.filter(t=>taskStatus(t)!=="done").sort((a,b)=>({high:0,medium:1,low:2})[a.priority||"medium"]-({high:0,medium:1,low:2})[b.priority||"medium"]);
   const done = tasks.filter(t=>taskStatus(t)==="done");
+  const allTaskIds = [...active,...done].map(t=>t.id);
+  const allSelected = allTaskIds.length>0&&allTaskIds.every(id=>selectedIds.includes(id));
+  const selectAll = () => setSelectedIds(allSelected?[]:allTaskIds);
+  const delSelected = () => { if(selectedIds.length===0) return; if(!window.confirm(`Ștergi ${selectedIds.length} task/taskuri?`)) return; setTasks(p=>delMultipleInTree(p,selectedIds)); setSelectedIds([]); };
 
   useEffect(()=>{
     const el=calendarScrollRef.current; if(!el||viewMode!=="calendar"||compact) return;
@@ -481,14 +488,15 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
     });
   };
 
-  const TaskCard = ({ t, isDone, depth=0 }) => {
+  const TaskCard = ({ t, isDone, depth=0, showSelect }) => {
     const ex = expandedIds.has(t.id);
     const subs = t.subtasks||[];
     const doneSubs = subs.filter(s=>s.done).length;
     const isReplying = replyingTo&&replyingTo.tid===t.id;
     return (
-      <div key={t.id} style={{borderRadius:12,background:th.c,border:`1px solid ${th.b}`,borderLeft:`5px solid ${PC[t.priority||"medium"]}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.06)",marginLeft:depth*16}}>
+      <div key={t.id} style={{borderRadius:12,background:th.c,border:`1px solid ${th.b}`,borderLeft:`5px solid ${PC[t.priority||"medium"]}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.06)",marginLeft:depth*16,borderWidth:showSelect&&selectedIds.includes(t.id)?2:1}}>
         <div onClick={()=>toggleExpanded(t.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 20px",cursor:"pointer",flexWrap:"wrap"}}>
+          {showSelect&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16}}/></div>}
           <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:20,height:20,borderRadius:5,border:`2px solid ${PC[t.priority||"medium"]}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?th.b:"transparent"}}>{isDone&&<IcCheck s={12}/>}</div>
           <div style={{flex:1,minWidth:120,fontSize:16,fontWeight:500,textDecoration:isDone?"line-through":undefined,color:isDone?th.tm:th.t,lineHeight:1.4}}>{t.text}</div>
           <select value={t.priority||"medium"} onChange={e=>{e.stopPropagation();updTask(t.id,{priority:e.target.value});}} onClick={e=>e.stopPropagation()} className="modernSel" style={{...sty.i,padding:"6px 24px 6px 10px",fontSize:12,borderRadius:8,border:`1px solid ${PC[t.priority||"medium"]}`,background:PC[t.priority||"medium"]+"15",color:PC[t.priority||"medium"],fontWeight:600,width:"auto",minWidth:90,cursor:"pointer"}}>
@@ -513,7 +521,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
           </div>
           <div style={{marginBottom:16}}>
             <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Subtasks</div>
-            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1}/>)}
+            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1} showSelect={false}/>)}
             <input placeholder="+ Adaugă subtask (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addSub(t.id,e.target.value);e.target.value="";}}} style={{...sty.i,width:"100%",padding:"14px 16px",fontSize:15,marginTop:8,borderRadius:10}}/>
           </div>
           <div style={{marginBottom:16}}>
@@ -564,6 +572,11 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
         <button onClick={add} style={{...sty.b,padding:"18px 24px",flexShrink:0,borderRadius:12,fontWeight:600,fontSize:15}}><IcPlus s={18}/></button>
       </div>
 
+      {!compact&&allTaskIds.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
+        <button onClick={selectAll} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allSelected?"Deselectează":"Selectează toate"}</button>
+        {selectedIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedIds.length} selectate</span><button onClick={delSelected} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
+      </div>}
+
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {active.length===0 && <div style={{padding:56,textAlign:"center",color:th.tm,fontSize:17,lineHeight:1.6,background:th.bg==="#09090b"?th.h:"#faf9f7",borderRadius:16,border:`2px dashed ${th.bl}`}}>Niciun task activ — scrie mai sus ce ai de făcut și apasă Enter 🎉</div>}
         {viewMode==="kanban"&&!compact ? (
@@ -576,10 +589,11 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
                 <div style={{display:"flex",flexDirection:"column",gap:10}}>
                   {colTasks.map(t=>(
                     <div key={t.id} draggable onDragStart={e=>e.dataTransfer.setData("taskId",t.id)} onClick={()=>toggleExpanded(t.id)}
-                      style={{background:th.c,borderRadius:12,padding:18,cursor:"grab",border:`1px solid ${th.bl}`,boxShadow:"0 1px 4px rgba(0,0,0,.05)",transition:"all .15s"}}
+                      style={{background:th.c,borderRadius:12,padding:18,cursor:"grab",border:`${selectedIds.includes(t.id)?2:1}px solid ${selectedIds.includes(t.id)?th.a:th.bl}`,boxShadow:"0 1px 4px rgba(0,0,0,.05)",transition:"all .15s"}}
                       onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)";}}
                       onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.05)";}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                        {!compact&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16}}/></div>}
                         <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:20,height:20,borderRadius:5,border:`2px solid ${TSC[taskStatus(t)]}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:taskStatus(t)==="done"?th.b:"transparent",marginTop:2}}>{taskStatus(t)==="done"&&<IcCheck s={12}/>}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:16,fontWeight:600,textDecoration:taskStatus(t)==="done"?"line-through":undefined,color:taskStatus(t)==="done"?th.tm:th.t,lineHeight:1.4}}>{t.text}</div>
@@ -595,7 +609,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
                       </div>
                       {expandedIds.has(t.id)&&<div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${th.b}`}}>
                         <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Subtasks</div>
-                        {(t.subtasks||[]).map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={1}/>)}
+                        {(t.subtasks||[]).map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={1} showSelect={false}/>)}
                         <input placeholder="+ Adaugă subtask (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addSub(t.id,e.target.value);e.target.value="";}}} style={{...sty.i,padding:"14px 16px",fontSize:15,marginTop:10,borderRadius:10}}/>
                       </div>}
                     </div>
@@ -626,25 +640,27 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false }) {
             </div>
           </div>
         ) : (
-          active.map(t=><TaskCard key={t.id} t={t} isDone={false}/>)
+          active.map(t=><TaskCard key={t.id} t={t} isDone={false} showSelect={!compact}/>)
         )}
       </div>
 
       {done.length>0 && <>
         <div style={{fontSize:13,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1.2,marginTop:32,marginBottom:14}}>Finalizate ({done.length})</div>
-        {(compact?done.slice(0,2):done).map(t=><TaskCard key={t.id} t={t} isDone={true}/>)}
+        {(compact?done.slice(0,2):done).map(t=><TaskCard key={t.id} t={t} isDone={true} showSelect={!compact}/>)}
       </>}
     </div>
   );
 }
 
 // ─── Offers board, contract, offer preview ───
-function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }) {
+function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, onDeleteSelected }) {
   const [sortBy, setSortBy] = useState("date");
   const [filterSt, setFilterSt] = useState("");
   const [filterCat, setFilterCat] = useState("");
   const [viewMode, setViewMode] = useState("list"); // list | grid | kanban
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const toggleSel = (id) => setSelectedIds(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
   let base = evs.filter(e=>{
     if(filterSt) { if(e.st!==filterSt) return false; }
     else { if(!["oferta","asteptare","plata_avans","confirmat"].includes(e.st)) return false; }
@@ -662,6 +678,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
     if(sortBy==="status") return (a.st||"").localeCompare(b.st||"");
     return 0;
   });
+  const allIds = active.map(e=>e.id);
+  const allSelected = allIds.length>0&&allIds.every(id=>selectedIds.includes(id));
+  const selectAll = () => setSelectedIds(allSelected?[]:allIds);
+  const delSelected = () => { if(selectedIds.length===0||!onDeleteSelected) return; if(!window.confirm(`Ștergi ${selectedIds.length} ofertă/oferte?`)) return; onDeleteSelected(selectedIds); setSelectedIds([]); };
   return (
     <div style={{animation:"su .3s ease"}}>
       <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
@@ -698,6 +718,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
           <option value="client">Client A-Z</option>
           <option value="status">Status</option>
         </select>
+        {onDeleteSelected&&<div style={{display:"flex",gap:6,alignItems:"center",marginLeft:"auto"}}>
+          <button onClick={selectAll} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allSelected?"Deselectează":"Selectează toate"}</button>
+          {selectedIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedIds.length} selectate</span><button onClick={delSelected} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
+        </div>}
       </div>
       {viewMode==="kanban" ? (
         <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(4,1fr)",gap:12,minHeight:400}}>
@@ -710,9 +734,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
                 {colEvs.map(ev=>{
                   const d=dU(ev.date); const urgent=d<=14;
                   return <div key={ev.id} draggable onDragStart={e=>e.dataTransfer.setData("evId",ev.id)} onClick={()=>onSelect(ev)}
-                    style={{background:th.c,borderRadius:8,padding:12,cursor:"grab",border:`1px solid ${th.b}`,boxShadow:"0 1px 3px rgba(0,0,0,.1)",transition:"transform .15s"}}
+                    style={{background:th.c,borderRadius:8,padding:12,cursor:"grab",border:`${selectedIds.includes(ev.id)?2:1}px solid ${selectedIds.includes(ev.id)?th.a:th.b}`,boxShadow:"0 1px 3px rgba(0,0,0,.1)",transition:"transform .15s",position:"relative"}}
                     onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.cursor="grab";}}
                     onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";}}>
+                    {onDeleteSelected&&<div style={{position:"absolute",top:8,right:8}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:14,height:14}}/></div>}
                     <div style={{fontSize:10,color:th.tm,marginBottom:2}}>{ev.type} {ev.cat==="private"?"· ZGV":"· PHASER"}</div>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
                     <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fD(ev.date)}</div>
@@ -729,10 +754,12 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
       <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
         <table style={{width:"100%",borderCollapse:"collapse"}}>
           <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
+            {onDeleteSelected&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={allSelected} onChange={selectAll} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
             {["Nr","Ofertă","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
           </tr></thead>
           <tbody>{active.map((ev,i)=>(
-            <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer"}} onMouseOver={e=>e.currentTarget.style.background=th.ab} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+            <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
+              {onDeleteSelected&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
               <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{(ev.offerNr?"O"+ev.offerNr:"—")}</td>
               <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
               <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
@@ -753,9 +780,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange }
         {active.map(ev=>{
           const d=dU(ev.date); const urgent=d<=14;
           return <div key={ev.id} onClick={()=>onSelect(ev)}
-            style={{...sty.cd,cursor:"pointer",borderColor:urgent?ST[ev.st].c:th.b,padding:16,transition:"all .15s"}}
+            style={{...sty.cd,cursor:"pointer",borderColor:urgent?ST[ev.st].c:th.b,padding:16,transition:"all .15s",position:"relative",borderWidth:selectedIds.includes(ev.id)?2:1}}
             onMouseOver={e=>e.currentTarget.style.transform="translateY(-2px)"}
             onMouseOut={e=>e.currentTarget.style.transform="translateY(0)"}>
+            {onDeleteSelected&&<div style={{position:"absolute",top:12,right:12}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:16,height:16}}/></div>}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
               <div>
                 <span style={{fontSize:10,fontWeight:600,color:th.tm,textTransform:"uppercase",display:"block",marginBottom:2}}>{ev.cat==="private"?"Privat":"Public"} · {ev.type}</span>
@@ -2470,6 +2498,7 @@ function App() {
     return null;
   }, [modal, payload, evs]);
   const [search, setSearch] = useState("");
+  const [selectedEvIds, setSelectedEvIds] = useState([]);
   const [calM, setCalM]   = useState(new Date());
   const [calSidebarDate, setCalSidebarDate] = useState(null);
   const [calDragEvId, setCalDragEvId] = useState(null);
@@ -2918,20 +2947,34 @@ function App() {
               {p.c&&<button onClick={()=>openModal("pick",null)} style={sty.b}><IcPlus s={14}/> Ofertă nouă</button>}
             </div>
             {/* Search */}
-            <div style={{position:"relative",maxWidth:320,marginBottom:16}}>
-              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:th.tm}}><IcSearch s={14}/></span>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Caută eveniment..." style={{...sty.i,paddingLeft:30,fontSize:mob?"16px":"14px"}}/>
+            <div style={{display:"flex",gap:12,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
+              <div style={{position:"relative",maxWidth:320,flex:1,minWidth:200}}>
+                <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:th.tm}}><IcSearch s={14}/></span>
+                <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Caută eveniment..." style={{...sty.i,paddingLeft:30,fontSize:mob?"16px":"14px"}}/>
+              </div>
+              {p.d&&(()=>{
+                const allEvIds = search ? fEvs.map(e=>e.id) : [...viitoare,...trecute].map(e=>e.id);
+                const allEvSelected = allEvIds.length>0&&allEvIds.every(id=>selectedEvIds.includes(id));
+                return (
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <button onClick={()=>setSelectedEvIds(allEvSelected?[]:allEvIds)} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allEvSelected?"Deselectează":"Selectează toate"}</button>
+                    {selectedEvIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedEvIds.length} selectate</span><button onClick={()=>{if(!window.confirm(`Ștergi ${selectedEvIds.length} eveniment/e?`))return;setEvs(prev=>prev.filter(e=>!selectedEvIds.includes(e.id)));setSelectedEvIds([]);showToast(`Șterse ${selectedEvIds.length} eveniment/e`);}} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
+                  </div>
+                );
+              })()}
             </div>
             {search ? (
               <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
                 <table style={{width:"100%"}}>
                   <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
+                    {p.d&&<th style={{padding:"9px 12px",width:36}}><input type="checkbox" checked={fEvs.length>0&&fEvs.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=fEvs.map(e=>e.id);const all=fEvs.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}
                     {["Client","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"9px 12px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                   </tr></thead>
                   <tbody>{fEvs.map(ev=>
-                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer"}}
-                      onMouseOver={e=>e.currentTarget.style.background=th.h}
-                      onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
+                      onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
+                      onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
+                      {p.d&&<td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div></td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -2948,10 +2991,12 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:"hidden",marginBottom:20}}>
                 {viitoare.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment confirmat viitor</div>}
                 {viitoare.length>0&&<table style={{width:"100%"}}>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{p.d&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={viitoare.length>0&&viitoare.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=viitoare.map(e=>e.id);const all=viitoare.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}{p.e&&<th style={{width:44}}/>}</tr></thead>
                   <tbody>{viitoare.map((ev,i)=>
-                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<viitoare.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer"}}
-                      onMouseOver={e=>e.currentTarget.style.background=th.h}
-                      onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<viitoare.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
+                      onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
+                      onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
+                      {p.d&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:700}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:10,color:th.tm}}>{ev.cat==="private"?"ZGV":"PHASER"}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div></td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -2967,10 +3012,12 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:"hidden"}}>
                 {trecute.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment trecut</div>}
                 {trecute.length>0&&<table style={{width:"100%"}}>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{p.d&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={trecute.length>0&&trecute.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=trecute.map(e=>e.id);const all=trecute.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Ofertă","Dată","Locație","Sumă","Status"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}</tr></thead>
                   <tbody>{trecute.map((ev,i)=>
-                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<trecute.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",opacity:.7}}
-                      onMouseOver={e=>{e.currentTarget.style.background=th.h;e.currentTarget.style.opacity="1"}}
-                      onMouseOut={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.opacity=".7"}}>
+                    <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<trecute.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",opacity:.7,background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
+                      onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
+                      onMouseOut={e=>{e.currentTarget.style.opacity=".7";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
+                      {p.d&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
@@ -2984,7 +3031,7 @@ function App() {
           </div>}
 
           {/* OFERTE */}
-          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pick",null):undefined} onStatusChange={updSt}/>}
+          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pick",null):undefined} onStatusChange={updSt} onDeleteSelected={p.d?ids=>{setEvs(prev=>prev.filter(e=>!ids.includes(e.id)));showToast(`Șterse ${ids.length} ofertă/oferte`);}:undefined}/>}
 
           {/* DOCS — Documente, rider, playlist, press kit — template pentru oferte */}
           {tab==="docs"&&<div style={{animation:"su .3s ease"}}>
