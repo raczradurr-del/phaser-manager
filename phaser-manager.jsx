@@ -1992,7 +1992,7 @@ export default function App() {
           {tab==="finances"&&<div style={{animation:"su .3s ease"}}>
             <h1 style={{fontSize:22,fontWeight:700,marginBottom:16}}>Finanțe</h1>
             <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
-              {[{l:"Venituri confirmate",v:f$(stats.rev),ac:"#22c55e"},{l:"Profit net",v:f$(stats.net),ac:stats.net>=0?"#22c55e":"#ef4444"},{l:"Pipeline",v:f$(stats.pipe)},{l:"Avansuri restante",v:f$(stats.pd),ac:stats.pd>0?"#ef4444":"#22c55e"}].map((c,i)=>
+              {[{l:"Venituri confirmate",v:f$(stats.rev),ac:"#22c55e"},{l:"Profit net",v:f$(stats.net),ac:stats.net>=0?"#22c55e":"#ef4444"},{l:"În așteptare",v:f$(stats.pipe)},{l:"Avansuri restante",v:f$(stats.pd),ac:stats.pd>0?"#ef4444":"#22c55e"}].map((c,i)=>
                 <div key={i} style={sty.cd}><div style={sty.l}>{c.l}</div><div style={{fontSize:mob?16:20,fontWeight:700,marginTop:5,color:c.ac||th.t}}>{c.v}</div></div>
               )}
             </div>
@@ -2001,10 +2001,12 @@ export default function App() {
               <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(5,1fr)",gap:8}}>
                 {MEMBERS.map(m=>{
                   const tot=evs.filter(e=>e.st==="confirmat").reduce((s,e)=>s+(e.sp?.[m.id]||0),0);
+                  const pipe=evs.filter(e=>["oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.sp?.[m.id]??((e.fee||0)/MEMBERS.length)),0);
                   return <div key={m.id} style={{padding:12,borderRadius:7,background:th.h,textAlign:"center"}}>
                     <div style={{width:32,height:32,borderRadius:"50%",background:th.a,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:13,color:th.bg,margin:"0 auto 6px"}}>{m.n[0]}</div>
                     <div style={{fontSize:12,fontWeight:500}}>{m.n}</div><div style={{fontSize:10,color:th.tm}}>{m.r}</div>
                     <div style={{fontSize:15,fontWeight:700,marginTop:4}}>{f$(tot)}</div>
+                    <div style={{fontSize:10,color:th.tm,marginTop:2}}>În așteptare: {f$(pipe)}</div>
                   </div>;
                 })}
               </div>
