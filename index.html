@@ -255,7 +255,15 @@ const RIDER_TEHNIC = {
 // STORAGE & SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 const PHASER_V = 3;
-const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative" };
+const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative", passwords: "phaser_passwords" };
+const hashPw = async (pw)=> { try { const b=new TextEncoder().encode(pw); const h=await crypto.subtle.digest("SHA-256",b); return Array.from(new Uint8Array(h)).map(x=>x.toString(16).padStart(2,"0")).join(""); } catch(e){ return "x"+btoa(encodeURIComponent(pw)).slice(0,64); } };
+const getPasswords = ()=> { try { const s=localStorage.getItem(LS_KEYS.passwords); return s?JSON.parse(s):{}; } catch(e){ return {}; } };
+const setPasswordFor = (userId, hash)=> { const p=getPasswords(); p[userId]=hash; try { localStorage.setItem(LS_KEYS.passwords, JSON.stringify(p)); } catch(e){} };
+const clearPasswordFor = (userId)=> { const p=getPasswords(); delete p[userId]; try { localStorage.setItem(LS_KEYS.passwords, JSON.stringify(p)); } catch(e){} };
+const LS_TRUSTED = "phaser_trusted_user";
+const getTrustedUser = ()=> { try { const s=localStorage.getItem(LS_TRUSTED); return s?JSON.parse(s):null; } catch(e){ return null; } };
+const setTrustedUser = (u)=> { try { localStorage.setItem(LS_TRUSTED, JSON.stringify(u)); } catch(e){} };
+const clearTrustedUser = ()=> { try { localStorage.removeItem(LS_TRUSTED); } catch(e){} };
 const migrate = (data, key) => { if (!data) return data; if (Array.isArray(data)) return data; if (data._v === PHASER_V) return data; if (typeof data._v !== "number") data._v = 1; while (data._v < PHASER_V) { data._v++; } return data; };
 const loadEvs = () => { try { const s = localStorage.getItem(LS_KEYS.evs); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
 const loadTasks = () => { try { const s = localStorage.getItem(LS_KEYS.tasks); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
@@ -1683,12 +1691,12 @@ function EventForm({ th, sty, isE, isP, mData, onSave, onClose, mob, templates }
     sp: mData?.sp||{}, svc: mData?.svc||{}, svcp: mData?.svcp||{sunet:350,lumini:500,ecran:600,scena:300,dj:600},
     ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu"},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu"},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu"}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"",
     impozitVenit: mData?.impozitVenit??1, plataAvansFirma: mData?.plataAvansFirma ?? (mData?.plataDirect===false), plataRestFirma: mData?.plataRestFirma ?? (mData?.plataDirect===false), sumaAvansLei: mData?.sumaAvansLei??0, sumaRestLei: mData?.sumaRestLei??0, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10, fondPct2: mData?.fondPct2??10,
-    videos: mData?.videos||DEFAULT_VIDEOS, covers: mData?.covers||tplCovers,
+    videos: mData?.videos||DEFAULT_VIDEOS, covers: mData?.covers||(tplCovers.map(c=>({...c,checked:true}))),
     desc: mData?.desc||"",
     poveste: mData?.poveste||"",
     customSvc: mData?.customSvc||[],
-    hosp: (mData?.hosp && !Array.isArray(mData.hosp)) ? {camere:4,meniuri:6,micDejun:true,pranz:true,extra:[],protocolOverride:"",...mData.hosp,extra:mData.hosp.extra||[],protocolOverride:mData.hosp.protocolOverride||""} : {
-      camere: 4, meniuri: 6, micDejun: true, pranz: true, extra: [], protocolOverride: "",
+    hosp: (mData?.hosp && !Array.isArray(mData.hosp)) ? {camere:4,meniuri:6,micDejun:false,pranz:false,extra:[],protocolOverride:"",...mData.hosp,extra:mData.hosp.extra||[],protocolOverride:mData.hosp.protocolOverride||""} : {
+      camere: 4, meniuri: 6, micDejun: false, pranz: false, extra: [], protocolOverride: "",
     },
     includeTehnicAnnex: mData?.includeTehnicAnnex||false,
     tehnic: mData?.tehnic||[
@@ -1727,8 +1735,7 @@ function EventForm({ th, sty, isE, isP, mData, onSave, onClose, mob, templates }
           {/* Header */}
           <div style={{padding:"14px 20px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:th.sb}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <Logo height={22}/>
-              <span style={{fontSize:12,color:"rgba(255,255,255,.5)",fontWeight:500}}>— {isE?"Editează":"Ofertă nouă"} {isP?"(Privat / ZGV)":"(Public / PHASER)"}</span>
+              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,.9)"}}>{isE?"Editează":"Ofertă nouă"} {isP?"(Privat / ZGV)":"(Public / PHASER)"}</span>
             </div>
             <button onClick={onClose} style={{padding:3,border:"none",background:"transparent",color:"rgba(255,255,255,.5)",cursor:"pointer"}}><IcX s={16}/></button>
           </div>
@@ -1962,7 +1969,7 @@ function EventForm({ th, sty, isE, isP, mData, onSave, onClose, mob, templates }
             </div>}
 
             {secTab==="ospitalitate"&&isP&&<div>
-              <div style={{fontSize:11,color:th.tm,marginBottom:16,padding:"8px 12px",background:th.h,borderRadius:7}}>🏨 Ce solicităm organizatorului pentru membrii trupei</div>
+              <div style={{fontSize:11,color:th.tm,marginBottom:16,padding:"8px 12px",background:th.h,borderRadius:7}}>🏨 Ce solicităm organizatorului pentru echipă</div>
               
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
                 <div>
@@ -2595,8 +2602,19 @@ function AIChatWidget(props) {
 function App() {
   const [themeMode, setThemeMode] = useState(gTheme());
   const [systemTheme, setSystemTheme] = useState(getSystemTheme);
-  const [user, setUser]   = useState(null);
+  const [user, setUser]   = useState(()=>getTrustedUser());
   const [loginStep, setLoginStep] = useState("profil");
+  const [pendingUser, setPendingUser] = useState(null);
+  const [pwInput, setPwInput] = useState("");
+  const [pwConfirm, setPwConfirm] = useState("");
+  const [pwError, setPwError] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
+  const [chPwCur, setChPwCur] = useState("");
+  const [chPwNew, setChPwNew] = useState("");
+  const [chPwConf, setChPwConf] = useState("");
+  const [chPwErr, setChPwErr] = useState("");
+  const [rememberDevice, setRememberDevice] = useState(true);
   const [sbMode, setSbMode] = useState("full");
   const [tab, setTab]     = useState("acasa");
   const [evs, setEvs]     = useLocalStorageState(LS_KEYS.evs, loadEvs);
@@ -2913,31 +2931,68 @@ function App() {
 
       <div style={{width:40,height:1,background:"#222"}}/>
 
-      {loginStep==="profil"&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
+      {loginStep==="profil"&&!pendingUser&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
         <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:16}}>Alege profilul</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <button onClick={()=>setLoginStep("membru")} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
             <span style={{fontWeight:600,fontSize:15}}>Membru</span>
             <span style={{fontSize:9,color:"#404040",textTransform:"uppercase",letterSpacing:2}}>membru</span>
           </button>
-          <button onClick={()=>setUser({id:"u4",n:"Furnizor",rl:"furnizor"})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
+          <button onClick={()=>setPendingUser({id:"u4",n:"Furnizor",rl:"furnizor"})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
             <span style={{fontWeight:600,fontSize:15}}>Furnizor</span>
             <span style={{fontSize:9,color:"#404040",textTransform:"uppercase",letterSpacing:2}}>furnizor</span>
           </button>
         </div>
       </div>}
 
-      {loginStep==="membru"&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
+      {loginStep==="membru"&&!pendingUser&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
         <button onClick={()=>setLoginStep("profil")} style={{padding:"6px 12px",marginBottom:12,border:"1px solid #333",background:"transparent",color:"#888",cursor:"pointer",fontSize:11,borderRadius:8}}>← Înapoi</button>
         <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:16}}>Alege membru</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {MEMBERS.map(m=>(
-            <button key={m.id} onClick={()=>setUser({id:"u3",n:m.short||m.n.split(" ")[0],rl:"membru",memberId:m.id})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
+            <button key={m.id} onClick={()=>setPendingUser({id:"u3",n:m.short||m.n.split(" ")[0],rl:"membru",memberId:m.id})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
               <span style={{fontWeight:600,fontSize:15}}>{m.short||m.n.split(" ")[0]}</span>
               <span style={{fontSize:9,color:"#404040",letterSpacing:1}}>{m.r}</span>
             </button>
           ))}
         </div>
+      </div>}
+
+      {pendingUser&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
+        <button onClick={()=>{setPendingUser(null);setPwInput("");setPwConfirm("");setPwError("");}} style={{padding:"6px 12px",marginBottom:12,border:"1px solid #333",background:"transparent",color:"#888",cursor:"pointer",fontSize:11,borderRadius:8}}>← Înapoi</button>
+        <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:8}}>Parolă · {pendingUser.n}</div>
+        {(()=>{
+          const uid=pendingUser.memberId||pendingUser.id;
+          const hasPw=!!getPasswords()[uid];
+          const doSet=async()=>{
+            setPwError("");
+            if(!pwInput.trim()){ setPwError("Introdu parola"); return; }
+            if(hasPw){
+              const h=await hashPw(pwInput);
+              if(getPasswords()[uid]!==h){ setPwError("Parolă greșită"); return; }
+              if(rememberDevice) setTrustedUser(pendingUser);
+              setUser(pendingUser); setPendingUser(null); setPwInput("");
+            } else {
+              if(pwInput!==pwConfirm){ setPwError("Parolele nu coincid"); return; }
+              if(pwInput.length<4){ setPwError("Minim 4 caractere"); return; }
+              setPasswordFor(uid, await hashPw(pwInput));
+              if(rememberDevice) setTrustedUser(pendingUser);
+              setUser(pendingUser); setPendingUser(null); setPwInput(""); setPwConfirm("");
+            }
+          };
+          const doForgot=()=>{ clearPasswordFor(uid); setPendingUser(null); setPwInput(""); setPwConfirm(""); setPwError(""); };
+          return <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <input type="password" value={pwInput} onChange={e=>{setPwInput(e.target.value);setPwError("");}} placeholder={hasPw?"Introdu parola":"Parolă nouă"} style={{width:"100%",padding:14,background:"#161616",border:"1px solid #222",borderRadius:10,color:"#fff",fontSize:14}} onKeyDown={e=>e.key==="Enter"&&doSet()}/>
+            {!hasPw&&<input type="password" value={pwConfirm} onChange={e=>{setPwConfirm(e.target.value);setPwError("");}} placeholder="Confirmă parola" style={{width:"100%",padding:14,background:"#161616",border:"1px solid #222",borderRadius:10,color:"#fff",fontSize:14}} onKeyDown={e=>e.key==="Enter"&&doSet()}/>}
+            <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:12,color:"#888"}}>
+              <input type="checkbox" checked={rememberDevice} onChange={e=>setRememberDevice(e.target.checked)}/>
+              Ține minte acest dispozitiv — intră direct la următoarea deschidere
+            </label>
+            {pwError&&<div style={{fontSize:12,color:"#ef4444"}}>{pwError}</div>}
+            <button onClick={()=>{setPwLoading(true);doSet().finally(()=>setPwLoading(false));}} disabled={pwLoading} style={{width:"100%",padding:14,background:"#333",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:600,cursor:pwLoading?"default":"pointer"}}>{hasPw?"Intră":pwLoading?"Se salvează...":"Setează parola"}</button>
+            {hasPw&&<button onClick={()=>{if(window.confirm("Ți se va șterge parola. La următoarea intrare vei seta parola din nou. Continuă?")) doForgot();}} style={{padding:8,border:"none",background:"transparent",color:"#666",fontSize:11,cursor:"pointer",textDecoration:"underline"}}>Am uitat parola</button>}
+          </div>;
+        })()}
       </div>}
     </div>
   );
@@ -3002,8 +3057,9 @@ function App() {
             {sbMode==="full"&&<span>{gcalToken?"Calendar conectat ✓":"Conectează Calendar"}</span>}
           </button>
         </div>
-        <div style={{padding:"8px 12px 14px"}}>
-          <button onClick={()=>setUser(null)} style={{display:"flex",alignItems:"center",gap:8,padding:sbMode==="full"?"8px 14px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",background:"transparent",color:th.sbt,fontSize:11,cursor:"pointer",width:"100%"}}>
+        <div style={{padding:"8px 12px 14px",display:"flex",flexDirection:"column",gap:4}}>
+          {sbMode==="full"&&<button onClick={()=>setShowChangePw(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px",borderRadius:8,border:"none",background:"transparent",color:th.sbt,fontSize:10,cursor:"pointer",width:"100%",opacity:.8}}>🔐 Schimbă parola</button>}
+          <button onClick={()=>{clearTrustedUser();setUser(null);}} style={{display:"flex",alignItems:"center",gap:8,padding:sbMode==="full"?"8px 14px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",background:"transparent",color:th.sbt,fontSize:11,cursor:"pointer",width:"100%"}}>
             <IcOut s={14}/>{sbMode==="full"&&<span>{user.n} · <span style={{textTransform:"uppercase",fontSize:9,letterSpacing:1}}>{user.rl}</span></span>}
           </button>
         </div>
@@ -4010,6 +4066,34 @@ function App() {
           {allNav.map(id=><div key={id} style={{width:id===tab?20:5,height:5,borderRadius:3,background:id===tab?"rgba(255,255,255,.9)":"rgba(255,255,255,.2)",transition:"all .25s"}}/>)}
         </div>;
       })()}
+
+      {showChangePw&&user&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1200}} onClick={()=>{setShowChangePw(false);setChPwCur("");setChPwNew("");setChPwConf("");setChPwErr("");}}>
+        <div style={{background:th.c,borderRadius:14,border:`1px solid ${th.b}`,padding:24,width:mob?"90%":360}} onClick={e=>e.stopPropagation()}>
+          <h3 style={{fontSize:16,fontWeight:700,marginBottom:16}}>Schimbă parola</h3>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <input type="password" value={chPwCur} onChange={e=>{setChPwCur(e.target.value);setChPwErr("");}} placeholder="Parola actuală" style={{...sty.i,padding:12,fontSize:14}}/>
+            <input type="password" value={chPwNew} onChange={e=>{setChPwNew(e.target.value);setChPwErr("");}} placeholder="Parolă nouă" style={{...sty.i,padding:12,fontSize:14}}/>
+            <input type="password" value={chPwConf} onChange={e=>{setChPwConf(e.target.value);setChPwErr("");}} placeholder="Confirmă parola nouă" style={{...sty.i,padding:12,fontSize:14}}/>
+            {chPwErr&&<div style={{fontSize:12,color:"#ef4444"}}>{chPwErr}</div>}
+            <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:8}}>
+              <button onClick={()=>{setShowChangePw(false);setChPwCur("");setChPwNew("");setChPwConf("");setChPwErr("");}} style={{...sty.bg,padding:"8px 16px"}}>Anulează</button>
+              <button onClick={async()=>{
+                setChPwErr("");
+                const uid=user.memberId||user.id;
+                const stored=getPasswords()[uid];
+                if(!stored){ setChPwErr("Nu există parolă setată"); return; }
+                const hCur=await hashPw(chPwCur);
+                if(stored!==hCur){ setChPwErr("Parola actuală e greșită"); return; }
+                if(!chPwNew||chPwNew.length<4){ setChPwErr("Parola nouă: minim 4 caractere"); return; }
+                if(chPwNew!==chPwConf){ setChPwErr("Parolele nu coincid"); return; }
+                setPasswordFor(uid, await hashPw(chPwNew));
+                setShowChangePw(false); setChPwCur(""); setChPwNew(""); setChPwConf("");
+                showToast("Parola a fost schimbată ✓");
+              }} style={{...sty.b,padding:"8px 16px"}}>Salvează</button>
+            </div>
+          </div>
+        </div>
+      </div>}
 
       <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
       <Toast message={toast.message} visible={toast.visible}/>
