@@ -129,11 +129,11 @@ const dU  = d => { if(!d) return 999; return Math.ceil((new Date(d+"T00:00:00")-
 const getProfitWithFond = (tot,exp,ev)=>{const brut=Math.max(0,tot-exp);const avansToFond=(ev?.dp&&ev?.dep)?(ev.dep||0):0;const cuFond=ev?.cuFond!==false;const pct=ev?.fondPct??10;const fondPct=cuFond?Math.round(brut*pct/100):0;const fondPct2=cuFond?Math.round(brut*(ev?.fondPct2??10)/100):0;const fond=avansToFond+fondPct+fondPct2;return{brut,fond,net:brut-fond};};
 
 const MEMBERS = [
-  {id:"m1",n:"Carina Dumitru",r:"Vocal"},
-  {id:"m2",n:"Radu Racz",r:"Bass"},
-  {id:"m3",n:"Lucian Oprișan",r:"Clape"},
-  {id:"m4",n:"Arnold Birta",r:"Tobe"},
-  {id:"m5",n:"Sebastian Bârzeianu",r:"Chitară"}
+  {id:"m1",n:"Carina Dumitru",short:"Carina",r:"Vocal"},
+  {id:"m2",n:"Radu Racz",short:"Radu",r:"Bass"},
+  {id:"m3",n:"Lucian Oprișan",short:"Luci",r:"Clape"},
+  {id:"m4",n:"Arnold Birta",short:"Arni",r:"Tobe"},
+  {id:"m5",n:"Sebastian Bârzeianu",short:"Sebi",r:"Chitară"}
 ];
 const SPLIT_PRIVATE = {m1:26,m4:20,m2:18,m5:18,m3:18};
 
@@ -2596,6 +2596,7 @@ function App() {
   const [themeMode, setThemeMode] = useState(gTheme());
   const [systemTheme, setSystemTheme] = useState(getSystemTheme);
   const [user, setUser]   = useState(null);
+  const [loginStep, setLoginStep] = useState("profil");
   const [sbMode, setSbMode] = useState("full");
   const [tab, setTab]     = useState("acasa");
   const [evs, setEvs]     = useLocalStorageState(LS_KEYS.evs, loadEvs);
@@ -2904,38 +2905,40 @@ function App() {
     <div style={{minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",background:"#0c0c0c",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",gap:24}}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
 
-      {/* Logo — direct, fara card */}
+      {/* Logo */}
       <div style={{animation:"up .5s ease",textAlign:"center"}}>
         <img src={LOGO_URL} alt="PHASER" style={{width:220,display:"block",margin:"0 auto"}}/>
         <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:4,textTransform:"uppercase",marginTop:16,fontWeight:400}}>Band Manager</div>
       </div>
 
-      {/* Separator */}
       <div style={{width:40,height:1,background:"#222"}}/>
 
-      {/* Selector profil */}
-      <div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
+      {loginStep==="profil"&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
         <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:16}}>Alege profilul</div>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          {USERS.map(u=>(
-            <button key={u.id} onClick={()=>setUser(u)} style={{
-              width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",
-              padding:"14px 20px",
-              background:"#161616",
-              color:"#fff",cursor:"pointer",fontFamily:"inherit",
-              border:"1px solid #222",
-              borderRadius:12,
-              transition:"background .15s, border-color .15s"
-            }}
-            onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}}
-            onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}
-            >
-              <span style={{fontWeight:600,fontSize:15}}>{u.n}</span>
-              <span style={{fontSize:9,color:"#404040",textTransform:"uppercase",letterSpacing:2}}>{u.rl}</span>
+          <button onClick={()=>setLoginStep("membru")} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
+            <span style={{fontWeight:600,fontSize:15}}>Membru</span>
+            <span style={{fontSize:9,color:"#404040",textTransform:"uppercase",letterSpacing:2}}>membru</span>
+          </button>
+          <button onClick={()=>setUser({id:"u4",n:"Furnizor",rl:"furnizor"})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
+            <span style={{fontWeight:600,fontSize:15}}>Furnizor</span>
+            <span style={{fontSize:9,color:"#404040",textTransform:"uppercase",letterSpacing:2}}>furnizor</span>
+          </button>
+        </div>
+      </div>}
+
+      {loginStep==="membru"&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
+        <button onClick={()=>setLoginStep("profil")} style={{padding:"6px 12px",marginBottom:12,border:"1px solid #333",background:"transparent",color:"#888",cursor:"pointer",fontSize:11,borderRadius:8}}>← Înapoi</button>
+        <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:16}}>Alege membru</div>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {MEMBERS.map(m=>(
+            <button key={m.id} onClick={()=>setUser({id:"u3",n:m.short||m.n.split(" ")[0],rl:"membru",memberId:m.id})} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"14px 20px",background:"#161616",color:"#fff",cursor:"pointer",fontFamily:"inherit",border:"1px solid #222",borderRadius:12,transition:"background .15s, border-color .15s"}} onMouseOver={e=>{e.currentTarget.style.background="#1e1e1e";e.currentTarget.style.borderColor="#333"}} onMouseOut={e=>{e.currentTarget.style.background="#161616";e.currentTarget.style.borderColor="#222"}}>
+              <span style={{fontWeight:600,fontSize:15}}>{m.short||m.n.split(" ")[0]}</span>
+              <span style={{fontSize:9,color:"#404040",letterSpacing:1}}>{m.r}</span>
             </button>
           ))}
         </div>
-      </div>
+      </div>}
     </div>
   );
 
@@ -3009,7 +3012,7 @@ function App() {
       {/* MAIN */}
       <div style={{flex:1,overflow:"auto",display:"flex",flexDirection:"column",position:"relative"}}>
         {sbMode==="mini"&&<button onClick={()=>setSbMode("full")} style={{position:"absolute",left:12,top:16,zIndex:100,padding:10,borderRadius:10,border:`1px solid ${th.b}`,background:th.c,color:th.t,cursor:"pointer",boxShadow:"0 2px 8px rgba(0,0,0,.15)"}} title="Deschide meniu"><IcChevR s={18}/></button>}
-        <div style={{flex:1,minHeight:0,overflow:"auto",padding:mob?"14px 12px":"22px 36px",paddingLeft:sbMode==="mini"?52:undefined}}>
+        <div style={{flex:1,minHeight:0,overflow:"auto",padding:mob?"14px 16px":"22px 36px 22px 44px",paddingLeft:sbMode==="mini"?52:(mob?16:44)}}>
 
           {/* GLOBAL SEARCH — mereu vizibil */}
           <div style={{position:"relative",marginBottom:16,maxWidth:400}}>
