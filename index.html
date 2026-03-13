@@ -1152,25 +1152,26 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
           <div/>
           <div style={{display:"flex",gap:10,alignItems:"center"}}>
             <button onClick={()=>{
+              const printWin = window.open("","_blank","width=820,height=1000");
+              if(!printWin){alert("Blocatorul de pop-up a blocat fereastra. Permiteți pop-up-urile pentru acest site și încercați din nou.");return;}
               const offerEl = document.getElementById("offer-print-content");
-              if(!offerEl) return;
+              if(!offerEl){printWin.close();return;}
               const iframeRepl=(html)=>{return html.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,function(m){var s=(m.match(/src="([^"]*)"/)||[])[1]||'';var vid=(s.match(/embed\/([^"?&\/]+)/)||[])[1]||'';if(!vid)return '';return '<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;text-decoration:none"><img src="https://img.youtube.com/vi/'+vid+'/hqdefault.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:6px;display:block"/><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,.9);border-radius:10px;width:60px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">&#9658;</div></a>';});};
-              let pHtml=iframeRepl(offerEl.innerHTML);
+              const absImgSrc=(html)=>{const base=window.location.href; return html.replace(/<img([^>]*)\ssrc="([^"]*)"/gi,function(_,rest,src){if(!src||src.startsWith('data:')||/^https?:\/\//i.test(src))return '<img'+rest+' src="'+src+'"'; try{return '<img'+rest+' src="'+new URL(src,base).href+'"';}catch(e){return '<img'+rest+' src="'+src+'"';}});};
+              let pHtml=absImgSrc(iframeRepl(offerEl.innerHTML));
               if(!isPriv){
                 const riderEl=document.getElementById("rider-print-content");
                 const pkEl=document.getElementById("presskit-print-content");
                 if(riderEl){pHtml+='<div class="print-break"></div>'+iframeRepl(riderEl.innerHTML);}
                 if(pkEl){pHtml+='<div class="print-break"></div>'+iframeRepl(pkEl.innerHTML);}
               }
-              const printWin = window.open("","_blank","width=820,height=1000");
-              if(!printWin) return;
               printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${window.location.href}"><title>O${ev.offerNr||"?"} (Event ${ev.date?ev.date.split('-').reverse().join('-'):""})</title><style>
                 *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
                 body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}
                 @media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}
                 img{max-width:100%;height:auto}
                 .print-break{break-before:page!important;page-break-before:always!important}
-              </style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+              </style></head><body>${pHtml}<script>window.onload=function(){setTimeout(function(){window.print();},800);}<\/script></body></html>`);
               printWin.document.close();
             }} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
               ↑ Trimite PDF
@@ -1189,17 +1190,18 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
           {/* Ofertă stilizată — de trimis la client / PDF */}
           <div id="offer-print-content" style={{maxWidth:560,margin:"0 auto",padding:mob?"16px":"24px 16px"}}>
 
+            {/* Antet logo-uri — ZGV stânga, Phaser dreapta (doar ofertă privată) */}
+            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:"16px 16px 0 0",padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",border:"1px solid rgba(245,158,11,.15)",borderBottom:"none"}}>
+              <img src={ZGV_LOGO} alt="Za good vibes" style={{height:36,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
+              <img src={LOGO_URL} alt="PHASER" style={{height:32,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
+            </div>}
             {/* Imagine header — privat: poza ofertă ZGV; public: din Press Kit Public */}
-            {(isPriv||pkPublic)&&<div style={{borderRadius:"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
+            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
               <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:300,objectFit:"cover",objectPosition:isPriv?"center 50%":(pkPublic?.heroImagePos||"center 50%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
-            {/* Header card — logo-uri vizibile, OFERTĂ mare, tip mic, data direct */}
+            {/* Header card — OFERTĂ mare, tip mic, data direct */}
             <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"28px 28px 24px",marginBottom:12,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
               <div style={{position:"absolute",top:0,right:0,width:240,height:240,background:"radial-gradient(circle,rgba(245,158,11,.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              {isPriv&&<div style={{display:"flex",alignItems:"center",gap:16,marginBottom:20}}>
-                <img src={ZGV_LOGO} alt="Za good vibes" style={{height:40,objectFit:"contain",filter:"brightness(0) invert(1)"}} onError={e=>{e.target.style.display="none";}}/>
-                <img src={LOGO_URL} alt="PHASER" style={{height:36,objectFit:"contain",filter:"brightness(0) invert(1)"}} onError={e=>{e.target.style.display="none";}}/>
-              </div>}
               <div style={{fontSize:16,fontWeight:700,color:"rgba(251,191,36,.9)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Ofertă de colaborare</div>
               <div style={{fontSize:16,fontWeight:600,color:"#fff",marginBottom:12}}>{ev.type}</div>
               <div style={{fontSize:11,color:"rgba(251,191,36,.5)",letterSpacing:1,textTransform:"uppercase"}}>Data</div>
@@ -3980,17 +3982,18 @@ function App() {
               <div style={{display:"flex",gap:5,justifyContent:mob?"center":"flex-end",flexWrap:"wrap",marginTop:8}}>
                 <button onClick={()=>{closeModal();setTimeout(()=>openModal("oferta",ev.id),80);}} style={sty.b}><IcFile s={13}/> Ofertă</button>
                 <button onClick={()=>{
-                  // Deschide oferta și declanșează print după ce se randează
+                  const printWin = window.open("","_blank","width=820,height=1000");
+                  if(!printWin){alert("Blocatorul de pop-up a blocat fereastra. Permiteți pop-up-urile pentru acest site și încercați din nou.");return;}
                   closeModal();
                   setTimeout(()=>{
                     openModal("oferta",ev.id);
                     setTimeout(()=>{
                       const offerEl = document.getElementById("offer-print-content");
-                      if(!offerEl) return;
-                      const printWin = window.open("","_blank","width=820,height=1000");
-                      if(!printWin) return;
-                      let pHtml = offerEl.innerHTML.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,function(m){var s=(m.match(/src="([^"]*)"/)||[])[1]||'';var vid=(s.match(/embed\/([^"?&\/]+)/)||[])[1]||'';if(!vid)return '';return '<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;text-decoration:none"><img src="https://img.youtube.com/vi/'+vid+'/hqdefault.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:6px;display:block"/><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,.9);border-radius:10px;width:60px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">&#9658;</div></a>';});
-                      printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${window.location.href}"><title>O${ev.offerNr||"?"} (Event ${ev.date?ev.date.split('-').reverse().join('-'):""})</title><style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}@media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}img{max-width:100%;height:auto}.print-break{break-before:page!important;page-break-before:always!important}</style></head><body>${pHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
+                      if(!offerEl){printWin.close();return;}
+                      const iframeRepl=(html)=>{return html.replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe>/gi,function(m){var s=(m.match(/src="([^"]*)"/)||[])[1]||'';var vid=(s.match(/embed\/([^"?&\/]+)/)||[])[1]||'';if(!vid)return '';return '<a href="https://www.youtube.com/watch?v='+vid+'" target="_blank" style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;text-decoration:none"><img src="https://img.youtube.com/vi/'+vid+'/hqdefault.jpg" style="width:100%;height:100%;object-fit:cover;border-radius:6px;display:block"/><div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(255,0,0,.9);border-radius:10px;width:60px;height:42px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff">&#9658;</div></a>';});};
+                      const absImgSrc=(html)=>{const base=window.location.href; return html.replace(/<img([^>]*)\ssrc="([^"]*)"/gi,function(_,rest,src){if(!src||src.startsWith('data:')||/^https?:\/\//i.test(src))return '<img'+rest+' src="'+src+'"'; try{return '<img'+rest+' src="'+new URL(src,base).href+'"';}catch(e){return '<img'+rest+' src="'+src+'"';}});};
+                      let pHtml=absImgSrc(iframeRepl(offerEl.innerHTML));
+                      printWin.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><base href="${window.location.href}"><title>O${ev.offerNr||"?"} (Event ${ev.date?ev.date.split('-').reverse().join('-'):""})</title><style>*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:32px}@media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}img{max-width:100%;height:auto}.print-break{break-before:page!important;page-break-before:always!important}</style></head><body>${pHtml}<script>window.onload=function(){setTimeout(function(){window.print();},800);}<\/script></body></html>`);
                       printWin.document.close();
                     }, 400);
                   }, 80);
