@@ -19,6 +19,7 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script>
     (function check() {
@@ -1081,7 +1082,7 @@ function ContractView({ ev, th, contractFields, onContractChange }) {
   );
 }
 // ─── OFFER PREVIEW ───
-function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, onClose, onEdit, sty, templates, memberProfiles }) {
+function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, onClose, onEdit, sty, templates, memberProfiles, showToast }) {
   const [copied, setCopied] = useState(false);
   const [mediaTitle, setMediaTitle] = useState(ev.mediaTitle||"PHASER Live");
   const [videos, setVideos] = useState(ev.videos||DEFAULT_VIDEOS);
@@ -1092,6 +1093,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const [tab, setTab] = useState("oferta");
   const [localSt, setLocalSt] = useState(evStatus);
   const [playlistSearch, setPlaylistSearch] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [contractFields, setContractFields] = useState({
     nr:"", dataSemnare:"", clientNume:ev.cn||"", clientEmail:ev.ce||"", clientTel:ev.cp||"",
     jud:"", mun:"", str:"", nr2:"", ap:"", ciSeria:"", ciNr:"", cnp:"",
@@ -1114,6 +1116,49 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     onStatusChange(ev.id, k);
   };
 
+  const getPdfFilename = () => `Oferta-O${ev.offerNr||"?"}-${(ev.date||"").split("-").reverse().join("-")||"event"}.pdf`;
+  const generateOfferPdf = () => {
+    const el = document.getElementById("offer-print-content");
+    if(!el || typeof html2pdf==="undefined") return Promise.reject(new Error("html2pdf indisponibil"));
+    return html2pdf().set({
+      margin:12, filename:getPdfFilename(),
+      image:{type:"jpeg",quality:0.95}, html2canvas:{scale:2,useCORS:true,logging:false},
+      jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}
+    }).from(el).outputPdf("blob");
+  };
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const blob = await generateOfferPdf();
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = getPdfFilename();
+      a.click(); URL.revokeObjectURL(a.href);
+      showToast&&showToast("PDF descărcat ✓");
+    } catch(e) { showToast&&showToast("Eroare la generare PDF"); console.error(e); }
+    setPdfLoading(false);
+  };
+  const handleSharePdf = async () => {
+    setPdfLoading(true);
+    try {
+      const blob = await generateOfferPdf();
+      const file = new File([blob], getPdfFilename(), { type: "application/pdf" });
+      if(navigator.share) {
+        try {
+          await navigator.share({ title: `Oferta O${ev.offerNr||"?"}`, files: [file] });
+          showToast&&showToast("Distribuit ✓");
+        } catch(shareErr) {
+          if(shareErr?.name==="AbortError") return;
+          const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = getPdfFilename();
+          a.click(); URL.revokeObjectURL(a.href);
+          showToast&&showToast("PDF descărcat. Trimite fișierul manual (WhatsApp, Mail, etc.)");
+        }
+      } else {
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = getPdfFilename();
+        a.click(); URL.revokeObjectURL(a.href);
+        showToast&&showToast("PDF descărcat. Trimite fișierul manual (WhatsApp, Mail, etc.)");
+      }
+    } catch(e) { if(e?.name!=="AbortError") { showToast&&showToast("Eroare la distribuire"); console.error(e); } }
+    setPdfLoading(false);
+  };
   const copyOffer = async () => {
     const lines = ["PHASER MUSIC SRL","═══════════════════════════════","","OFERTĂ",""];
     if(ev.desc) lines.push(ev.desc,"");
@@ -1150,7 +1195,13 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
         {/* Header simplu — trimite + close */}
         <div style={{padding:"14px 20px",borderBottom:"1px solid rgba(251,191,36,.2)",display:"flex",justifyContent:"space-between",alignItems:"center",background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:mob?"0":"16px 16px 0 0",flexShrink:0}}>
           <div/>
-          <div style={{display:"flex",gap:10,alignItems:"center"}}>
+          <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <button onClick={handleDownloadPdf} disabled={pdfLoading} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#22c55e",color:"#fff",fontWeight:700,fontSize:12,cursor:pdfLoading?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:pdfLoading?0.7:1}}>
+              {pdfLoading?"⏳":"⬇"} Descarcă PDF
+            </button>
+            <button onClick={handleSharePdf} disabled={pdfLoading} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:12,cursor:pdfLoading?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:pdfLoading?0.7:1}}>
+              {pdfLoading?"⏳":"📤"} Distribuie
+            </button>
             <button onClick={()=>{
               const printWin = window.open("","_blank","width=820,height=1000");
               if(!printWin){alert("Blocatorul de pop-up a blocat fereastra. Permiteți pop-up-urile pentru acest site și încercați din nou.");return;}
@@ -1173,8 +1224,8 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
                 .print-break{break-before:page!important;page-break-before:always!important}
               </style></head><body>${pHtml}<script>window.onload=function(){setTimeout(function(){window.print();},800);}<\/script></body></html>`);
               printWin.document.close();
-            }} style={{padding:"8px 20px",borderRadius:8,border:"none",background:"#fbbf24",color:"#111",fontWeight:700,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-              ↑ Trimite PDF
+            }} style={{padding:"8px 14px",borderRadius:8,border:"1px solid rgba(255,255,255,.4)",background:"transparent",color:"rgba(255,255,255,.9)",fontWeight:600,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              ↑ Print
             </button>
             <button onClick={onClose} style={{padding:4,border:"none",background:"transparent",color:"rgba(255,255,255,.6)",cursor:"pointer"}}><IcX s={18}/></button>
           </div>
@@ -4153,6 +4204,7 @@ function App() {
         memberProfiles={memberProfiles}
         sty={sty}
         templates={templates}
+        showToast={showToast}
       />}
 
       {/* Swipe indicator dots — mobile only */}
