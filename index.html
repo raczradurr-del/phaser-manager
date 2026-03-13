@@ -1160,17 +1160,32 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       btn.style.display = "none";
     });
 
+    // 4. Fix page breaks — injectăm CSS care previne tăierea pozelor și a cardurilor
+    const styleTag = document.createElement("style");
+    styleTag.id = "__pdf_break_styles";
+    styleTag.textContent = [
+      // Fiecare secțiune (card direct child) nu se taie între pagini
+      "#offer-print-content > div { break-inside: avoid; page-break-inside: avoid; }",
+      // Pozele nu se taie niciodată
+      "#offer-print-content img { break-inside: avoid; page-break-inside: avoid; display: block; }",
+      // Fix columns playlist — forțăm single column ca html2canvas să nu rupă itemii ciudat
+      "#offer-print-content [style*='columns'] { columns: 1 !important; column-count: 1 !important; }",
+    ].join("\n");
+    document.head.appendChild(styleTag);
+
     const restore = () => {
       taRestores.forEach(({ div, ta }) => { try { div.parentNode.replaceChild(ta, div); } catch(e){} });
       iframeRestores.forEach(({ div, container, parent }) => { try { parent.replaceChild(container, div); } catch(e){} });
       btnRestores.forEach(({ btn, was }) => { btn.style.display = was; });
+      try { document.head.removeChild(styleTag); } catch(e) {}
     };
 
     return html2pdf().set({
-      margin:12, filename:getPdfFilename(),
-      image:{type:"jpeg",quality:0.95},
-      html2canvas:{scale:2,useCORS:true,allowTaint:true,logging:false},
-      jsPDF:{unit:"mm",format:"a4",orientation:"portrait"}
+      margin: 12, filename: getPdfFilename(),
+      image: {type:"jpeg", quality:0.95},
+      html2canvas: {scale:2, useCORS:true, allowTaint:true, logging:false},
+      jsPDF: {unit:"mm", format:"a4", orientation:"portrait"},
+      pagebreak: { mode: ["css", "legacy"], avoid: ["img", "div"] }
     }).from(el).outputPdf("blob").then(blob => { restore(); return blob; }, err => { restore(); return Promise.reject(err); });
   };
   const handleDownloadPdf = async () => {
