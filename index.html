@@ -1459,17 +1459,30 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Despre noi</div>
               <textarea value={ev.poveste||templates?.poveste||"Suntem o gașcă de visători muzicali și artiști pasionați, gata să aducem vibe-ul ăla bun la evenimentul vostru. Trebuie doar să ne vezi live și vei înțelege că un show-ul este un tour de force încărcat cu intensitate dar și cu momente de sensibilitate simplă. Printre cuvinte, imagini și muzică spunem povestea tuturor, a celor ce iubesc sau a celor îndrăgostiți de viață."} onChange={e=>syncOffer({poveste:e.target.value})} placeholder="Despre noi — modifică înainte de a genera PDF" style={{width:"100%",minHeight:100,resize:"vertical",fontSize:14,lineHeight:1.8,fontStyle:"italic",color:"#333",border:"1px solid #e5e5e5",borderRadius:8,padding:12}}/>
             </div>}
-            {/* Za Good Vibes presents PHASER — fundal întunecat, text alb, bold */}
-            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:12,padding:"12px 18px",marginBottom:6,borderLeft:"4px solid #f59e0b"}}>
-              <div style={{fontSize:14,color:"#fff",fontWeight:700}}>Za Good Vibes presents PHASER</div>
-            </div>}
-            {/* Poza trupa — imediat după Za Good Vibes presents PHASER (200px pentru PDF) */}
-            {isPriv&&<div style={{borderRadius:12,overflow:"hidden",marginBottom:8}}>
-              <img src={PK_IMG_PRIVAT_HEAD} alt="" style={{width:"100%",height:200,objectFit:"cover",objectPosition:"center 50%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
-            </div>}
+            {/* Link video — prima pagină se termină aici (primul video selectat) */}
+            {isPriv&&videos.filter(v=>v.checked).length>0&&(()=>{
+              const v0=videos.filter(x=>x.checked)[0];
+              const vid=v0?.url?.match(/embed\/([^?&]+)/)?.[1]||v0?.url?.match(/(?:youtu\.be\/|v=)([^?&]+)/)?.[1]||"";
+              const ytUrl=vid?"https://youtu.be/"+vid:v0?.url||"";
+              return <div style={{marginTop:12,borderRadius:12,overflow:"hidden",background:"#111"}}>
+                <a href={ytUrl} target="_blank" rel="noreferrer" style={{display:"block",textDecoration:"none"}}>
+                  <div style={{position:"relative",paddingBottom:"56.25%",height:0,background:"#000"}}>
+                    <img src={vid?"https://img.youtube.com/vi/"+vid+"/hqdefault.jpg":""} alt="" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:64,height:64,borderRadius:"50%",background:"rgba(255,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,color:"#fff"}}>&#9658;</div>
+                  </div>
+                  <div style={{padding:"14px 18px",background:"#fff",borderTop:"1px solid #eee"}}>
+                    <div style={{fontSize:14,fontWeight:600,color:"#111"}}>{v0?.title||"Video"}</div>
+                    <div style={{fontSize:11,color:"#666",marginTop:4,wordBreak:"break-all"}}>{ytUrl}</div>
+                  </div>
+                </a>
+              </div>;
+            })()}
             </div>
-            {/* Pagină separată: Prestație + costuri */}
+            {/* Pagină separată: Prestație + costuri — Za Good Vibes presents PHASER la prestație live */}
             <div className="print-break" style={{breakBefore:"page"}}>
+            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:12,padding:"14px 20px",marginBottom:8,borderLeft:"4px solid #f59e0b"}}>
+              <div style={{fontSize:14,color:"#fff",fontWeight:700}}>Za Good Vibes presents PHASER — la prestație live</div>
+            </div>}
             {/* Prestație — PHASER + preț */}
             <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
               <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Prestație artistică</div>
@@ -1586,7 +1599,6 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             <div style={{background:"#fff",borderRadius:12,overflow:"hidden",marginBottom:8}}>
               <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",padding:"20px 24px",marginBottom:16}}>
                 <div style={{fontSize:28,fontWeight:800,color:"#fff",letterSpacing:2,textTransform:"uppercase"}}>Playlist</div>
-                <div style={{fontSize:12,color:"rgba(251,191,36,.8)",marginTop:4,letterSpacing:1}}>Za good vibes with Phaser</div>
               </div>
               <div style={{padding:"0 20px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
                 <div/>
