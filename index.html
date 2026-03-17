@@ -1528,7 +1528,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"rgba(255,255,255,.4)",marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.08)"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
             </div>}
 
-            {/* Cazare, Transport, Protocol — doar dacă există cazare sau transport */}
+            {/* Cazare și Transport — doar dacă există camere sau distanță >= 25km */}
             {isPriv&&ev.hosp&&((ev.hosp.camere??0)>0||(ev.dist??999)>=25)&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
               <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Cazare și Transport</div>
               {[
@@ -1540,7 +1540,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
                   <span style={{fontSize:13,color:"#444"}}>{item}</span>
                 </div>
               ))}
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginTop:14,marginBottom:10}}>Protocol</div>
+            </div>}
+            {/* Protocol — întotdeauna afișat dacă există ev.hosp */}
+            {isPriv&&ev.hosp&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:10}}>Protocol</div>
               {(ev.hosp.protocolOverride||"").trim() ? (
                 <div style={{fontSize:13,color:"#444",lineHeight:1.7,whiteSpace:"pre-line"}}>{(ev.hosp.protocolOverride||"").trim()}</div>
               ) : [
