@@ -1441,12 +1441,12 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             <div className="offer-page-1">
             {/* Antet logo-uri — ZGV stânga, Phaser dreapta (doar ofertă privată) */}
             {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:"16px 16px 0 0",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",border:"1px solid rgba(245,158,11,.15)",borderBottom:"none"}}>
-              <img src={ZGV_LOGO} alt="Za good vibes" style={{height:48,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
+              <img src={ZGV_LOGO} alt="Za good vibes" style={{height:40,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitFilter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
               <img src={LOGO_URL} alt="PHASER" style={{height:28,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
-            {/* Imagine header — cover photo mic, cu crop central */}
-            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0,height:220}}>
-              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 35%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+            {/* Imagine header — cover photo 220px */}
+            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
+              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:"220px",objectFit:"cover",objectPosition:"center 35%",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
             {/* Header card — tip + data + locatie pe acelasi rand */}
             <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"14px 18px 14px",marginBottom:6,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
@@ -1489,19 +1489,18 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             </div>
             {/* Pagina 2 — data + locatie + tip eveniment + restul ofertei */}
             <div className="print-break" style={{breakBefore:"page"}}>
-            {/* Header pagina 2 — repeta info eveniment */}
+            {/* Header pagina 2 — tip + data + locatie, fara label */}
             {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:12,padding:"14px 18px",marginBottom:8,border:"1px solid rgba(245,158,11,.15)",position:"relative",overflow:"hidden"}}>
               <div style={{position:"absolute",top:0,right:0,width:200,height:200,background:"radial-gradient(circle,rgba(245,158,11,.07) 0%,transparent 70%)",pointerEvents:"none"}}/>
-              <div style={{fontSize:11,fontWeight:700,color:"rgba(251,191,36,.6)",letterSpacing:3,textTransform:"uppercase",marginBottom:6}}>Ofertă de colaborare</div>
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <div style={{fontSize:16,fontWeight:700,color:"#fff"}}>{ev.type}</div>
-                <div style={{width:1,height:15,background:"rgba(251,191,36,.35)",flexShrink:0}}/>
-                <div style={{fontSize:13,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fD(ev.date)}</div>
-                {(ev.venue||ev.city)&&<><div style={{width:1,height:15,background:"rgba(251,191,36,.35)",flexShrink:0}}/><div style={{fontSize:13,color:"rgba(251,191,36,.75)"}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div></>}
+                <div style={{fontSize:17,fontWeight:700,color:"#fff"}}>{ev.type}</div>
+                <div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/>
+                <div style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fD(ev.date)}</div>
+                {(ev.venue||ev.city)&&<><div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/><div style={{fontSize:14,color:"rgba(251,191,36,.75)"}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div></>}
               </div>
             </div>}
-            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:12,padding:"12px 20px",marginBottom:8,borderLeft:"4px solid #f59e0b"}}>
-              <div style={{fontSize:13,color:"rgba(251,191,36,.9)",fontWeight:700,letterSpacing:1}}>Za Good Vibes presents PHASER</div>
+            {isPriv&&<div style={{background:"#fff",borderRadius:12,padding:"13px 20px",marginBottom:8,border:"1px solid #e5e5e5",borderLeft:"4px solid #111"}}>
+              <div style={{fontSize:13,color:"#111",fontWeight:800,letterSpacing:1}}>Za Good Vibes presents PHASER</div>
             </div>}
             {/* Prestație — PHASER + preț */}
             <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
