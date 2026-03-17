@@ -1142,9 +1142,9 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       const div = document.createElement("div");
       div.style.cssText = "margin-bottom:8px;border-radius:8px;overflow:hidden;background:#111;";
       if (vid) {
-        div.innerHTML = "<div style=\"position:relative;padding-bottom:56.25%;height:0;background:#000\"><img src=\"https://img.youtube.com/vi/"+vid+"/hqdefault.jpg\" alt=\"\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block\"/><div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff\">&#9658;</div></div><div style=\"padding:12px 16px;background:#fff;border-top:1px solid #eee\"><div style=\"font-size:13px;font-weight:600;color:#111\">"+esc(title)+"</div><div style=\"font-size:11px;color:#666;margin-top:4px;word-break:break-all\">"+esc(url)+"</div></div>";
+        div.innerHTML = "<div style=\"position:relative;padding-bottom:56.25%;height:0;background:#000\"><img src=\"https://img.youtube.com/vi/"+vid+"/hqdefault.jpg\" alt=\"\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block\"/><div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff\">&#9658;</div></div><div style=\"padding:12px 16px;background:#fff;border-top:1px solid #eee\"><div style=\"font-size:13px;font-weight:600;color:#111\">"+esc(title)+"</div></div>";
       } else {
-        div.innerHTML = "<div style=\"padding:14px 16px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;gap:12px\"><span style=\"font-size:18px;color:#555\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111\">"+esc(title)+"</div><div style=\"font-size:11px;color:#888;margin-top:2px;word-break:break-all\">"+esc(url)+"</div></div></div>";
+        div.innerHTML = "<div style=\"padding:14px 16px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;gap:12px\"><span style=\"font-size:18px;color:#555\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111\">"+esc(title)+"</div></div></div>";
       }
       container.parentNode.replaceChild(div, container);
     });
@@ -1174,11 +1174,15 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     if (!PDF_WORKER_URL || !PDF_WORKER_URL.startsWith("http")) return null;
     const html = getOfferHtmlForWorker();
     if (!html) return null;
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 5000);
     const res = await fetch(PDF_WORKER_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ html, baseUrl: window.location.origin + "/" }),
+      signal: ctrl.signal,
     });
+    clearTimeout(t);
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || err.details || "Eroare Worker");
@@ -1218,11 +1222,11 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       div.style.cssText = "margin-bottom:8px;border-radius:8px;overflow:hidden;background:#111;";
       if (videoId) {
         const thumbUrl = "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg";
-        div.innerHTML = "<div style=\"position:relative;padding-bottom:56.25%;height:0;background:#000;\"><img src=\"" + thumbUrl + "\" alt=\"\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block\" crossorigin=\"anonymous\"/><div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;\">&#9658;</div></div><div style=\"padding:12px 16px;background:#fff;border-top:1px solid #eee;\"><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div><div style=\"font-size:11px;color:#666;margin-top:4px;word-break:break-all;\">" + escapeHtml(ytUrl) + "</div></div>";
+        div.innerHTML = "<div style=\"position:relative;padding-bottom:56.25%;height:0;background:#000;\"><img src=\"" + thumbUrl + "\" alt=\"\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block\" crossorigin=\"anonymous\"/><div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;\">&#9658;</div></div><div style=\"padding:12px 16px;background:#fff;border-top:1px solid #eee;\"><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div></div>";
         const img = div.querySelector("img");
         if (img) ytThumbImgs.push(img);
       } else {
-        div.innerHTML = "<div style=\"padding:14px 16px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;gap:12px;\"><span style=\"font-size:18px;color:#555;\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div><div style=\"font-size:11px;color:#888;margin-top:2px;word-break:break-all;\">" + escapeHtml(ytUrl) + "</div></div></div>";
+        div.innerHTML = "<div style=\"padding:14px 16px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;gap:12px;\"><span style=\"font-size:18px;color:#555;\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div></div></div>";
       }
       parent.replaceChild(div, container);
       iframeRestores.push({ div, container, parent });
@@ -1436,16 +1440,16 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             {/* Pagina 1 — tot conținutul până la Prestație (nu se desparte) */}
             <div className="offer-page-1" style={{pageBreakInside:"avoid",breakInside:"avoid"}}>
             {/* Antet logo-uri — ZGV stânga, Phaser dreapta (doar ofertă privată) */}
-            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:"16px 16px 0 0",padding:"16px 24px",display:"flex",alignItems:"center",justifyContent:"space-between",border:"1px solid rgba(245,158,11,.15)",borderBottom:"none"}}>
-              <img src={ZGV_LOGO} alt="Za good vibes" style={{height:64,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
-              <img src={LOGO_URL} alt="PHASER" style={{height:32,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
+            {isPriv&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 100%)",borderRadius:"16px 16px 0 0",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",border:"1px solid rgba(245,158,11,.15)",borderBottom:"none"}}>
+              <img src={ZGV_LOGO} alt="Za good vibes" style={{height:48,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
+              <img src={LOGO_URL} alt="PHASER" style={{height:28,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
-            {/* Imagine header — privat: poza ofertă ZGV; public: din Press Kit Public (200px pentru PDF) */}
+            {/* Imagine header — privat: poza ofertă ZGV; public: din Press Kit Public (150px pentru PDF) */}
             {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
-              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:200,objectFit:"cover",objectPosition:isPriv?"center 50%":(pkPublic?.heroImagePos||"center 50%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:150,objectFit:"cover",objectPosition:isPriv?"center 50%":(pkPublic?.heroImagePos||"center 50%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
             {/* Header card — OFERTĂ mare, tip mic, data direct */}
-            <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"18px 20px 16px",marginBottom:8,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
+            <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"14px 18px 12px",marginBottom:6,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
               <div style={{position:"absolute",top:0,right:0,width:240,height:240,background:"radial-gradient(circle,rgba(245,158,11,.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
               <div style={{fontSize:16,fontWeight:700,color:"rgba(251,191,36,.9)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Ofertă de colaborare</div>
               <div style={{fontSize:16,fontWeight:600,color:"#fff",marginBottom:12}}>{ev.type}</div>
@@ -1455,24 +1459,23 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             </div>
 
             {/* Despre noi — editabil înainte de generare PDF (doar ofertă privată) */}
-            {isPriv&&<div style={{background:"#fff",borderRadius:12,padding:"14px 18px",marginBottom:6,borderLeft:"4px solid #111"}}>
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:12}}>Despre noi</div>
-              <textarea value={ev.poveste||templates?.poveste||"Suntem o gașcă de visători muzicali și artiști pasionați, gata să aducem vibe-ul ăla bun la evenimentul vostru. Trebuie doar să ne vezi live și vei înțelege că un show-ul este un tour de force încărcat cu intensitate dar și cu momente de sensibilitate simplă. Printre cuvinte, imagini și muzică spunem povestea tuturor, a celor ce iubesc sau a celor îndrăgostiți de viață."} onChange={e=>syncOffer({poveste:e.target.value})} placeholder="Despre noi — modifică înainte de a genera PDF" style={{width:"100%",minHeight:100,resize:"vertical",fontSize:14,lineHeight:1.8,fontStyle:"italic",color:"#333",border:"1px solid #e5e5e5",borderRadius:8,padding:12}}/>
+            {isPriv&&<div style={{background:"#fff",borderRadius:12,padding:"10px 14px",marginBottom:6,borderLeft:"4px solid #111"}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:8}}>Despre noi</div>
+              <textarea value={ev.poveste||templates?.poveste||"Suntem o gașcă de visători muzicali și artiști pasionați, gata să aducem vibe-ul ăla bun la evenimentul vostru. Trebuie doar să ne vezi live și vei înțelege că un show-ul este un tour de force încărcat cu intensitate dar și cu momente de sensibilitate simplă. Printre cuvinte, imagini și muzică spunem povestea tuturor, a celor ce iubesc sau a celor îndrăgostiți de viață."} onChange={e=>syncOffer({poveste:e.target.value})} placeholder="Despre noi — modifică înainte de a genera PDF" style={{width:"100%",minHeight:80,resize:"vertical",fontSize:13,lineHeight:1.6,fontStyle:"italic",color:"#333",border:"1px solid #e5e5e5",borderRadius:8,padding:10}}/>
             </div>}
             {/* Link video — prima pagină se termină aici (primul video selectat) */}
             {isPriv&&videos.filter(v=>v.checked).length>0&&(()=>{
               const v0=videos.filter(x=>x.checked)[0];
               const vid=v0?.url?.match(/embed\/([^?&]+)/)?.[1]||v0?.url?.match(/(?:youtu\.be\/|v=)([^?&]+)/)?.[1]||"";
               const ytUrl=vid?"https://youtu.be/"+vid:v0?.url||"";
-              return <div style={{marginTop:12,borderRadius:12,overflow:"hidden",background:"#111"}}>
+              return <div style={{marginTop:8,borderRadius:12,overflow:"hidden",background:"#111"}}>
                 <a href={ytUrl} target="_blank" rel="noreferrer" style={{display:"block",textDecoration:"none"}}>
-                  <div style={{position:"relative",paddingBottom:"56.25%",height:0,background:"#000"}}>
+                  <div style={{position:"relative",paddingBottom:"45%",height:0,background:"#000"}}>
                     <img src={vid?"https://img.youtube.com/vi/"+vid+"/hqdefault.jpg":""} alt="" style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:64,height:64,borderRadius:"50%",background:"rgba(255,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,color:"#fff"}}>&#9658;</div>
+                    <div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:56,height:56,borderRadius:"50%",background:"rgba(255,0,0,.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff"}}>&#9658;</div>
                   </div>
-                  <div style={{padding:"14px 18px",background:"#fff",borderTop:"1px solid #eee"}}>
-                    <div style={{fontSize:14,fontWeight:600,color:"#111"}}>{v0?.title||"Video"}</div>
-                    <div style={{fontSize:11,color:"#666",marginTop:4,wordBreak:"break-all"}}>{ytUrl}</div>
+                  <div style={{padding:"10px 14px",background:"#fff",borderTop:"1px solid #eee"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{v0?.title||"Video"}</div>
                   </div>
                 </a>
               </div>;
@@ -1499,15 +1502,15 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               </div>
             </div>
 
-            {/* Servicii extra */}
-            {isPriv&&Object.values(ev.svc||{}).some(v=>v)&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Echipamente & Extra</div>
-              {ev.svc?.sunet&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Sistem sunet</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.sunet,ev.valuta)}</span></div>}
-              {ev.svc?.lumini&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Sistem lumini</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.lumini,ev.valuta)}</span></div>}
-              {ev.svc?.ecran&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Ecran LED (3×2)</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.ecran,ev.valuta)} + 1 meniu + 1 cameră twin</span></div>}
-              {ev.svc?.scena&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Scenă / Podium</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.scena,ev.valuta)}</span></div>}
-              {ev.svc?.dj&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0"}}><span style={{fontSize:13,color:"#444"}}>DJ</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.dj,ev.valuta)} + 1 meniu</span></div>}
-              {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"#888",marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
+            {/* Servicii extra — fundal colorat */}
+            {isPriv&&Object.values(ev.svc||{}).some(v=>v)&&<div style={{background:"linear-gradient(135deg,#1e3a5f 0%,#2d4a6f 50%,#1e3a5f 100%)",borderRadius:12,padding:"18px 20px",marginBottom:8,border:"1px solid rgba(255,255,255,.1)"}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"rgba(255,255,255,.6)",marginBottom:14}}>Echipamente & Extra</div>
+              {ev.svc?.sunet&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,.1)"}}><span style={{fontSize:13,color:"#fff"}}>Sistem sunet</span><span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>{fFmt(ev.svcp?.sunet,ev.valuta)}</span></div>}
+              {ev.svc?.lumini&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,.1)"}}><span style={{fontSize:13,color:"#fff"}}>Sistem lumini</span><span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>{fFmt(ev.svcp?.lumini,ev.valuta)}</span></div>}
+              {ev.svc?.ecran&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,.1)"}}><span style={{fontSize:13,color:"#fff"}}>Ecran LED (3×2)</span><span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>{fFmt(ev.svcp?.ecran,ev.valuta)} + 1 meniu + 1 cameră twin</span></div>}
+              {ev.svc?.scena&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:"1px solid rgba(255,255,255,.1)"}}><span style={{fontSize:13,color:"#fff"}}>Scenă / Podium</span><span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>{fFmt(ev.svcp?.scena,ev.valuta)}</span></div>}
+              {ev.svc?.dj&&<div style={{display:"flex",justifyContent:"space-between",padding:"6px 0"}}><span style={{fontSize:13,color:"#fff"}}>DJ</span><span style={{fontWeight:700,fontSize:15,color:"#fbbf24"}}>{fFmt(ev.svcp?.dj,ev.valuta)} + 1 meniu</span></div>}
+              {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"rgba(255,255,255,.6)",marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.1)"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
             </div>}
 
             {/* Cazare, Transport, Protocol — doar dacă există cazare sau transport */}
@@ -1574,9 +1577,8 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             {/* Pagină separată: link-uri YouTube */}
             {isPriv&&videos.filter(v=>v.checked).length>0&&<div className="print-break" style={{breakBefore:"page"}}>
             <div style={{background:"#fff",borderRadius:12,padding:"20px 24px",marginBottom:8,borderLeft:"4px solid #111"}}>
-              <div style={{marginBottom:24,paddingBottom:20,borderBottom:"1px solid #f0f0f0"}}>
-                <div style={{fontSize:40,fontWeight:900,color:"#111",letterSpacing:-2,lineHeight:1,marginBottom:8}}>Feel the Show.</div>
-                <div style={{fontSize:13,color:"#999",fontStyle:"italic",letterSpacing:.3}}>Za good vibes with Phaser</div>
+              <div style={{marginBottom:20,paddingBottom:16,borderBottom:"1px solid #f0f0f0"}}>
+                <div style={{fontSize:40,fontWeight:900,color:"#111",letterSpacing:-2,lineHeight:1}}>Feel the Show.</div>
               </div>
               {videos.filter(v=>v.checked).map((v,i)=>(
                 <div key={v.id} style={{marginBottom:i<videos.filter(x=>x.checked).length-1?20:0}}>

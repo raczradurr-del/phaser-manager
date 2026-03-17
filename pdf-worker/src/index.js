@@ -61,7 +61,7 @@ export default {
   <base href="${baseUrl.replace(/"/g, "&quot;")}"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:16px}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:12px}
     @media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}
     img{max-width:100%;height:auto}
     .print-break{break-before:page!important;page-break-before:always!important}
@@ -72,9 +72,10 @@ export default {
 </html>`;
 
       await page.setContent(fullHtml, {
-        waitUntil: "load",
-        timeout: 15000,
+        waitUntil: "domcontentloaded",
+        timeout: 8000,
       });
+      await new Promise((r) => setTimeout(r, 600));
 
       const pdf = await page.pdf({
         printBackground: true,
