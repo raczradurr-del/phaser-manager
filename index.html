@@ -1444,9 +1444,9 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <img src={ZGV_LOGO} alt="Za good vibes" style={{height:48,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
               <img src={LOGO_URL} alt="PHASER" style={{height:28,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
-            {/* Imagine header — aspect ratio corect, nu turtit */}
-            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0,aspectRatio:"16/9",position:"relative"}}>
-              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",objectPosition:isPriv?"center 50%":(pkPublic?.heroImagePos||"center 50%"),display:"block"}} onError={e=>{e.target.style.display="none";}}/>
+            {/* Imagine header — poza completa, fara crop */}
+            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",overflow:"hidden",marginBottom:0}}>
+              <img src={isPriv?PK_IMG_OFERTA_PRIVAT_ZGV:(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:"auto",display:"block"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
             {/* Header card — OFERTĂ mare, tip mic, data direct */}
             <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"14px 18px 12px",marginBottom:6,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
@@ -1502,15 +1502,16 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               </div>
             </div>
 
-            {/* Servicii extra — același stil ca restul */}
-            {isPriv&&Object.values(ev.svc||{}).some(v=>v)&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
-              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Echipamente & Extra</div>
-              {ev.svc?.sunet&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Sistem sunet</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.sunet,ev.valuta)}</span></div>}
-              {ev.svc?.lumini&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Sistem lumini</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.lumini,ev.valuta)}</span></div>}
-              {ev.svc?.ecran&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Ecran LED (3×2)</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.ecran,ev.valuta)} + 1 meniu + 1 cameră twin</span></div>}
-              {ev.svc?.scena&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:"1px solid #f5f5f5"}}><span style={{fontSize:13,color:"#444"}}>Scenă / Podium</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.scena,ev.valuta)}</span></div>}
-              {ev.svc?.dj&&<div style={{display:"flex",justifyContent:"space-between",padding:"5px 0"}}><span style={{fontSize:13,color:"#444"}}>DJ</span><span style={{fontWeight:700,fontSize:15,color:"#111"}}>{fFmt(ev.svcp?.dj,ev.valuta)} + 1 meniu</span></div>}
-              {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"#888",marginTop:10,paddingTop:10,borderTop:"1px solid #f5f5f5"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
+            {/* Servicii extra — dark cu accent auriu, consistent cu restul ofertei */}
+            {isPriv&&Object.values(ev.svc||{}).some(v=>v)&&<div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:12,padding:"18px 20px",marginBottom:8,border:"1px solid rgba(245,158,11,.2)",position:"relative",overflow:"hidden"}}>
+              <div style={{position:"absolute",top:0,right:0,width:160,height:160,background:"radial-gradient(circle,rgba(245,158,11,.07) 0%,transparent 70%)",pointerEvents:"none"}}/>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"rgba(251,191,36,.7)",marginBottom:14}}>Echipamente & Extra</div>
+              {ev.svc?.sunet&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid rgba(255,255,255,.08)"}}><span style={{fontSize:13,color:"rgba(255,255,255,.8)"}}>Sistem sunet</span><span style={{fontWeight:700,fontSize:14,color:"rgba(251,191,36,.95)"}}>{fFmt(ev.svcp?.sunet,ev.valuta)}</span></div>}
+              {ev.svc?.lumini&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid rgba(255,255,255,.08)"}}><span style={{fontSize:13,color:"rgba(255,255,255,.8)"}}>Sistem lumini</span><span style={{fontWeight:700,fontSize:14,color:"rgba(251,191,36,.95)"}}>{fFmt(ev.svcp?.lumini,ev.valuta)}</span></div>}
+              {ev.svc?.ecran&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid rgba(255,255,255,.08)"}}><span style={{fontSize:13,color:"rgba(255,255,255,.8)"}}>Ecran LED (3×2)</span><span style={{fontWeight:700,fontSize:14,color:"rgba(251,191,36,.95)"}}>{fFmt(ev.svcp?.ecran,ev.valuta)} + 1 meniu + 1 cameră twin</span></div>}
+              {ev.svc?.scena&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:"1px solid rgba(255,255,255,.08)"}}><span style={{fontSize:13,color:"rgba(255,255,255,.8)"}}>Scenă / Podium</span><span style={{fontWeight:700,fontSize:14,color:"rgba(251,191,36,.95)"}}>{fFmt(ev.svcp?.scena,ev.valuta)}</span></div>}
+              {ev.svc?.dj&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0"}}><span style={{fontSize:13,color:"rgba(255,255,255,.8)"}}>DJ</span><span style={{fontWeight:700,fontSize:14,color:"rgba(251,191,36,.95)"}}>{fFmt(ev.svcp?.dj,ev.valuta)} + 1 meniu</span></div>}
+              {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"rgba(255,255,255,.4)",marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.08)"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
             </div>}
 
             {/* Cazare, Transport, Protocol — doar dacă există cazare sau transport */}
