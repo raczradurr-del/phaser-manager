@@ -1134,21 +1134,35 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       taRestores.push({ div, ta });
     });
 
-    // 2. Fix iframe → placeholder link
+    // 2. Fix iframe → thumbnail YouTube (embed vizual, nu doar link text)
+    const escapeHtml = (s) => (s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
     const iframeRestores = [];
+    const ytThumbImgs = [];
     Array.from(el.querySelectorAll("iframe")).forEach(iframe => {
       const title = iframe.title || "Video";
       const src = iframe.src || "";
-      const videoId = src.match(/embed\/([^?&]+)/)?.[1] || "";
+      const videoId = src.match(/embed\/([^?&]+)/)?.[1] || src.match(/(?:youtu\.be\/|v=)([^?&]+)/)?.[1] || "";
       const ytUrl = videoId ? "https://youtu.be/" + videoId : src;
       const container = iframe.parentNode;
       const parent = container.parentNode;
       const div = document.createElement("div");
-      div.style.cssText = "padding:14px 16px;background:#f5f5f5;border:1px solid #e0e0e0;border-radius:8px;margin-bottom:8px;display:flex;align-items:center;gap:12px;";
-      div.innerHTML = "<span style=\"font-size:18px;color:#555;\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111;\">" + title + "</div><div style=\"font-size:11px;color:#888;margin-top:2px;\">" + ytUrl + "</div></div>";
+      div.style.cssText = "margin-bottom:8px;border-radius:8px;overflow:hidden;background:#111;";
+      if (videoId) {
+        const thumbUrl = "https://img.youtube.com/vi/" + videoId + "/hqdefault.jpg";
+        div.innerHTML = "<div style=\"position:relative;padding-bottom:56.25%;height:0;background:#000;\"><img src=\"" + thumbUrl + "\" alt=\"\" style=\"position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;display:block\" crossorigin=\"anonymous\"/><div style=\"position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(255,0,0,.9);display:flex;align-items:center;justify-content:center;font-size:24px;color:#fff;\">&#9658;</div></div><div style=\"padding:12px 16px;background:#fff;border-top:1px solid #eee;\"><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div><div style=\"font-size:11px;color:#666;margin-top:4px;word-break:break-all;\">" + escapeHtml(ytUrl) + "</div></div>";
+        const img = div.querySelector("img");
+        if (img) ytThumbImgs.push(img);
+      } else {
+        div.innerHTML = "<div style=\"padding:14px 16px;background:#f5f5f5;border-radius:8px;display:flex;align-items:center;gap:12px;\"><span style=\"font-size:18px;color:#555;\">&#9654;</span><div><div style=\"font-size:13px;font-weight:600;color:#111;\">" + escapeHtml(title) + "</div><div style=\"font-size:11px;color:#888;margin-top:2px;word-break:break-all;\">" + escapeHtml(ytUrl) + "</div></div></div>";
+      }
       parent.replaceChild(div, container);
       iframeRestores.push({ div, container, parent });
     });
+    await Promise.all(ytThumbImgs.map(img => new Promise(resolve => {
+      if (img.complete && img.naturalWidth) return resolve();
+      img.onload = resolve; img.onerror = resolve;
+      setTimeout(resolve, 5000);
+    })));
 
     // 3. Ascundem butoanele
     const btnRestores = [];
@@ -1189,21 +1203,42 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       "#offer-print-content > div:has(> img) { page-break-inside: avoid; break-inside: avoid; }",
       "#offer-print-content > div:first-child { page-break-after: avoid; break-after: avoid; }",
       "#offer-print-content [style*='columns'] { columns: 1 !important; column-count: 1 !important; }",
+      "#offer-print-content [style*='border-left'] { border-left: none !important; }",
     ].join("\n");
     document.head.appendChild(styleTag);
+
+    // 6. Elimină overflow care taie conținutul la export PDF
+    //    Containerul părinte cu overflow:auto limitează capturarea; trebuie overflow:visible
+    el.scrollIntoView({ block: "start" });
+    const overflowRestores = [];
+    let p = el.parentElement;
+    while (p && p !== document.body) {
+      const ov = p.style.overflow; const mh = p.style.maxHeight; const h = p.style.height;
+      const needsFix = (ov === "auto" || ov === "hidden" || ov === "scroll") || (mh || h);
+      if (needsFix) {
+        if (ov === "auto" || ov === "hidden" || ov === "scroll") p.style.overflow = "visible";
+        if (mh || h) { p.style.maxHeight = "unset"; p.style.height = "auto"; }
+        overflowRestores.push({ el: p, ov, mh, h });
+      }
+      p = p.parentElement;
+    }
 
     const restore = () => {
       taRestores.forEach(({ div, ta }) => { try { div.parentNode.replaceChild(ta, div); } catch(e){} });
       iframeRestores.forEach(({ div, container, parent }) => { try { parent.replaceChild(container, div); } catch(e){} });
       btnRestores.forEach(({ btn, was }) => { btn.style.display = was; });
       filterRestores.forEach(({ img, origSrc, origFilter }) => { img.src = origSrc; img.style.filter = origFilter; img.style.webkitFilter = origFilter; });
+      overflowRestores.forEach(({ el, ov, mh, h }) => { el.style.overflow = ov || ""; el.style.maxHeight = mh || ""; el.style.height = h || ""; });
       try { document.head.removeChild(styleTag); } catch(e) {}
     };
 
     return html2pdf().set({
       margin: 12, filename: getPdfFilename(),
       image: {type:"jpeg", quality:0.95},
-      html2canvas: {scale:2, useCORS:true, allowTaint:true, logging:false},
+      html2canvas: {
+        scale: 2, useCORS: true, allowTaint: true, logging: false,
+        scrollY: -window.scrollY, scrollX: -window.scrollX
+      },
       jsPDF: {unit:"mm", format:"a4", orientation:"portrait"},
       pagebreak: { mode: ["css", "legacy"] }
     }).from(el).outputPdf("blob").then(blob => { restore(); return blob; }, err => { restore(); return Promise.reject(err); });
