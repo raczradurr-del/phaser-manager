@@ -142,6 +142,7 @@ const MEMBERS = [
   {id:"m5",n:"Sebastian Bârzeianu",short:"Sebi",r:"Chitară",email:"sebi@phaser.ro"}
 ];
 const FURNIZOR_EMAIL = "furnizor@phaser.ro";
+const ADMIN_EMAIL = "raczradurr@gmail.com";
 // Validare parolă — minim 8 caractere, literă mare, literă mică, cifră
 const validatePw = (pw) => {
   if(!pw||pw.length<8) return "Minim 8 caractere";
@@ -294,7 +295,7 @@ const mapSbUserToAppUser = (sbUser, memberProfilesData) => {
     const de = (m.email || "").toLowerCase();
     return (pe && pe === email) || (de && de === email);
   });
-  if (mem) return { id: "u3", n: mem.short || mem.n.split(" ")[0], rl: "membru", memberId: mem.id };
+  if (mem) return { id: "u3", n: mem.short || mem.n.split(" ")[0], rl: email===ADMIN_EMAIL?"admin":"membru", memberId: mem.id };
   if (email === FURNIZOR_EMAIL) return { id: "u4", n: "Furnizor", rl: "furnizor" };
   return null;
 };
@@ -2955,6 +2956,14 @@ function App() {
   const [pwError, setPwError] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
   const [pwResetSent, setPwResetSent] = useState(false);
+  // ─── AUTH FLOW NOU ───
+  const [authStep, setAuthStep] = useState("role"); // "role"|"method"|"signup"|"login"|"pending"
+  const [loginRole, setLoginRole] = useState(null); // "membru"|"furnizor"
+  const [signupForm, setSignupForm] = useState({prenume:"",nume:"",email:"",nickname:"",password:"",confirm:""});
+  const [signupAvatarFile, setSignupAvatarFile] = useState(null);
+  const [signupAvatarPreview, setSignupAvatarPreview] = useState(null);
+  const [sfErr, setSfErr] = useState(""); // eroare formular signup
+  const [pendingRequests, setPendingRequests] = useState([]); // admin: cereri în așteptare
   const [showChangePw, setShowChangePw] = useState(false);
   const [chPwNew, setChPwNew] = useState("");
   const [chPwConf, setChPwConf] = useState("");
@@ -3080,18 +3089,39 @@ function App() {
   useEffect(() => {
     const sb = getSbClient();
     if (!sb) { setAuthLoading(false); return; }
-    const profiles = loadMemberProfiles();
-    sb.auth.getSession().then(({ data: { session } }) => {
+
+    // Rezolvă userul din Supabase auth + member_profiles
+    const resolveUser = async (sbUser) => {
+      if (!sbUser) return null;
+      // 1. Încearcă maparea pe MEMBERS hardcoded (pentru membrii existenți)
+      const profiles = loadMemberProfiles();
+      const appUser = mapSbUserToAppUser(sbUser, profiles);
+      if (appUser) return appUser;
+      // 2. Caută în member_profiles (pentru useri noi)
+      try {
+        const { data: prof } = await sb.from("member_profiles").select("*").eq("user_id", sbUser.id).maybeSingle();
+        if (prof) {
+          if (prof.status === "pending") { setAuthStep("pending"); return null; }
+          if (prof.status === "approved") {
+            return { id: sbUser.id, n: prof.nickname||prof.prenume, rl: prof.role||"membru", memberId: null, profileData: prof };
+          }
+        }
+      } catch(e) {}
+      return null;
+    };
+
+    sb.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        const appUser = mapSbUserToAppUser(session.user, profiles);
+        const appUser = await resolveUser(session.user);
         if (appUser) setUser(appUser);
       }
       setAuthLoading(false);
     }).catch(() => setAuthLoading(false));
-    const { data: { subscription } } = sb.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_OUT") { setUser(null); return; }
+
+    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") { setUser(null); setAuthStep("role"); return; }
       if (session?.user) {
-        const appUser = mapSbUserToAppUser(session.user, loadMemberProfiles());
+        const appUser = await resolveUser(session.user);
         if (appUser) setUser(appUser);
       }
     });
@@ -3390,137 +3420,235 @@ function App() {
   );
 
   if(!user) {
-    // ─── helpers login ───
-    const isKnownEmail = (em) => {
-      if(em === FURNIZOR_EMAIL) return true;
-      return MEMBERS.some(m=>{
-        const pe=(memberProfiles[m.id]?.email||"").toLowerCase();
-        const de=(m.email||"").toLowerCase();
-        return (pe&&pe===em)||(de&&de===em);
-      });
+    // ─── Reset complet auth ───
+    const resetAuth = () => {
+      setAuthStep("role"); setLoginRole(null);
+      setLoginEmail(""); setLoginEmailErr(""); setPendingEmail(null);
+      setPwInput(""); setPwConfirm(""); setPwError(""); setPwResetSent(false);
+      setSignupForm({prenume:"",nume:"",email:"",nickname:"",password:"",confirm:""});
+      setSignupAvatarFile(null); setSignupAvatarPreview(null); setSfErr("");
     };
-    const doEmailStep = () => {
+    // ─── Login cu email+parolă ───
+    const doLogin = async () => {
       const em = loginEmail.trim().toLowerCase();
-      if(!em){ setLoginEmailErr("Introdu adresa de email"); return; }
-      if(!em.includes("@")||!em.includes(".")){ setLoginEmailErr("Email invalid"); return; }
-      if(!isKnownEmail(em)){ setLoginEmailErr("Email nerecunoscut — pune emailul tău personal în Contul Meu după prima logare"); return; }
-      setPendingEmail(em); setLoginMode("signin"); setPwInput(""); setPwConfirm(""); setPwError(""); setPwResetSent(false);
-    };
-    const doAuth = async () => {
-      if(!pendingEmail) return;
+      if(!em){ setLoginEmailErr("Introdu emailul"); return; }
+      if(!pwInput.trim()){ setPwError("Introdu parola"); return; }
       setPwError(""); setPwLoading(true);
       const sb = getSbClient();
-      if(!sb){ setPwError("Supabase nu este configurat"); setPwLoading(false); return; }
+      if(!sb){ setPwError("Supabase nu e configurat"); setPwLoading(false); return; }
       try {
-        if(loginMode === "signup") {
-          const vErr = validatePw(pwInput);
-          if(vErr){ setPwError(vErr); setPwLoading(false); return; }
-          if(pwInput !== pwConfirm){ setPwError("Parolele nu coincid"); setPwLoading(false); return; }
-          const { data, error } = await sb.auth.signUp({ email: pendingEmail, password: pwInput });
-          if(error){
-            if(error.message?.toLowerCase().includes("already registered")||error.message?.toLowerCase().includes("already been registered"))
-              setPwError("Cont deja existent — folosește 'Am deja cont'");
-            else setPwError(error.message||"Eroare la crearea contului");
-          } else if(data.user && !data.session) {
-            setPwResetSent(true);
-          }
-        } else {
-          if(!pwInput.trim()){ setPwError("Introdu parola"); setPwLoading(false); return; }
-          const { error } = await sb.auth.signInWithPassword({ email: pendingEmail, password: pwInput });
-          if(error) setPwError("Email sau parolă incorectă");
-        }
+        const { error } = await sb.auth.signInWithPassword({ email: em, password: pwInput });
+        if(error) setPwError("Email sau parolă incorectă");
       } catch(e){ setPwError(String(e?.message||e)); }
       setPwLoading(false);
     };
+    // ─── Resetare parolă ───
     const doResetPw = async () => {
-      if(!pendingEmail) return;
-      const sb = getSbClient();
-      if(!sb) return;
+      const em = loginEmail.trim().toLowerCase();
+      if(!em){ setLoginEmailErr("Introdu emailul mai întâi"); return; }
+      const sb = getSbClient(); if(!sb) return;
       setPwLoading(true);
-      const { error } = await sb.auth.resetPasswordForEmail(pendingEmail, { redirectTo: window.location.href });
-      if(!error) setPwResetSent(true);
-      else setPwError(error.message||"Eroare");
+      const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: window.location.href });
+      if(!error) setPwResetSent(true); else setPwError(error.message||"Eroare");
       setPwLoading(false);
     };
-    const memberForEmail = pendingEmail ? MEMBERS.find(m=>{
-      const pe=(memberProfiles[m.id]?.email||"").toLowerCase();
-      const de=(m.email||"").toLowerCase();
-      return (pe&&pe===pendingEmail)||(de&&de===pendingEmail);
-    }) : null;
-    const displayName = pendingEmail===FURNIZOR_EMAIL ? "Furnizor" : (memberForEmail?.short||memberForEmail?.n?.split(" ")[0]||"");
+    // ─── Signup cont nou ───
+    const doSignup = async () => {
+      const { prenume, nume, email, nickname, password, confirm } = signupForm;
+      if(!prenume.trim()){ setSfErr("Prenumele e obligatoriu"); return; }
+      if(!nume.trim()){ setSfErr("Numele e obligatoriu"); return; }
+      const em = email.trim().toLowerCase();
+      if(!em.includes("@")){ setSfErr("Email invalid"); return; }
+      const vErr = validatePw(password);
+      if(vErr){ setSfErr(vErr); return; }
+      if(password !== confirm){ setSfErr("Parolele nu coincid"); return; }
+      setSfErr(""); setPwLoading(true);
+      const sb = getSbClient();
+      if(!sb){ setSfErr("Supabase nu e configurat"); setPwLoading(false); return; }
+      try {
+        const { data, error } = await sb.auth.signUp({ email: em, password });
+        if(error){
+          if(error.message?.toLowerCase().includes("already")) setSfErr("Email deja înregistrat — folosește 'Mă autentific'");
+          else setSfErr(error.message||"Eroare");
+          setPwLoading(false); return;
+        }
+        const userId = data.user?.id;
+        if(!userId){ setSfErr("Eroare la creare cont"); setPwLoading(false); return; }
+        let avatar_url = null;
+        if(signupAvatarFile){
+          const ext = signupAvatarFile.name.split(".").pop()||"jpg";
+          const path = `${userId}/avatar.${ext}`;
+          const { error: upErr } = await sb.storage.from("avatars").upload(path, signupAvatarFile, { upsert: true });
+          if(!upErr){ const { data: urlD } = sb.storage.from("avatars").getPublicUrl(path); avatar_url = urlD?.publicUrl||null; }
+        }
+        const isKnown = MEMBERS.some(m=>(m.email||"").toLowerCase()===em) || em===FURNIZOR_EMAIL || em===ADMIN_EMAIL;
+        const status = isKnown ? "approved" : "pending";
+        const role = loginRole==="furnizor" ? "furnizor" : (em===ADMIN_EMAIL ? "admin" : "membru");
+        await sb.from("member_profiles").insert({
+          user_id: userId, prenume: prenume.trim(), nume: nume.trim(),
+          nickname: nickname.trim()||null, email: em, avatar_url, role, status
+        });
+        if(status === "pending") setAuthStep("pending");
+      } catch(e){ setSfErr(String(e?.message||e)); }
+      setPwLoading(false);
+    };
+
+    const aB = {minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",background:"#0c0c0c",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",gap:24};
+    const aC = {width:"100%",maxWidth:320,animation:"up .4s ease both"};
+    const aI = {width:"100%",padding:14,background:"#161616",border:"1px solid #222",borderRadius:10,color:"#fff",fontSize:14,fontFamily:"inherit",outline:"none"};
+    const aBt = {width:"100%",padding:14,background:"#fff",color:"#000",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"};
+    const aBo = {width:"100%",padding:14,background:"transparent",color:"#888",border:"1px solid #282828",borderRadius:10,fontSize:14,fontWeight:500,cursor:"pointer"};
+    const aBk = {padding:"6px 12px",marginBottom:16,border:"1px solid #282828",background:"transparent",color:"#666",cursor:"pointer",fontSize:11,borderRadius:8,fontFamily:"inherit"};
 
     return (
-      <div style={{minHeight:"100vh",fontFamily:"'Inter',system-ui,sans-serif",background:"#0c0c0c",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 28px",gap:24}}>
+      <div style={aB}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
         <div style={{animation:"up .5s ease",textAlign:"center"}}>
           <img src={LOGO_URL} alt="PHASER" style={{width:220,display:"block",margin:"0 auto"}}/>
-          <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:4,textTransform:"uppercase",marginTop:16,fontWeight:400}}>Band Manager</div>
+          <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:4,textTransform:"uppercase",marginTop:16}}>Band Manager</div>
         </div>
         <div style={{width:40,height:1,background:"#222"}}/>
-        {!pendingEmail&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
-          <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",textAlign:"center",marginBottom:20}}>Autentificare</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <div>
-              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Adresă email</label>
-              <input type="email" value={loginEmail} autoFocus onChange={e=>{setLoginEmail(e.target.value);setLoginEmailErr("");}}
-                placeholder="emailul-tau@gmail.com"
-                style={{width:"100%",padding:14,background:"#161616",border:`1px solid ${loginEmailErr?"#ef4444":"#222"}`,borderRadius:10,color:"#fff",fontSize:14,fontFamily:"inherit",outline:"none"}}
-                onKeyDown={e=>e.key==="Enter"&&doEmailStep()}/>
-              {loginEmailErr&&<div style={{fontSize:12,color:"#ef4444",marginTop:6,lineHeight:1.4}}>{loginEmailErr}</div>}
-            </div>
-            <button onClick={doEmailStep} style={{width:"100%",padding:14,background:"#fff",color:"#000",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:"pointer"}}>Continuă →</button>
-            <div style={{textAlign:"center",marginTop:4}}>
-              <span style={{fontSize:11,color:"#444"}}>Furnizor? </span>
-              <button onClick={()=>{setPendingEmail(FURNIZOR_EMAIL);setLoginMode("signin");setPwInput("");setPwConfirm("");setPwError("");setPwResetSent(false);}} style={{fontSize:11,color:"#666",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",padding:0}}>Intră ca Furnizor</button>
-            </div>
+
+        {authStep==="role"&&<div style={aC}>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase"}}>Cine ești?</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <button onClick={()=>{setLoginRole("membru");setAuthStep("method");}} style={{...aBt,padding:18,fontSize:15}}>
+              🎸 &nbsp;Sunt Membru
+            </button>
+            <button onClick={()=>{setLoginRole("furnizor");setAuthStep("login");setLoginEmail(FURNIZOR_EMAIL);}} style={{...aBo,padding:18,fontSize:15}}>
+              🏢 &nbsp;Sunt Furnizor
+            </button>
           </div>
         </div>}
-        {pendingEmail&&<div style={{animation:"up .5s ease .1s both",width:"100%",maxWidth:320}}>
-          <button onClick={()=>{setPendingEmail(null);setPwInput("");setPwConfirm("");setPwError("");setPwResetSent(false);}} style={{padding:"6px 12px",marginBottom:16,border:"1px solid #282828",background:"transparent",color:"#666",cursor:"pointer",fontSize:11,borderRadius:8,fontFamily:"inherit"}}>← Înapoi</button>
+
+        {authStep==="method"&&<div style={aC}>
+          <button onClick={()=>setAuthStep("role")} style={aBk}>← Înapoi</button>
+          <div style={{textAlign:"center",marginBottom:28}}>
+            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase"}}>Autentificare Membru</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>
+            <button onClick={()=>setAuthStep("login")} style={{...aBt,padding:18,fontSize:15}}>
+              🔑 &nbsp;Mă autentific
+            </button>
+            <button onClick={()=>setAuthStep("signup")} style={{...aBo,padding:18,fontSize:15}}>
+              ✨ &nbsp;Cont nou
+            </button>
+          </div>
+        </div>}
+
+        {authStep==="login"&&<div style={aC}>
+          <button onClick={()=>{setAuthStep(loginRole==="furnizor"?"role":"method");setLoginEmail(loginRole==="furnizor"?"":loginEmail);setPwInput("");setPwError("");setPwResetSent(false);}} style={aBk}>← Înapoi</button>
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>{loginMode==="signup"?"Cont nou":"Bine ai venit,"}</div>
-            <div style={{fontSize:22,fontWeight:700,color:"#fff"}}>{displayName||pendingEmail}</div>
-            <div style={{fontSize:11,color:"#444",marginTop:3}}>{pendingEmail}</div>
+            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>{loginRole==="furnizor"?"Furnizor":"Membru"}</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#fff"}}>Bine ai venit</div>
           </div>
           {pwResetSent ? (
-            <div style={{padding:"16px",borderRadius:10,background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.2)",fontSize:13,color:"#22c55e",lineHeight:1.6,textAlign:"center"}}>
-              ✓ {loginMode==="signup"?"Verifică emailul — ți-am trimis un link de confirmare.":"Verifică emailul — ți-am trimis un link de resetare."}<br/>
-              <button onClick={()=>{setPwResetSent(false);setPwError("");}} style={{marginTop:10,padding:"6px 14px",border:"1px solid #22c55e",background:"transparent",color:"#22c55e",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>← Înapoi</button>
+            <div style={{padding:16,borderRadius:10,background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.2)",fontSize:13,color:"#22c55e",lineHeight:1.6,textAlign:"center"}}>
+              ✓ Verifică emailul — ți-am trimis un link de resetare.
+              <button onClick={()=>setPwResetSent(false)} style={{display:"block",margin:"10px auto 0",padding:"6px 14px",border:"1px solid #22c55e",background:"transparent",color:"#22c55e",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>← Înapoi</button>
             </div>
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
-              {loginMode==="signup"&&<div style={{padding:"10px 14px",borderRadius:8,background:"rgba(251,191,36,.08)",border:"1px solid rgba(251,191,36,.2)",fontSize:12,color:"#fbbf24",lineHeight:1.5}}>Cont nou — setează parola pentru acest email.</div>}
               <div>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă{loginMode==="signup"?" nouă":""}</label>
-                <input type="password" value={pwInput} autoFocus onChange={e=>{setPwInput(e.target.value);setPwError("");}}
-                  placeholder={loginMode==="signup"?"Minim 8 car., literă mare, cifră":"••••••••"}
-                  style={{width:"100%",padding:14,background:"#161616",border:`1px solid ${pwError?"#ef4444":"#222"}`,borderRadius:10,color:"#fff",fontSize:14,fontFamily:"inherit",outline:"none"}}
-                  onKeyDown={e=>e.key==="Enter"&&(loginMode==="signin"?doAuth():null)}/>
+                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email</label>
+                <input type="email" value={loginEmail} autoFocus={loginRole!=="furnizor"}
+                  onChange={e=>{setLoginEmail(e.target.value);setLoginEmailErr("");}}
+                  readOnly={loginRole==="furnizor"}
+                  placeholder="emailul-tau@gmail.com"
+                  style={{...aI,border:`1px solid ${loginEmailErr?"#ef4444":"#222"}`,opacity:loginRole==="furnizor"?0.5:1}}
+                  onKeyDown={e=>e.key==="Enter"&&document.getElementById("pw-inp")?.focus()}/>
+                {loginEmailErr&&<div style={{fontSize:12,color:"#ef4444",marginTop:4}}>{loginEmailErr}</div>}
               </div>
-              {loginMode==="signup"&&<div>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Confirmă parola</label>
-                <input type="password" value={pwConfirm} onChange={e=>{setPwConfirm(e.target.value);setPwError("");}}
-                  placeholder="Repetă parola"
-                  style={{width:"100%",padding:14,background:"#161616",border:`1px solid ${pwError&&pwConfirm&&pwInput!==pwConfirm?"#ef4444":"#222"}`,borderRadius:10,color:"#fff",fontSize:14,fontFamily:"inherit",outline:"none"}}
-                  onKeyDown={e=>e.key==="Enter"&&doAuth()}/>
-                <div style={{marginTop:8,padding:"8px 12px",borderRadius:7,background:"rgba(255,255,255,.03)",fontSize:11,color:"#444",lineHeight:1.7}}>
-                  Cerințe: minim 8 caractere · o literă MARE · o literă mică · o cifră
-                </div>
-              </div>}
+              <div>
+                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă</label>
+                <input id="pw-inp" type="password" value={pwInput} autoFocus={loginRole==="furnizor"}
+                  onChange={e=>{setPwInput(e.target.value);setPwError("");}}
+                  placeholder="••••••••"
+                  style={{...aI,border:`1px solid ${pwError?"#ef4444":"#222"}`}}
+                  onKeyDown={e=>e.key==="Enter"&&doLogin()}/>
+              </div>
               {pwError&&<div style={{fontSize:12,color:"#ef4444",padding:"8px 12px",background:"rgba(239,68,68,.08)",borderRadius:8,border:"1px solid rgba(239,68,68,.2)"}}>{pwError}</div>}
-              <button onClick={()=>{setPwLoading(true);doAuth().finally(()=>setPwLoading(false));}} disabled={pwLoading}
-                style={{width:"100%",padding:14,background:"#fff",color:"#000",border:"none",borderRadius:10,fontSize:14,fontWeight:700,cursor:pwLoading?"default":"pointer",marginTop:4}}>
-                {pwLoading?"Se procesează...":(loginMode==="signup"?"Creează cont →":"Intră →")}
+              <button onClick={doLogin} disabled={pwLoading} style={{...aBt,marginTop:4}}>
+                {pwLoading?"Se procesează...":"Intră →"}
               </button>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-                {loginMode==="signin"
-                  ? <button onClick={()=>{setLoginMode("signup");setPwInput("");setPwConfirm("");setPwError("");}} style={{padding:6,border:"none",background:"transparent",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Prima dată? Creează cont</button>
-                  : <button onClick={()=>{setLoginMode("signin");setPwInput("");setPwConfirm("");setPwError("");}} style={{padding:6,border:"none",background:"transparent",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Am deja cont</button>}
-                {loginMode==="signin"&&<button onClick={doResetPw} disabled={pwLoading} style={{padding:6,border:"none",background:"transparent",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit"}}>Am uitat parola</button>}
-              </div>
+              <button onClick={doResetPw} disabled={pwLoading} style={{padding:6,border:"none",background:"transparent",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline",fontFamily:"inherit",textAlign:"center"}}>Am uitat parola</button>
             </div>
           )}
         </div>}
+
+        {authStep==="signup"&&<div style={{...aC,maxWidth:400,overflowY:"auto",maxHeight:"80vh"}}>
+          <button onClick={()=>{setAuthStep("method");setSfErr("");}} style={aBk}>← Înapoi</button>
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Cont nou</div>
+            <div style={{fontSize:20,fontWeight:700,color:"#fff"}}>Creează-ți contul</div>
+            <div style={{fontSize:11,color:"#444",marginTop:3}}>Adminul va aproba cererea ta</div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:4}}>
+              <div style={{width:64,height:64,borderRadius:"50%",background:"#1a1a1a",border:"1px solid #282828",overflow:"hidden",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24}}>
+                {signupAvatarPreview ? <img src={signupAvatarPreview} style={{width:"100%",height:"100%",objectFit:"cover"}}/> : "👤"}
+              </div>
+              <div>
+                <div style={{fontSize:12,color:"#888",marginBottom:6}}>Poză de profil <span style={{color:"#555"}}>(opțional)</span></div>
+                <label style={{padding:"6px 12px",background:"#1a1a1a",border:"1px solid #282828",borderRadius:8,fontSize:11,color:"#888",cursor:"pointer"}}>
+                  Alege imagine
+                  <input type="file" accept="image/*" style={{display:"none"}} onChange={e=>{
+                    const f=e.target.files[0]; if(!f) return;
+                    setSignupAvatarFile(f);
+                    const r=new FileReader(); r.onload=ev=>setSignupAvatarPreview(ev.target.result); r.readAsDataURL(f);
+                  }}/>
+                </label>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Prenume *</label>
+                <input value={signupForm.prenume} onChange={e=>setSignupForm(f=>({...f,prenume:e.target.value}))} placeholder="Ion" style={aI} autoFocus/>
+              </div>
+              <div style={{flex:1}}>
+                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nume *</label>
+                <input value={signupForm.nume} onChange={e=>setSignupForm(f=>({...f,nume:e.target.value}))} placeholder="Popescu" style={aI}/>
+              </div>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nickname <span style={{color:"#444"}}>(opțional)</span></label>
+              <input value={signupForm.nickname} onChange={e=>setSignupForm(f=>({...f,nickname:e.target.value}))} placeholder="Ex: Ionu'" style={aI}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email *</label>
+              <input type="email" value={signupForm.email} onChange={e=>setSignupForm(f=>({...f,email:e.target.value}))} placeholder="emailul-tau@gmail.com" style={aI}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă *</label>
+              <input type="password" value={signupForm.password} onChange={e=>setSignupForm(f=>({...f,password:e.target.value}))} placeholder="Minim 8 car., literă mare, cifră" style={aI}/>
+            </div>
+            <div>
+              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Confirmă parola *</label>
+              <input type="password" value={signupForm.confirm} onChange={e=>{setSignupForm(f=>({...f,confirm:e.target.value}));setSfErr("");}} placeholder="Repetă parola" style={aI} onKeyDown={e=>e.key==="Enter"&&doSignup()}/>
+            </div>
+            <div style={{padding:"8px 12px",borderRadius:7,background:"rgba(255,255,255,.03)",fontSize:11,color:"#444",lineHeight:1.7}}>
+              Cerințe parolă: minim 8 caractere · o literă MARE · o literă mică · o cifră
+            </div>
+            {sfErr&&<div style={{fontSize:12,color:"#ef4444",padding:"8px 12px",background:"rgba(239,68,68,.08)",borderRadius:8,border:"1px solid rgba(239,68,68,.2)"}}>{sfErr}</div>}
+            <button onClick={doSignup} disabled={pwLoading} style={{...aBt,marginTop:4}}>
+              {pwLoading?"Se procesează...":"Trimite cererea →"}
+            </button>
+          </div>
+        </div>}
+
+        {authStep==="pending"&&<div style={{...aC,textAlign:"center"}}>
+          <div style={{fontSize:48,marginBottom:16}}>⏳</div>
+          <div style={{fontSize:20,fontWeight:700,color:"#fff",marginBottom:8}}>Cerere trimisă!</div>
+          <div style={{fontSize:13,color:"#555",lineHeight:1.7,marginBottom:20}}>
+            Contul tău a fost creat.<br/>
+            Adminul va aproba cererea ta în curând.<br/>
+            Vei putea accesa aplicația după aprobare.
+          </div>
+          <button onClick={resetAuth} style={{...aBo,width:"auto",padding:"8px 20px",fontSize:12}}>← Înapoi la login</button>
+        </div>}
+
       </div>
     );
   }
@@ -4334,6 +4462,51 @@ function App() {
               </div>;
             })()}
           </div>}
+
+          {/* PANEL ADMIN — cereri de acces */}
+          {tab==="contul"&&user?.rl==="admin"&&(()=>{
+            const loadRequests = async () => {
+              const sb = getSbClient(); if(!sb) return;
+              const { data } = await sb.from("member_profiles").select("*").eq("status","pending").order("created_at",{ascending:true});
+              setPendingRequests(data||[]);
+            };
+            if(pendingRequests.length===0 && getSbClient()) {
+              getSbClient().from("member_profiles").select("*").eq("status","pending").then(({data})=>setPendingRequests(data||[]));
+            }
+            const approve = async (profileId) => {
+              const sb = getSbClient(); if(!sb) return;
+              await sb.from("member_profiles").update({status:"approved"}).eq("id",profileId);
+              setPendingRequests(p=>p.filter(r=>r.id!==profileId));
+              showToast("Utilizator aprobat ✓");
+            };
+            const reject = async (profileId) => {
+              const sb = getSbClient(); if(!sb) return;
+              await sb.from("member_profiles").update({status:"rejected"}).eq("id",profileId);
+              setPendingRequests(p=>p.filter(r=>r.id!==profileId));
+              showToast("Cerere respinsă");
+            };
+            if(pendingRequests.length===0) return null;
+            return <div style={{marginTop:28,borderTop:`1px solid ${th.b}`,paddingTop:24}}>
+              <h2 style={{fontSize:16,fontWeight:700,marginBottom:4,color:"#f59e0b"}}>🔔 Cereri de acces ({pendingRequests.length})</h2>
+              <p style={{fontSize:12,color:th.tm,marginBottom:16}}>Utilizatori care au creat cont și așteaptă aprobare.</p>
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {pendingRequests.map(r=>(
+                  <div key={r.id} style={{padding:"12px 16px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+                    {r.avatar_url ? <img src={r.avatar_url} style={{width:40,height:40,borderRadius:"50%",objectFit:"cover",flexShrink:0}}/> : <div style={{width:40,height:40,borderRadius:"50%",background:"#333",display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,flexShrink:0}}>{(r.prenume||"?")[0]}</div>}
+                    <div style={{flex:1,minWidth:120}}>
+                      <div style={{fontSize:14,fontWeight:600}}>{r.prenume} {r.nume} {r.nickname?`(${r.nickname})`:""}</div>
+                      <div style={{fontSize:12,color:th.tm}}>{r.email}</div>
+                      <div style={{fontSize:11,color:"#555",marginTop:2}}>{r.role} · {new Date(r.created_at).toLocaleDateString("ro-RO")}</div>
+                    </div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button onClick={()=>approve(r.id)} style={{padding:"6px 14px",background:"#22c55e",color:"#000",border:"none",borderRadius:7,fontSize:12,fontWeight:600,cursor:"pointer"}}>✓ Aprobă</button>
+                      <button onClick={()=>reject(r.id)} style={{padding:"6px 14px",background:"transparent",color:"#ef4444",border:"1px solid #ef4444",borderRadius:7,fontSize:12,cursor:"pointer"}}>✕ Respinge</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>;
+          })()}
 
           {/* FINANȚE */}
           {tab==="finances"&&<div style={{animation:"su .3s ease"}}>
