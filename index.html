@@ -2996,6 +2996,7 @@ function App() {
   const [calSidebarDate, setCalSidebarDate] = useState(null);
   const [calDragEvId, setCalDragEvId] = useState(null);
   const [calDropDate, setCalDropDate] = useState(null);
+  const [calDateSearch, setCalDateSearch] = useState("");
   const [dashboardDateSearch, setDashboardDateSearch] = useState("");
   const [globalSearch, setGlobalSearch] = useState("");
   const [sectTab, setSectTab] = useState("playlist");
@@ -3301,7 +3302,7 @@ function App() {
   const MONTHS_RO = {ianuarie:1,februarie:2,martie:3,aprilie:4,mai:5,iunie:6,iulie:7,august:8,septembrie:9,octombrie:10,noiembrie:11,decembrie:12};
   const globalSearchResults = useMemo(()=>{
     const q = (globalSearch||"").trim().toLowerCase();
-    if(!q) return {evs:[],tasks:[]};
+    if(!q) return {evs:[],tasks:[],parsedDate:null};
     let qDate = q.replace(/\./g,"-").replace(/(\d{1,2})-(\d{1,2})-(\d{4})/,(_,d,m,y)=>`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`);
     const now = new Date();
     const y = now.getFullYear();
@@ -3314,6 +3315,22 @@ function App() {
         break;
       }
     }
+    // Detectează dacă query-ul e o dată exactă (YYYY-MM-DD)
+    let parsedDate = null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(qDate)) {
+      const testD = new Date(qDate+"T00:00:00");
+      if (!isNaN(testD.getTime())) parsedDate = qDate;
+    }
+    // Detectează format DD.MM sau DD.MM.YYYY scris direct
+    if (!parsedDate) {
+      const dmMatch = q.match(/^(\d{1,2})[.\-\/](\d{1,2})(?:[.\-\/](\d{2,4}))?$/);
+      if (dmMatch) {
+        const dd=dmMatch[1].padStart(2,"0"), mm=dmMatch[2].padStart(2,"0"), yy=dmMatch[3]?(dmMatch[3].length===2?"20"+dmMatch[3]:dmMatch[3]):String(y);
+        const candidate=`${yy}-${mm}-${dd}`;
+        const testD2=new Date(candidate+"T00:00:00");
+        if(!isNaN(testD2.getTime())&&testD2.getMonth()===parseInt(mm,10)-1) parsedDate=candidate;
+      }
+    }
     const evMatches = evs.filter(e=>{
       if([e.cn,e.type,e.venue,e.city,e.notes,e.desc,e.title].some(f=>String(f||"").toLowerCase().includes(q))) return true;
       if(e.date&&(e.date.includes(q)||e.date.includes(qDate)||fD(e.date).toLowerCase().includes(q))) return true;
@@ -3322,7 +3339,7 @@ function App() {
     });
     const taskMatchesSearch = t=>{ if((t.text||"").toLowerCase().includes(q)) return true; if((t.notes||"").toLowerCase().includes(q)) return true; if((t.tags||[]).some(tag=>tag.toLowerCase().includes(q))) return true; if((t.subtasks||[]).some(s=>taskMatchesSearch(s))) return true; return false; };
     const taskMatches = tasks.filter(taskMatchesSearch);
-    return {evs:evMatches.slice(0,8),tasks:taskMatches.slice(0,6)};
+    return {evs:evMatches.slice(0,8),tasks:taskMatches.slice(0,6),parsedDate};
   },[globalSearch,evs,tasks]);
 
   const navItems = [
@@ -3529,7 +3546,25 @@ function App() {
             <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",color:th.tm,pointerEvents:"none"}}><IcSearch s={16}/></span>
             <input value={globalSearch} onChange={e=>setGlobalSearch(e.target.value)} placeholder="Caută în toată aplicația..." style={{...sty.i,width:"100%",paddingLeft:38,paddingRight:12,paddingTop:10,paddingBottom:10,fontSize:14,borderRadius:10}}/>
             {globalSearch.trim()&&<button onClick={()=>setGlobalSearch("")} style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer",fontSize:18}}>×</button>}
-            {globalSearch.trim()&&(globalSearchResults.evs.length>0||globalSearchResults.tasks.length>0)&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:th.c,borderRadius:10,border:`1px solid ${th.b}`,boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:200,maxHeight:360,overflow:"auto"}}>
+            {globalSearch.trim()&&(globalSearchResults.evs.length>0||globalSearchResults.tasks.length>0||globalSearchResults.parsedDate)&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,background:th.c,borderRadius:10,border:`1px solid ${th.b}`,boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:200,maxHeight:360,overflow:"auto"}}>
+              {/* Dacă e o dată detectată, arată un card de calendar */}
+              {globalSearchResults.parsedDate&&(()=>{
+                const pd=globalSearchResults.parsedDate;
+                const evsOnDate=evs.filter(e=>e.date===pd);
+                return <div style={{padding:"10px 14px",borderBottom:`1px solid ${th.bl}`,background:"rgba(59,130,246,0.06)",display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,minWidth:0}}>
+                    <span style={{fontSize:16}}>📅</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#3b82f6"}}>{fD(pd)}</div>
+                      <div style={{fontSize:11,color:th.tm}}>{evsOnDate.length>0?`${evsOnDate.length} eveniment${evsOnDate.length!==1?"e":""} în calendar`:"Nimic în calendar pentru această dată"}</div>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6,flexShrink:0}}>
+                    <button onClick={()=>{setGlobalSearch("");setTab("calendar");const d=new Date(pd+"T00:00:00");setCalM(new Date(d.getFullYear(),d.getMonth()));setCalDateSearch(pd);setCalSidebarDate(pd);}} style={{...sty.bg,fontSize:11,padding:"5px 10px",color:"#3b82f6",border:"1px solid #3b82f6",whiteSpace:"nowrap"}}>📅 Calendar</button>
+                    {p.c&&<button onClick={()=>{setGlobalSearch("");openModal("pick",{date:pd});}} style={{padding:"5px 10px",borderRadius:7,border:"none",background:"#3b82f6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>+ Adaugă</button>}
+                  </div>
+                </div>;
+              })()}
               {globalSearchResults.evs.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Oferte / Evenimente</div>}
               {globalSearchResults.evs.map(ev=><div key={ev.id} onClick={()=>{setGlobalSearch("");openModal("detail",ev.id);}} style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${th.bl}`,display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
                 <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.venue}</div></div>
@@ -3541,7 +3576,7 @@ function App() {
                 <div style={{fontSize:11,color:th.tm}}>{(t.tags||[]).slice(0,3).map(tg=>"#"+tg).join(" ")}{t.due?" · "+fD(t.due):""}</div>
               </div>)}
             </div>}
-            {globalSearch.trim()&&globalSearchResults.evs.length===0&&globalSearchResults.tasks.length===0&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,padding:16,background:th.c,borderRadius:10,border:`1px solid ${th.b}`,boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:200,fontSize:13,color:th.tm}}>Niciun rezultat</div>}
+            {globalSearch.trim()&&globalSearchResults.evs.length===0&&globalSearchResults.tasks.length===0&&!globalSearchResults.parsedDate&&<div style={{position:"absolute",top:"100%",left:0,right:0,marginTop:4,padding:16,background:th.c,borderRadius:10,border:`1px solid ${th.b}`,boxShadow:"0 8px 24px rgba(0,0,0,.15)",zIndex:200,fontSize:13,color:th.tm}}>Niciun rezultat</div>}
           </div>
 
           {/* ACASĂ */}
@@ -4107,10 +4142,36 @@ function App() {
               const mn=["Ianuarie","Februarie","Martie","Aprilie","Mai","Iunie","Iulie","August","Septembrie","Octombrie","Noiembrie","Decembrie"];
               const dk=th.bg==="#09090b";
               return <div style={{...sty.cd,flex:1,minHeight:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexShrink:0}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,flexShrink:0}}>
                   <button onClick={()=>setCalM(new Date(y,m-1))} style={{...sty.bg,padding:"6px 12px"}}><IcChevL s={14}/> Înapoi</button>
                   <h2 style={{fontSize:18,fontWeight:700}}>{mn[m]} {y}</h2>
                   <button onClick={()=>setCalM(new Date(y,m+1))} style={{...sty.bg,padding:"6px 12px"}}>Înainte <IcChevR s={14}/></button>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexShrink:0}}>
+                  <div style={{position:"relative",flex:1,maxWidth:260}}>
+                    <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",color:th.tm,pointerEvents:"none"}}><IcSearch s={14}/></span>
+                    <input
+                      type="date"
+                      value={calDateSearch}
+                      onChange={e=>{
+                        const v=e.target.value;
+                        setCalDateSearch(v);
+                        if(v){
+                          const d=new Date(v+"T00:00:00");
+                          if(!isNaN(d.getTime())){
+                            setCalM(new Date(d.getFullYear(),d.getMonth()));
+                            setCalSidebarDate(v);
+                          }
+                        } else {
+                          setCalSidebarDate(null);
+                        }
+                      }}
+                      style={{...sty.i,width:"100%",paddingLeft:32,paddingRight:10,paddingTop:6,paddingBottom:6,fontSize:13,borderRadius:8}}
+                      title="Caută o dată în calendar"
+                    />
+                  </div>
+                  {calDateSearch&&<button onClick={()=>{setCalDateSearch("");setCalSidebarDate(null);}} style={{...sty.bg,padding:"5px 10px",fontSize:12,color:th.tm}}>✕</button>}
+                  <button onClick={()=>{const n=new Date();setCalM(new Date(n.getFullYear(),n.getMonth()));setCalDateSearch("");setCalSidebarDate(null);}} style={{...sty.bg,padding:"5px 10px",fontSize:12}}>Azi</button>
                 </div>
                 <div style={{flex:1,minHeight:0,overflowY:"auto",overflowX:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
                 <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3,minWidth:400}}>
@@ -4121,11 +4182,12 @@ function App() {
                     const ds=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
                     const de=evs.filter(e=>e.date===ds);
                     const td=new Date().getDate()===d&&new Date().getMonth()===m&&new Date().getFullYear()===y;
+                    const isSearchedDay=calDateSearch===ds;
                     const resp=(e)=>e.responsabilPrincipal||(e.responsabili&&e.responsabili[0]?.nume)||e.cn||"—";
                     return <div key={d} onClick={()=>setCalSidebarDate(ds)} onDragOver={e=>{e.preventDefault();setCalDropDate(ds);}} onDragLeave={()=>setCalDropDate(null)} onDrop={e=>{e.preventDefault();setCalDropDate(null);if(calDragEvId){moveEvToDate(calDragEvId,ds);setCalDragEvId(null);}}}
-                      style={{minHeight:80,padding:4,borderRadius:6,border:td?`2px solid ${th.a}`:calDropDate===ds?`2px solid ${th.a}`:de.length>0?`1px solid ${th.b}`:`1px solid ${th.bl}`,background:calDropDate===ds?th.ab:td?th.ab:"transparent",display:"flex",flexDirection:"column",cursor:"pointer"}}>
+                      style={{minHeight:80,padding:4,borderRadius:6,border:isSearchedDay?`2px solid #3b82f6`:td?`2px solid ${th.a}`:calDropDate===ds?`2px solid ${th.a}`:de.length>0?`1px solid ${th.b}`:`1px solid ${th.bl}`,background:calDropDate===ds?th.ab:isSearchedDay?"rgba(59,130,246,0.08)":td?th.ab:"transparent",display:"flex",flexDirection:"column",cursor:"pointer"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:2}}>
-                        <span style={{fontSize:12,fontWeight:td?800:de.length>0?600:400,color:td?th.t:de.length>0?th.t:th.tm}}>{d}</span>
+                        <span style={{fontSize:12,fontWeight:isSearchedDay||td?800:de.length>0?600:400,color:isSearchedDay?"#3b82f6":td?th.t:de.length>0?th.t:th.tm}}>{d}</span>
                         {p.c&&<button onClick={e=>{e.stopPropagation();openModal("pick",{date:ds});}} style={{width:20,height:20,padding:0,borderRadius:6,border:"none",background:th.a,color:th.bg,fontSize:14,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}} title="Adaugă ofertă">+</button>}
                       </div>
                       <div style={{flex:1,overflow:"auto",maxHeight:120}}>
