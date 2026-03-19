@@ -4574,28 +4574,9 @@ function App() {
                 const totLei=annualCosts.filter(x=>(x.v||"lei")==="lei").reduce((s,x)=>s+(x.a||0),0);
                 const totEur=annualCosts.filter(x=>x.v==="eur").reduce((s,x)=>s+(x.a||0),0);
                 const totAnualEur=Math.round((totLei/CURS+totEur)*100)/100;
-                const fondAcum=stats.fondTotal; // fond din concerte confirmate
-                const fondViitor=evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)).reduce((s,e)=>s+calcFond5(e),0);
-                // Fond → annual costs first
-                const fondPentruAnual=Math.min(fondAcum,totAnualEur);
-                const pctAcoperit=totAnualEur>0?Math.min(100,Math.round(fondPentruAnual/totAnualEur*100)):100;
-                const ramasDeAcoperit=Math.max(0,totAnualEur-fondAcum);
-                const fondViitorPentruAnual=Math.min(fondViitor,Math.max(0,ramasDeAcoperit));
-                const pctCuViitor=totAnualEur>0?Math.min(100,Math.round((fondPentruAnual+fondViitorPentruAnual)/totAnualEur*100)):100;
-                return <div style={{padding:12,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
-                    <div style={{fontSize:12,fontWeight:600}}>Target anual: <span style={{color:th.t}}>{f$(totAnualEur)}</span></div>
-                    <div style={{fontSize:10,color:th.tm}}>Acoperit: <strong style={{color:pctAcoperit>=100?"#22c55e":pctAcoperit>0?"#818cf8":th.tm}}>{f$(fondPentruAnual)}</strong></div>
-                  </div>
-                  <div style={{height:8,borderRadius:6,background:th.b,overflow:"hidden",marginBottom:6,position:"relative"}}>
-                    <div style={{position:"absolute",height:"100%",width:pctCuViitor+"%",borderRadius:6,background:"rgba(99,102,241,.25)"}}/>
-                    <div style={{position:"absolute",height:"100%",width:pctAcoperit+"%",borderRadius:6,background:pctAcoperit>=100?"#22c55e":"#6366f1",transition:"width .6s ease"}}/>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:th.tm}}>
-                    <span>{pctAcoperit}% confirmat{fondViitorPentruAnual>0?` · +${Math.round(pctCuViitor-pctAcoperit)}% din concerte viitoare`:""}</span>
-                    {pctAcoperit<100&&<span style={{color:"#ef4444"}}>Mai lipsesc: <strong>{f$(ramasDeAcoperit)}</strong></span>}
-                    {pctAcoperit>=100&&<span style={{color:"#22c55e",fontWeight:600}}>✓ Acoperit!</span>}
-                  </div>
+                return <div style={{padding:"10px 14px",borderRadius:8,background:th.h,border:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <div style={{fontSize:13,fontWeight:700}}>Target anual: <span style={{color:th.a}}>{f$(totAnualEur)}</span></div>
+                  <div style={{fontSize:11,color:th.tm}}>Vezi progresul mai jos ↓</div>
                 </div>;
               })()}
             </div>
@@ -4604,15 +4585,16 @@ function App() {
             {(()=>{
               const CURS=5;
               const totAnualEur=Math.round((annualCosts.filter(x=>(x.v||"lei")==="lei").reduce((s,x)=>s+(x.a||0),0)/CURS+annualCosts.filter(x=>x.v==="eur").reduce((s,x)=>s+(x.a||0),0))*100)/100;
-              // Fond intrat = din avansuri primite (dp=true)
-              const fondIntrat=evs.filter(e=>e.st==="confirmat"&&e.dp).reduce((s,e)=>s+calcFond5(e),0);
-              // Fond confirmat dar neprimit (money pending)
-              const fondConfNePlatit=evs.filter(e=>e.st==="confirmat"&&!e.dp).reduce((s,e)=>s+calcFond5(e),0);
-              // Fond din pipeline (oferte/așteptare)
+              // Fond din avansuri intrate (dp=true, event neplătit integral)
+              // Avansul intră imediat în fond când e primit
+              const fondDinAvans=evs.filter(e=>e.st==="confirmat"&&e.dp&&!e.restPaid).reduce((s,e)=>s+(e.dep||0),0);
+              // Fond din 5% — DOAR pentru evenimente plătite integral (restPaid=true)
+              const fondDin5pct=evs.filter(e=>e.st==="confirmat"&&e.restPaid).reduce((s,e)=>s+calcFond5(e),0);
+              const fondIntrat=fondDinAvans+fondDin5pct;
+              // Fond urmează: confirmate neplătite (5%) + pipeline
+              const fondConfUrmeaza=evs.filter(e=>e.st==="confirmat"&&!e.restPaid).reduce((s,e)=>s+calcFond5(e),0);
               const fondPipeline=evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)).reduce((s,e)=>s+calcFond5(e),0);
-              const fondUrmeaza=fondConfNePlatit+fondPipeline;
-              // Proiecție totală
-              const fondTotal=fondIntrat+fondConfNePlatit;
+              const fondUrmeaza=fondConfUrmeaza+fondPipeline;
               // Surplus după cheltuieli anuale
               const fondDisponibil=Math.max(0,fondIntrat-totAnualEur);
               const ramasDeCoperit=Math.max(0,totAnualEur-fondIntrat);
@@ -4625,12 +4607,15 @@ function App() {
                   <div style={{padding:"10px 12px",borderRadius:8,background:th.h,border:`1px solid ${fondIntrat>0?"rgba(99,102,241,.3)":th.b}`}}>
                     <div style={{fontSize:9,color:"#818cf8",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>✅ Fond intrat</div>
                     <div style={{fontSize:22,fontWeight:800,color:"#818cf8"}}>{f$(fondIntrat)}</div>
-                    <div style={{fontSize:10,color:th.tm,marginTop:2}}>Din {evs.filter(e=>e.st==="confirmat"&&e.dp).length} events cu avans primit</div>
+                    {fondDinAvans>0&&<div style={{fontSize:10,color:"#a5b4fc",marginTop:3}}>Avansuri: {f$(fondDinAvans)}</div>}
+                    {fondDin5pct>0&&<div style={{fontSize:10,color:"#818cf8",marginTop:1}}>5% finalizat: {f$(fondDin5pct)}</div>}
+                    {fondIntrat===0&&<div style={{fontSize:10,color:th.tm,marginTop:2}}>Niciun avans sau eveniment plătit integral</div>}
                   </div>
                   <div style={{padding:"10px 12px",borderRadius:8,background:th.h,border:`1px solid ${fondUrmeaza>0?"rgba(245,158,11,.2)":th.b}`}}>
                     <div style={{fontSize:9,color:"#f59e0b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>⏳ Fond urmează</div>
                     <div style={{fontSize:22,fontWeight:800,color:"#f59e0b"}}>{f$(fondUrmeaza)}</div>
-                    <div style={{fontSize:10,color:th.tm,marginTop:2}}>{fondConfNePlatit>0&&`${f$(fondConfNePlatit)} confirmat neprimite`}{fondConfNePlatit>0&&fondPipeline>0&&" + "}{fondPipeline>0&&`${f$(fondPipeline)} pipeline`}</div>
+                    {fondConfUrmeaza>0&&<div style={{fontSize:10,color:th.tm,marginTop:3}}>5% confirmate: {f$(fondConfUrmeaza)}</div>}
+                    {fondPipeline>0&&<div style={{fontSize:10,color:th.tm,marginTop:1}}>Pipeline: {f$(fondPipeline)}</div>}
                   </div>
                 </div>
                 {/* Progress spre cheltuieli anuale */}
@@ -4964,18 +4949,23 @@ function App() {
                 </div>
               </div>
 
-              {/* Avans */}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                <div onClick={()=>{upd({dp:!ev.dp});showToast(ev.dp?"Avans: neîncasat":"Avans: încasat ✓");}} style={{padding:12,borderRadius:8,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":"transparent"}`}}>
-                  <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Avans</div>
-                  <div style={{fontSize:16,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{fv(dep)}</div>
-                  <div style={{fontSize:9,color:ev.dp?"#22c55e":"#ef4444"}}>{ev.dp?"✓ Încasat":"✗ Neîncasat"}</div>
+              {/* Plăți primite */}
+              <div>
+                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Plăți primite</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  <div onClick={()=>{upd({dp:!ev.dp});showToast(ev.dp?"Avans: neîncasat":"Avans: încasat ✓");}} style={{padding:12,borderRadius:8,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":th.b}`,transition:"border-color .15s"}}>
+                    <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Avans {ev.dp?"✓":""}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{fv(dep)}</div>
+                    <div style={{fontSize:9,color:ev.dp?"#22c55e":"#ef4444",marginTop:2}}>{ev.dp?"Încasat":"Neîncasat · click"}</div>
+                  </div>
+                  <div onClick={()=>{upd({restPaid:!ev.restPaid});showToast(ev.restPaid?"Rest: neplătit":"Rest: plătit integral ✓");}} style={{padding:12,borderRadius:8,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.restPaid?"#22c55e":th.b}`,transition:"border-color .15s"}}>
+                    <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Rest {ev.restPaid?"✓":""}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:ev.restPaid?"#22c55e":th.t}}>{fv(rest)}</div>
+                    <div style={{fontSize:9,color:ev.restPaid?"#22c55e":"#f59e0b",marginTop:2}}>{ev.restPaid?"Plătit integral":"Neîncasat · click"}</div>
+                  </div>
                 </div>
-                <div style={{padding:12,borderRadius:8,background:th.h,textAlign:"center"}}>
-                  <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Rest</div>
-                  <div style={{fontSize:16,fontWeight:700}}>{fv(rest)}</div>
-                  <div style={{fontSize:9,color:th.tm}}>Total: {fv(total)}</div>
-                </div>
+                {ev.dp&&ev.restPaid&&<div style={{fontSize:10,color:"#22c55e",fontWeight:600,textAlign:"center",marginTop:6}}>✓ Eveniment plătit integral — 5% fond activ</div>}
+                {ev.dp&&!ev.restPaid&&<div style={{fontSize:10,color:"#f59e0b",textAlign:"center",marginTop:6}}>Avans în fond · 5% se calculează după plata integrală</div>}
               </div>
 
               {/* Cheltuieli fixe editabile */}
