@@ -2605,10 +2605,6 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                     <input type="number" value={fm.svcp[sv.k]||0} onChange={e=>{e.stopPropagation();const nsvcp={...fm.svcp,[sv.k]:Number(e.target.value)};const nsvcT=Object.entries(nsvcp).reduce((s,[k,v])=>s+(fm.svc?.[k]?v:0),0);const tot=fm.fee+nsvcT;setFm(p=>({...p,svcp:nsvcp,dep:Math.round(tot*0.1/10)*10}));}} style={{...iStyle,width:80,textAlign:"right"}} onClick={e=>e.stopPropagation()}/>
                     <span style={{fontSize:11,color:th.tm}}>{fm.valuta==="lei"?"lei":"€"}</span>
                   </div>
-                  {fm.svc[sv.k]&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:8,marginLeft:28}} onClick={e=>e.stopPropagation()}>
-                    <input value={(fm.svcInfo||{})[sv.k]?.ceAducem||""} onChange={e=>u("svcInfo",{...fm.svcInfo,[sv.k]:{...((fm.svcInfo||{})[sv.k]||{}),ceAducem:e.target.value}})} style={{...iStyle,fontSize:12}} placeholder="Ce aducem"/>
-                    <input value={(fm.svcInfo||{})[sv.k]?.furnizor||""} onChange={e=>u("svcInfo",{...fm.svcInfo,[sv.k]:{...((fm.svcInfo||{})[sv.k]||{}),furnizor:e.target.value}})} style={{...iStyle,fontSize:12}} placeholder="Nume furnizor"/>
-                  </div>}
                 </div>
               )}
               {fm.svc?.scena&&<div style={{marginTop:8,marginLeft:28}}><label style={{...sty.l,fontSize:10}}>Nr. plăci podium (cost furnizor)</label><input type="number" value={fm.scenaPlates??12} onChange={e=>u("scenaPlates",Math.max(0,Number(e.target.value)||0))} style={iStyle} min={1} placeholder="12"/></div>}
