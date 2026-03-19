@@ -151,7 +151,19 @@ const validatePw = (pw) => {
   if(!/[0-9]/.test(pw)) return "Trebuie cel puțin o cifră (0-9)";
   return null;
 };
-const SPLIT_PRIVATE = {m1:26,m4:20,m2:18,m5:18,m3:18};
+const SPLIT_PRIVATE = {m1:24,m2:19,m3:19,m4:19,m5:19}; // Carina 24%, restul 19% fiecare
+const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei
+const CURS_DEFAULT = 5; // 1€ = 5 lei
+const calcFond5 = (ev) => {
+  const CURS = ev.cursLei||CURS_DEFAULT;
+  const fee = (ev.fee||0) + Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
+  const onFirma = ev.payType==="firma";
+  const taxVenit = onFirma ? fee*0.01 : 0;
+  const fc = ev.fixedCosts||DEFAULT_FIXED_COSTS;
+  const fcEur = ((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0))/CURS;
+  const netAfterFixed = Math.max(0, fee - taxVenit - fcEur);
+  return Math.round(netAfterFixed*0.05*100)/100;
+};
 
 const USERS = [
   {id:"u3",n:"Membru",rl:"membru"},
@@ -3214,11 +3226,11 @@ function App() {
   },[]);
 
   const stats = useMemo(()=>{
-    const gpf=(tot,ex,ev)=>{const brut=Math.max(0,tot-ex);const av=(ev?.dp&&ev?.dep)?(ev.dep||0):0;const cf=ev?.cuFond!==false;const p=ev?.fondPct??10;const p2=ev?.fondPct2??10;const f=av+(cf?Math.round(brut*p/100):0)+(cf?Math.round(brut*p2/100):0);return f;};
     const sg = evs.filter(e=>e.st==="confirmat");
     const rev = sg.reduce((s,e)=>s+(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0),0);
     const exp = sg.reduce((s,e)=>s+(e.ex||[]).reduce((a,x)=>a+x.a,0),0);
-    const fondTotal = sg.reduce((s,e)=>{const tot=(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0);const ex=(e.ex||[]).reduce((a,x)=>a+x.a,0);return s+gpf(tot,ex,e);},0);
+    // Fond 5% din noul sistem de calcul
+    const fondTotal = sg.reduce((s,e)=>s+calcFond5(e),0);
     const ge  = genExp.reduce((s,e)=>s+e.a,0);
     const pipe= evs.filter(e=>["oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.fee||0),0);
     const pd  = sg.filter(e=>!e.dp).reduce((s,e)=>s+(e.dep||0),0);
@@ -3505,7 +3517,7 @@ function App() {
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');*{box-sizing:border-box;margin:0;padding:0}@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}`}</style>
         <div style={{animation:"up .5s ease",textAlign:"center"}}>
           <img src={LOGO_URL} alt="PHASER" style={{width:220,display:"block",margin:"0 auto"}}/>
-          <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:4,textTransform:"uppercase",marginTop:16}}>Band Manager</div>
+          <div style={{fontSize:9,color:"#666",letterSpacing:4,textTransform:"uppercase",marginTop:16}}>Band Manager</div>
         </div>
         <div style={{width:40,height:1,background:"#222"}}/>
 
@@ -3522,15 +3534,12 @@ function App() {
 
         {authStep==="method"&&<div style={aC}>
           <button onClick={()=>setAuthStep("role")} style={aBk}>← Înapoi</button>
-          <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase"}}>Autentificare Membru</div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <button onClick={()=>setAuthStep("login")} style={{...aBt,padding:18,fontSize:15}}>
-              🔑 &nbsp;Mă autentific
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <button onClick={()=>setAuthStep("login")} style={{width:"100%",padding:"20px 18px",background:"#161616",color:"#fff",border:"1px solid #303030",borderRadius:12,fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:22}}>🔑</span> Autentificare
             </button>
-            <button onClick={()=>setAuthStep("signup")} style={{...aBo,padding:18,fontSize:15}}>
-              ✨ &nbsp;Cont nou
+            <button onClick={()=>setAuthStep("signup")} style={{width:"100%",padding:"20px 18px",background:"#161616",color:"#fff",border:"1px solid #303030",borderRadius:12,fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:12}}>
+              <span style={{fontSize:22}}>✨</span> Cont nou
             </button>
           </div>
         </div>}
@@ -3538,7 +3547,7 @@ function App() {
         {authStep==="login"&&<div style={aC}>
           <button onClick={()=>{setAuthStep(loginRole==="furnizor"?"role":"method");setLoginEmail(loginRole==="furnizor"?"":loginEmail);setPwInput("");setPwError("");setPwResetSent(false);}} style={aBk}>← Înapoi</button>
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>{loginRole==="furnizor"?"Furnizor":"Membru"}</div>
+            <div style={{fontSize:9,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>{loginRole==="furnizor"?"Furnizor":"Membru"}</div>
             <div style={{fontSize:20,fontWeight:700,color:"#fff"}}>Bine ai venit</div>
           </div>
           {pwResetSent ? (
@@ -3549,7 +3558,7 @@ function App() {
           ) : (
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               <div>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email</label>
+                <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email</label>
                 <input type="email" value={loginEmail} autoFocus={loginRole!=="furnizor"}
                   onChange={e=>{setLoginEmail(e.target.value);setLoginEmailErr("");}}
                   readOnly={loginRole==="furnizor"}
@@ -3559,7 +3568,7 @@ function App() {
                 {loginEmailErr&&<div style={{fontSize:12,color:"#ef4444",marginTop:4}}>{loginEmailErr}</div>}
               </div>
               <div>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă</label>
+                <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă</label>
                 <input id="pw-inp" type="password" value={pwInput} autoFocus={loginRole==="furnizor"}
                   onChange={e=>{setPwInput(e.target.value);setPwError("");}}
                   placeholder="••••••••"
@@ -3578,7 +3587,7 @@ function App() {
         {authStep==="signup"&&<div style={{...aC,maxWidth:400,overflowY:"auto",maxHeight:"80vh"}}>
           <button onClick={()=>{setAuthStep("method");setSfErr("");}} style={aBk}>← Înapoi</button>
           <div style={{marginBottom:20}}>
-            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Cont nou</div>
+            <div style={{fontSize:9,color:"#666",letterSpacing:3,textTransform:"uppercase",marginBottom:4}}>Cont nou</div>
             <div style={{fontSize:20,fontWeight:700,color:"#fff"}}>Creează-ți contul</div>
             <div style={{fontSize:11,color:"#444",marginTop:3}}>Adminul va aproba cererea ta</div>
           </div>
@@ -3601,28 +3610,28 @@ function App() {
             </div>
             <div style={{display:"flex",gap:8}}>
               <div style={{flex:1}}>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Prenume *</label>
+                <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Prenume *</label>
                 <input value={signupForm.prenume} onChange={e=>setSignupForm(f=>({...f,prenume:e.target.value}))} placeholder="Ion" style={aI} autoFocus/>
               </div>
               <div style={{flex:1}}>
-                <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nume *</label>
+                <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nume *</label>
                 <input value={signupForm.nume} onChange={e=>setSignupForm(f=>({...f,nume:e.target.value}))} placeholder="Popescu" style={aI}/>
               </div>
             </div>
             <div>
-              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nickname <span style={{color:"#444"}}>(opțional)</span></label>
+              <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Nickname <span style={{color:"#444"}}>(opțional)</span></label>
               <input value={signupForm.nickname} onChange={e=>setSignupForm(f=>({...f,nickname:e.target.value}))} placeholder="Ex: Ionu'" style={aI}/>
             </div>
             <div>
-              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email *</label>
+              <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Email *</label>
               <input type="email" value={signupForm.email} onChange={e=>setSignupForm(f=>({...f,email:e.target.value}))} placeholder="emailul-tau@gmail.com" style={aI}/>
             </div>
             <div>
-              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă *</label>
+              <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Parolă *</label>
               <input type="password" value={signupForm.password} onChange={e=>setSignupForm(f=>({...f,password:e.target.value}))} placeholder="Minim 8 car., literă mare, cifră" style={aI}/>
             </div>
             <div>
-              <label style={{fontSize:11,color:"#555",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Confirmă parola *</label>
+              <label style={{fontSize:11,color:"#888",letterSpacing:1,textTransform:"uppercase",display:"block",marginBottom:6}}>Confirmă parola *</label>
               <input type="password" value={signupForm.confirm} onChange={e=>{setSignupForm(f=>({...f,confirm:e.target.value}));setSfErr("");}} placeholder="Repetă parola" style={aI} onKeyDown={e=>e.key==="Enter"&&doSignup()}/>
             </div>
             <div style={{padding:"8px 12px",borderRadius:7,background:"rgba(255,255,255,.03)",fontSize:11,color:"#444",lineHeight:1.7}}>
@@ -3711,16 +3720,13 @@ function App() {
           </button>
         </div>
         <div style={{padding:"8px 12px 14px",display:"flex",flexDirection:"column",gap:4}}>
-          {sbMode==="full"&&<button onClick={()=>setShowChangePw(true)} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 14px",borderRadius:8,border:"none",background:"transparent",color:th.sbt,fontSize:10,cursor:"pointer",width:"100%",opacity:.8}}>🔐 Schimbă parola</button>}
           <button onClick={async()=>{const sb=getSbClient();if(sb) await sb.auth.signOut();setUser(null);}} style={{display:"flex",alignItems:"center",gap:8,padding:sbMode==="full"?"8px 14px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",background:"transparent",color:th.sbt,fontSize:11,cursor:"pointer",width:"100%"}}>
             <IcOut s={14}/>{sbMode==="full"&&<span>{user.n} · <span style={{textTransform:"uppercase",fontSize:9,letterSpacing:1}}>{user.rl}</span></span>}
           </button>
-          {/* Sync status */}
-          <div title={syncStatus==="synced"?"Date sincronizate în cloud":syncStatus==="syncing"?"Se sincronizează...":syncStatus==="error"?(syncErrorMsg?"Eroare: "+syncErrorMsg:"Eroare sincronizare — verifică conexiunea și tabela app_data în Supabase"):"Așteptând..."} style={{display:"flex",alignItems:"center",gap:6,padding:"4px 14px 10px",opacity:.7}}>
-            <span style={{fontSize:13}}>{syncStatus==="synced"?"☁️":syncStatus==="syncing"?"🔄":syncStatus==="error"?"⚠️":"💤"}</span>
-            {sbMode==="full"&&<span style={{fontSize:9,color:syncStatus==="synced"?"#22c55e":syncStatus==="error"?"#ef4444":syncStatus==="syncing"?"#f59e0b":"#888",fontWeight:600,letterSpacing:.5,textTransform:"uppercase"}}>
-              {syncStatus==="synced"?"Cloud sync":syncStatus==="syncing"?"Sincronizare...":syncStatus==="error"?"Eroare sync":"Offline"}
-            </span>}
+          {/* Sync status — bulinuță subtilă */}
+          <div title={syncStatus==="synced"?"Date sincronizate în cloud":syncStatus==="syncing"?"Se sincronizează...":syncStatus==="error"?(syncErrorMsg||"Eroare sincronizare"):"Așteptând..."} style={{display:"flex",alignItems:"center",gap:6,padding:"2px 14px 8px"}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:syncStatus==="synced"?"#22c55e":syncStatus==="error"?"#ef4444":syncStatus==="syncing"?"#f59e0b":"#444",flexShrink:0,boxShadow:syncStatus==="synced"?"0 0 4px #22c55e55":syncStatus==="syncing"?"0 0 4px #f59e0b55":"none"}}/>
+            {sbMode==="full"&&syncStatus==="error"&&<span style={{fontSize:9,color:"#ef4444"}}>Eroare sync</span>}
           </div>
         </div>
       </div>
@@ -4549,7 +4555,6 @@ function App() {
                 <div style={{fontSize:13,fontWeight:600}}>Cheltuieli anuale fixe (firmă)</div>
                 <button onClick={()=>setAC([...DEFAULT_ANNUAL_COSTS])} style={{...sty.bg,fontSize:10,padding:"4px 8px"}}>Restabilește default</button>
               </div>
-              <div style={{fontSize:11,color:th.tm,marginBottom:12}}>Costuri fixe pe an — pune deoparte un procent din fiecare concert ca să le acoperi</div>
               {annualCosts.map((x,i)=><div key={x.id} style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr auto":"2fr 1fr 80px auto",gap:6,marginBottom:6,alignItems:"center"}}>
                 <input value={x.n} onChange={e=>{const ac=[...annualCosts];ac[i]={...ac[i],n:e.target.value};setAC(ac);}} style={{...sty.i,padding:8,fontSize:12}} placeholder="Ex: Contabilă"/>
                 <input type="number" value={x.a} onChange={e=>{const ac=[...annualCosts];ac[i]={...ac[i],a:Number(e.target.value)||0};setAC(ac);}} style={{...sty.i,padding:8,fontSize:12}} placeholder="0"/>
@@ -4557,16 +4562,36 @@ function App() {
                 <button onClick={()=>setAC(annualCosts.filter((_,j)=>j!==i))} style={{padding:4,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button>
               </div>)}
               <button onClick={()=>setAC([...annualCosts,{id:uid(),n:"",a:0,v:"lei"}])} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginBottom:12}}>+ Adaugă</button>
-              {(()=>{const CURS=5;const totLei=annualCosts.filter(x=>(x.v||"lei")==="lei").reduce((s,x)=>s+(x.a||0),0);const totEur=annualCosts.filter(x=>x.v==="eur").reduce((s,x)=>s+(x.a||0),0);const totAnualLei=totLei+totEur*CURS;const gigsAn=Math.max(1,typeof gigsPerYear==="number"?gigsPerYear:12);const perGigLei=totAnualLei/gigsAn;const now=new Date();const last12mEnd=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1).toISOString().slice(0,10);const last12mStart=new Date(now.getFullYear()-1,now.getMonth(),now.getDate()).toISOString().slice(0,10);const evsLastYear=evs.filter(e=>e.st==="confirmat"&&e.date&&e.date>=last12mStart&&e.date<last12mEnd);const avgFee=evsLastYear.length>0?evsLastYear.reduce((s,e)=>s+(e.fee||0),0)/evsLastYear.length:2000;const avgFeeLei=avgFee*CURS;const pct=avgFeeLei>0?Math.round(perGigLei/avgFeeLei*100):0;return <div style={{padding:12,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
-                <div style={{fontSize:11,fontWeight:600,marginBottom:6}}>Total anual: {totLei>0&&<span>{totLei.toLocaleString("ro-RO")} lei</span>}{totLei>0&&totEur>0&&" + "}{totEur>0&&<span>{f$(totEur)} (≈{Math.round(totEur*CURS).toLocaleString("ro-RO")} lei)</span>}</div>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                  <span style={{fontSize:10,color:th.tm}}>Concerte estimate/an:</span>
-                  <input type="number" value={gigsPerYear} onChange={e=>setGigsPerYear(Math.max(1,Number(e.target.value)||12))} style={{...sty.i,width:50,padding:4,fontSize:12}} min={1} max={365}/>
-                </div>
-                <div style={{fontSize:10,color:th.tm,marginBottom:4}}>→ <strong>{Math.round(perGigLei).toLocaleString("ro-RO")} lei</strong> de pus deoparte per concert</div>
-                <div style={{fontSize:10,color:th.tm}}>Dacă onorariu mediu e {f$(avgFee)} (≈{Math.round(avgFeeLei).toLocaleString("ro-RO")} lei){evsLastYear.length>0?` (din ${evsLastYear.length} concert${evsLastYear.length===1?"":"e"} în ultimele 12 luni)`:" (implicit)"}: <strong style={{color:th.t}}>~{pct}%</strong> din fiecare concert pentru costuri firmă</div>
-                <div style={{fontSize:9,color:th.tm,marginTop:6}}>+ 16% dividende când plătești prin firmă</div>
-              </div>;})()}
+              {(()=>{
+                const CURS=5;
+                const totLei=annualCosts.filter(x=>(x.v||"lei")==="lei").reduce((s,x)=>s+(x.a||0),0);
+                const totEur=annualCosts.filter(x=>x.v==="eur").reduce((s,x)=>s+(x.a||0),0);
+                const totAnualEur=totLei/CURS+totEur;
+                // Fond acumulat din toate evenimentele confirmate (€)
+                const fondAcum=stats.fondTotal;
+                const pctAcoperit=totAnualEur>0?Math.min(100,Math.round(fondAcum/totAnualEur*100)):0;
+                const ramasDeAcoperit=Math.max(0,totAnualEur-fondAcum);
+                return <div style={{padding:12,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                  <div style={{fontSize:11,fontWeight:600,marginBottom:4}}>Total anual: <span style={{color:th.t}}>{totEur>0?f$(totAnualEur):`${totLei.toLocaleString("ro-RO")} lei`}</span></div>
+                  <div style={{fontSize:10,color:th.tm,marginBottom:10}}>Fond acumulat din concerte: <strong style={{color:fondAcum>0?"#818cf8":th.tm}}>{f$(fondAcum)}</strong></div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:th.tm,marginBottom:4}}>
+                    <span>Acoperit</span><span>{pctAcoperit}% din {f$(totAnualEur)}</span>
+                  </div>
+                  <div style={{height:10,borderRadius:6,background:th.b,overflow:"hidden",marginBottom:8}}>
+                    <div style={{height:"100%",width:pctAcoperit+"%",borderRadius:6,background:pctAcoperit>=100?"#22c55e":pctAcoperit>=50?"#f59e0b":"#6366f1",transition:"width .6s ease"}}/>
+                  </div>
+                  {pctAcoperit<100&&<div style={{fontSize:10,color:th.tm}}>Mai lipsesc: <strong style={{color:"#ef4444"}}>{f$(ramasDeAcoperit)}</strong></div>}
+                  {pctAcoperit>=100&&<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>✓ Cheltuielile anuale sunt acoperite!</div>}
+                </div>;
+              })()}
+            </div>
+
+            {/* Fond trupa */}
+            <div style={{...sty.cd,marginTop:16,border:`1px solid rgba(99,102,241,.3)`}}>
+              <div style={{fontSize:13,fontWeight:600,marginBottom:4,color:"#a5b4fc"}}>💰 Fond trupa</div>
+              <div style={{fontSize:11,color:th.tm,marginBottom:8}}>5% din fiecare concert (după cheltuieli fixe), acumulat automat</div>
+              <div style={{fontSize:28,fontWeight:800,color:"#818cf8"}}>{f$(stats.fondTotal)}</div>
+              <div style={{fontSize:10,color:th.tm,marginTop:4}}>Din {evs.filter(e=>e.st==="confirmat").length} concerte confirmate</div>
             </div>
           </div>}
 
@@ -4753,122 +4778,192 @@ function App() {
       {/* FINANCE POPUP — Fișa financiară E(nr) (data) */}
       {modal==="finance"&&(()=>{
         if(!mData) return null;
-        const ev=mData; const svc=getSvcTotal(ev); const tot=(ev.fee??0)+svc; const dep=ev.dep??0; const rest=tot-dep;
+        const ev=mData;
         const upd=(patch)=>setEvs(p=>p.map(e=>e.id===ev.id?{...e,...patch}:e));
-        const onFirma=ev.plataAvansFirma||ev.plataRestFirma;
-        const cursLei=ev.cursLei??5;
-        const avansVal=ev.plataAvansFirma?(ev.sumaAvansLei??0)/cursLei:dep;
-        const restVal=ev.plataRestFirma?(ev.sumaRestLei??0)/cursLei:rest;
-        const totIncasat=avansVal+restVal;
-        const impozit1=(ev.plataAvansFirma?Math.round((ev.sumaAvansLei??0)*0.01):0)+(ev.plataRestFirma?Math.round((ev.sumaRestLei??0)*0.01):0);
-        const impozit1Eur=impozit1/cursLei;
-        const cheltSvc=svc;
-        const backline=250; const tehnic=200; const tehnicDiv=onFirma?Math.round(tehnic*0.16):0;
-        const stageMgr=30; const stageMgrDiv=onFirma?Math.round(stageMgr*0.16):0;
-        const callBookerPct=0.03; const callBooker=Math.round(tot*callBookerPct); const callBookerDiv=onFirma?Math.round(callBooker*0.16):0;
-        const exNeprevazute=(ev.ex||[]).filter(x=>!/tehnic|backline|transport/i.test(x.n||""));
-        const cheltNeprevazute=exNeprevazute.reduce((s,x)=>s+(x.a||0),0);
-        const cheltNeprevazuteDiv=exNeprevazute.filter(x=>x.direct).reduce((s,x)=>s+Math.round((x.a||0)*0.16),0);
-        const exTransport=(ev.ex||[]).find(x=>/transport/i.test(x.n||""));
-        const cheltOficiu=((ev.dist??999)>=25&&exTransport)?(exTransport.a||0):0;
-        const cheltTotal=cheltSvc+backline+tehnic+tehnicDiv+stageMgr+stageMgrDiv+callBooker+callBookerDiv+cheltNeprevazute+cheltNeprevazuteDiv+cheltOficiu+impozit1Eur;
-        let ramas=Math.max(0,totIncasat-cheltTotal);
-        const fondPct=ev.fondPct??10; const fondPct2=ev.fondPct2??10;
-        const avansInFond=ev.dp?avansVal:0;
-        const cuFond=ev.cuFond!==false;
-        const fondFixe=cuFond?Math.round(ramas*fondPct/100):0;
-        const fondTrupa=cuFond?Math.round(ramas*fondPct2/100):0;
-        ramas=Math.max(0,ramas-fondFixe-fondTrupa);
-        const div16=onFirma?Math.round(ramas*0.16):0;
-        ramas=Math.max(0,ramas-div16);
+        const CURS=ev.cursLei||CURS_DEFAULT;
         const isPrivate=ev.cat==="private";
-        const splitPct=isPrivate?SPLIT_PRIVATE:null;
+        const payType=ev.payType||"direct";
+        const onFirma=payType==="firma";
+
+        // Total brut
+        const svcTot=Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
+        const total=(ev.fee||0)+svcTot;
+        const dep=ev.dep||0; const rest=total-dep;
+
+        // 1. Impozit pe venit 1% (dacă pe firmă)
+        const impVenit=onFirma?Math.round(total*0.01*100)/100:0;
+        const netDupaTax=total-impVenit;
+
+        // 2. Cheltuieli fixe (lei → €)
+        const fc={...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{})};
+        const fcLeiTotal=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);
+        const fcEur=fcLeiTotal/CURS;
+
+        // 3. Net după cheltuieli fixe
+        const netDupaFixed=Math.max(0,netDupaTax-fcEur);
+
+        // 4. Fond 5%
+        const fond5=Math.round(netDupaFixed*0.05*100)/100;
+        const dupaFond=netDupaFixed-fond5;
+
+        // 5. Dividende 16% (dacă pe firmă)
+        const div16=onFirma?Math.round(dupaFond*0.16*100)/100:0;
+        const dupaDiv=dupaFond-div16;
+
+        // 6. Roluri
+        const leadPct=isPrivate?0.02:0.01;
+        const leadAmt=ev.leadId?Math.round(dupaDiv*leadPct*100)/100:0;
+        const adminAmt=ev.adminId?Math.round(dupaDiv*0.02*100)/100:0;
+        const socialAmt=ev.socialId?Math.round(dupaDiv*0.02*100)/100:0;
+        const stageAmt=ev.stageId?Math.round(dupaDiv*0.02*100)/100:0;
+        const totalRoluri=leadAmt+adminAmt+socialAmt+stageAmt;
+
+        // 7. Pool de împărțit
+        const pool=Math.max(0,dupaDiv-totalRoluri);
+
+        // 8. Split per membru
+        const shares={};
+        MEMBERS.forEach(m=>{
+          const base=isPrivate?Math.round(pool*(SPLIT_PRIVATE[m.id]||0)/100*100)/100:Math.round(pool/5*100)/100;
+          shares[m.id]=base;
+        });
+        if(ev.leadId) shares[ev.leadId]=(shares[ev.leadId]||0)+leadAmt;
+        if(ev.adminId) shares[ev.adminId]=(shares[ev.adminId]||0)+adminAmt;
+        if(ev.socialId) shares[ev.socialId]=(shares[ev.socialId]||0)+socialAmt;
+        if(ev.stageId) shares[ev.stageId]=(shares[ev.stageId]||0)+stageAmt;
+
+        const fv=(v)=>v.toLocaleString("ro-RO",{minimumFractionDigits:0,maximumFractionDigits:2})+"€";
+        const fvl=(v)=>Math.round(v).toLocaleString("ro-RO")+" lei";
+        const Row=({l,v,c,bold})=><div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${th.bl}`}}>
+          <span style={{fontSize:12,color:th.tm}}>{l}</span>
+          <span style={{fontSize:12,fontWeight:bold?700:500,color:c||th.t}}>{v}</span>
+        </div>;
+
         return <div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100}} onClick={closeModal}>
-          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"95%":520,maxHeight:"90vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
-            <div style={{padding:"16px 20px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between"}}>
-              <h3 style={{fontSize:15,fontWeight:700}}>Fișa financiară E{ev.offerNr||"?"} ({fDFisa(ev.date)})</h3>
-              <button onClick={closeModal} style={{padding:3,border:"none",background:"transparent",color:th.tm,cursor:"pointer"}}><IcX s={14}/></button>
-            </div>
-            <div style={{padding:"16px 20px"}}>
-              <div style={{textAlign:"center",marginBottom:16}}>
-                <div style={{fontSize:12,color:th.tm}}>{ev.type}</div>
-                <div style={{fontSize:26,fontWeight:800,marginTop:3}}>{fFmt(tot,ev.valuta)}</div>
+          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"95%":500,maxHeight:"92vh",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700}}>Fișa financiară · O{ev.offerNr||"?"}</div>
+                <div style={{fontSize:11,color:th.tm,marginTop:2}}>{isPrivate?"Privat":"Public"} · {fD(ev.date)}</div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                <div onClick={()=>{upd({dp:!ev.dp});showToast(ev.dp?"Avans: neîncasat":"Avans: încasat ✓")}} style={{padding:10,borderRadius:6,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":"transparent"}`}} title="Click pentru a bifa/debifa avans încasat">
+              <button onClick={closeModal} style={{padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer"}}><IcX s={14}/></button>
+            </div>
+
+            <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:16}}>
+
+              {/* Tip plată */}
+              <div>
+                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tip plată</div>
+                <div style={{display:"flex",gap:10}}>
+                  {["direct","firma"].map(t=><button key={t} onClick={()=>upd({payType:t})} style={{flex:1,padding:"10px 0",borderRadius:8,border:`1px solid ${payType===t?th.a:th.b}`,background:payType===t?th.ab:"transparent",color:payType===t?th.a:th.tm,fontWeight:payType===t?700:400,fontSize:12,cursor:"pointer"}}>
+                    {t==="direct"?"🤝 Direct":"🏢 Pe firmă"}
+                  </button>)}
+                </div>
+                <div style={{display:"flex",gap:8,marginTop:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,color:th.tm}}>Curs 1€ =</span>
+                  <input type="number" value={ev.cursLei||5} onChange={e=>upd({cursLei:Number(e.target.value)||5})} style={{...sty.i,width:60,padding:5,fontSize:12}}/> 
+                  <span style={{fontSize:11,color:th.tm}}>lei</span>
+                </div>
+              </div>
+
+              {/* Avans */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                <div onClick={()=>{upd({dp:!ev.dp});showToast(ev.dp?"Avans: neîncasat":"Avans: încasat ✓");}} style={{padding:12,borderRadius:8,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":"transparent"}`}}>
                   <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Avans</div>
-                  <div style={{fontSize:15,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{ev.plataAvansFirma?fFmt(ev.sumaAvansLei??0,"lei"):fFmt(dep,ev.valuta)}</div>
+                  <div style={{fontSize:16,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{fv(dep)}</div>
                   <div style={{fontSize:9,color:ev.dp?"#22c55e":"#ef4444"}}>{ev.dp?"✓ Încasat":"✗ Neîncasat"}</div>
                 </div>
-                <div style={{padding:10,borderRadius:6,background:th.h,textAlign:"center"}}>
+                <div style={{padding:12,borderRadius:8,background:th.h,textAlign:"center"}}>
                   <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>Rest</div>
-                  <div style={{fontSize:15,fontWeight:700}}>{ev.plataRestFirma?fFmt(ev.sumaRestLei??0,"lei"):fFmt(rest,ev.valuta)}</div>
+                  <div style={{fontSize:16,fontWeight:700}}>{fv(rest)}</div>
+                  <div style={{fontSize:9,color:th.tm}}>Total: {fv(total)}</div>
                 </div>
               </div>
-              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Plată Avans</div>
-              <div style={{display:"flex",gap:16,marginBottom:8,flexWrap:"wrap"}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="pa" checked={!ev.plataAvansFirma} onChange={()=>upd({plataAvansFirma:false,sumaAvansLei:0})}/><span style={{fontSize:12}}>Direct</span></label>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="pa" checked={!!ev.plataAvansFirma} onChange={()=>upd({plataAvansFirma:true,sumaAvansLei:ev.sumaAvansLei||Math.round(dep*cursLei)})}/><span style={{fontSize:12}}>Firmă (lei)</span></label>
-                {ev.plataAvansFirma&&<input type="number" value={ev.sumaAvansLei??""} onChange={e=>upd({sumaAvansLei:Number(e.target.value)})} placeholder="Suma lei" style={{...sty.i,width:100,padding:6,fontSize:12}}/>}
-              </div>
-              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Plată Rest</div>
-              <div style={{display:"flex",gap:16,marginBottom:12,flexWrap:"wrap"}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="pr" checked={!ev.plataRestFirma} onChange={()=>upd({plataRestFirma:false,sumaRestLei:0})}/><span style={{fontSize:12}}>Direct</span></label>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="pr" checked={!!ev.plataRestFirma} onChange={()=>upd({plataRestFirma:true,sumaRestLei:ev.sumaRestLei||Math.round(rest*cursLei)})}/><span style={{fontSize:12}}>Firmă (lei)</span></label>
-                {ev.plataRestFirma&&<input type="number" value={ev.sumaRestLei??""} onChange={e=>upd({sumaRestLei:Number(e.target.value)})} placeholder="Suma lei" style={{...sty.i,width:100,padding:6,fontSize:12}}/>}
-              </div>
-              {(ev.plataAvansFirma||ev.plataRestFirma)&&<div style={{marginBottom:12}}><label style={{fontSize:9,color:th.tm}}>Curs EUR→lei</label><input type="number" value={ev.cursLei??5} onChange={e=>upd({cursLei:Number(e.target.value)||5})} style={{...sty.i,width:60,padding:6,marginLeft:8}}/></div>}
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Modalitate plată avans</label><input value={ev.modalitatePlataAvans||""} onChange={e=>upd({modalitatePlataAvans:e.target.value})} placeholder="ex. Transfer" style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
-                <div><label style={{fontSize:9,color:th.tm,display:"block",marginBottom:4}}>Modalitate plată rest</label><input value={ev.modalitatePlataRest||""} onChange={e=>upd({modalitatePlataRest:e.target.value})} placeholder="ex. Numerar" style={{...sty.i,width:"100%",padding:8,fontSize:12}}/></div>
-              </div>
-              <div style={{marginBottom:12}}>
-                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Fond (avans + cheltuieli fixe % + fond trupa %)</div>
-                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap"}}>
-                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="fond" checked={ev.cuFond!==false} onChange={()=>upd({cuFond:true})}/><span style={{fontSize:12}}>Da</span></label>
-                  <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer"}}><input type="radio" name="fond" checked={ev.cuFond===false} onChange={()=>upd({cuFond:false})}/><span style={{fontSize:12}}>Nu</span></label>
-                  {ev.cuFond!==false&&<><span style={{fontSize:11,color:th.tm}}>Cheltuieli fixe</span><input type="number" value={ev.fondPct??10} onChange={e=>upd({fondPct:Number(e.target.value)||0})} style={{...sty.i,width:50,padding:6,fontSize:13}} min={0} max={100}/><span style={{fontSize:12,color:th.tm}}>%</span><span style={{fontSize:11,color:th.tm}}>Fond trupa</span><input type="number" value={ev.fondPct2??10} onChange={e=>upd({fondPct2:Number(e.target.value)||0})} style={{...sty.i,width:50,padding:6,fontSize:13}} min={0} max={100}/><span style={{fontSize:12,color:th.tm}}>%</span></>}
+
+              {/* Cheltuieli fixe editabile */}
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Cheltuieli fixe logistică</div>
+                  <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS}})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
+                </div>
+                {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Scule"},{k:"soundman",l:"Sunetist"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                  <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                    <span style={{fontSize:12,flex:1}}>{l}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <input type="number" value={(ev.fixedCosts||DEFAULT_FIXED_COSTS)[k]||0} onChange={e=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),[k]:Number(e.target.value)||0}})} style={{...sty.i,width:70,padding:4,fontSize:12,textAlign:"right"}}/>
+                      <span style={{fontSize:11,color:th.tm,width:22}}>lei</span>
+                      <span style={{fontSize:11,color:th.tm,width:36}}>{fv(((ev.fixedCosts||DEFAULT_FIXED_COSTS)[k]||0)/CURS)}</span>
+                    </div>
+                  </div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:`1px solid ${th.b}`,marginTop:4}}>
+                  <span style={{fontSize:12,fontWeight:600}}>Total logistică</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#ef4444"}}>{fvl(fcLeiTotal)} / {fv(fcEur)}{onFirma?<span style={{fontSize:10,color:th.tm}}> (+16% div. = {fv(fcEur*1.16)})</span>:null}</span>
                 </div>
               </div>
-              <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:8}}>Cheltuieli (ordine deducere)</div>
-              <div style={{fontSize:11,padding:"8px 12px",background:th.h,borderRadius:8,marginBottom:10,lineHeight:1.8}}>
-                {onFirma&&impozit1>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span>Impozit pe venit 1%</span><span style={{color:"#ef4444"}}>-{fFmt(impozit1,"lei")}</span></div>}
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Avans în fond</span><span style={{color:"#22c55e"}}>+{fFmt(avansInFond,ev.valuta)}</span></div>
-                {cheltSvc>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span>Servicii ofertă (lumini, sunet, etc.)</span><span style={{color:"#ef4444"}}>-{fFmt(cheltSvc,ev.valuta)}</span></div>}
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Backline</span><span style={{color:"#ef4444"}}>-{fFmt(backline,ev.valuta)}</span></div>
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Tehnic 200 €{tehnicDiv>0?" +16% div.":""}</span><span style={{color:"#ef4444"}}>-{fFmt(tehnic+tehnicDiv,ev.valuta)}</span></div>
-                {cheltOficiu>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span>Alte cheltuieli oficiu</span><span style={{color:"#ef4444"}}>-{fFmt(cheltOficiu,ev.valuta)}</span></div>}
-                {cheltNeprevazute>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span>Alte cheltuieli neprevăzute{cheltNeprevazuteDiv>0?" +16% div.":""}</span><span style={{color:"#ef4444"}}>-{fFmt(cheltNeprevazute+cheltNeprevazuteDiv,ev.valuta)}</span></div>}
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Stage manager intern 30 €{stageMgrDiv>0?" +16% div.":""}</span><span style={{color:"#ef4444"}}>-{fFmt(stageMgr+stageMgrDiv,ev.valuta)}</span></div>
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Call booker 3%</span><span style={{color:"#ef4444"}}>-{fFmt(callBooker+callBookerDiv,ev.valuta)}</span></div>
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Fond cheltuieli fixe {fondPct}%</span><span style={{color:"#6366f1"}}>-{fFmt(fondFixe,ev.valuta)}</span></div>
-                <div style={{display:"flex",justifyContent:"space-between"}}><span>Fond trupa {fondPct2}%</span><span style={{color:"#6366f1"}}>-{fFmt(fondTrupa,ev.valuta)}</span></div>
-                {div16>0&&<div style={{display:"flex",justifyContent:"space-between"}}><span>Dividende 16%</span><span style={{color:"#ef4444"}}>-{fFmt(div16,ev.valuta)}</span></div>}
+
+              {/* Calcul distribuție */}
+              <div>
+                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Distribuție</div>
+                <div style={{background:th.h,borderRadius:8,padding:"10px 12px",display:"flex",flexDirection:"column",gap:2}}>
+                  <Row l="Total brut" v={fv(total)} bold/>
+                  {onFirma&&<Row l="Impozit pe venit 1%" v={"-"+fv(impVenit)} c="#ef4444"/>}
+                  <Row l={`Cheltuieli fixe (${fvl(fcLeiTotal)})`} v={"-"+fv(fcEur)} c="#ef4444"/>
+                  <Row l="Net după cheltuieli" v={fv(netDupaFixed)} bold/>
+                  <Row l="Fond 5%" v={"-"+fv(fond5)} c="#6366f1"/>
+                  {onFirma&&<Row l="Dividende 16%" v={"-"+fv(div16)} c="#ef4444"/>}
+                  {ev.leadId&&<Row l={`Lead ${isPrivate?"2%":"1%"} — ${MEMBERS.find(m=>m.id===ev.leadId)?.short||""}`} v={"-"+fv(leadAmt)} c="#f59e0b"/>}
+                  {ev.adminId&&<Row l={`Administrator 2% — ${MEMBERS.find(m=>m.id===ev.adminId)?.short||""}`} v={"-"+fv(adminAmt)} c="#f59e0b"/>}
+                  {ev.socialId&&<Row l={`Social Media 2% — ${MEMBERS.find(m=>m.id===ev.socialId)?.short||""}`} v={"-"+fv(socialAmt)} c="#f59e0b"/>}
+                  {ev.stageId&&<Row l={`Stage Manager 2% — ${MEMBERS.find(m=>m.id===ev.stageId)?.short||""}`} v={"-"+fv(stageAmt)} c="#f59e0b"/>}
+                </div>
+                <div style={{padding:"10px 12px",borderRadius:8,background:th.ab,display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:8}}>
+                  <span style={{fontSize:13,fontWeight:600}}>De împărțit</span>
+                  <span style={{fontSize:20,fontWeight:800,color:"#22c55e"}}>{fv(pool)}</span>
+                </div>
+                <div style={{fontSize:10,color:th.tm,marginTop:4,textAlign:"right"}}>{isPrivate?"Split privat: Carina 24%, restul 19%":"Split public: egal (20% fiecare)"}</div>
               </div>
-              <div style={{marginTop:16,padding:12,borderRadius:8,background:th.ab,textAlign:"center"}}>
-                <div style={{fontSize:9,color:th.tm,textTransform:"uppercase"}}>De împărțit</div>
-                <div style={{fontSize:20,fontWeight:800,color:ramas>=0?"#22c55e":"#ef4444"}}>{fFmt(ramas,ev.valuta)}</div>
-                {isPrivate&&splitPct&&<div style={{fontSize:10,color:th.tm,marginTop:8}}>Split standard (evenimente private): Carina 26%, Arni 20%, Radu 18%, Sebi 18%, Luci 18%</div>}
+
+              {/* Roluri */}
+              <div>
+                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Roluri eveniment</div>
+                {[{k:"leadId",l:`Lead (${isPrivate?"2%":"1%"})`,tip:"Cel care a adus evenimentul"},{k:"adminId",l:"Administrator (2%)",tip:""},{k:"socialId",l:"Social Media (2%)",tip:""},{k:"stageId",l:"Stage Manager (2%)",tip:""}].map(({k,l,tip})=>(
+                  <div key={k} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                    <span style={{fontSize:12,flex:1}}>{l}</span>
+                    <select value={ev[k]||""} onChange={e=>upd({[k]:e.target.value||null})} style={{...sty.i,padding:6,fontSize:12,minWidth:120}}>
+                      <option value="">— nimeni —</option>
+                      {MEMBERS.map(m=><option key={m.id} value={m.id}>{m.short}</option>)}
+                    </select>
+                  </div>
+                ))}
               </div>
-              {isPrivate&&<div style={{marginTop:12}}>
-                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Split per membru</div>
-                {MEMBERS.map(m=>{
-                  const pct=splitPct?.[m.id]??(100/MEMBERS.length);
-                  const val=Math.round(ramas*pct/100);
-                  return <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                    <span style={{fontSize:12,flex:1}}>{m.n.split(" ")[0]} {splitPct?`(${pct}%)`:""}</span>
-                    <span style={{fontSize:12,fontWeight:600}}>{fFmt(val,ev.valuta)}</span>
-                  </div>;
-                })}
-              </div>}
-              <div style={{marginTop:12}}>
-                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Plăți servicii ofertă</div>
-                {Object.entries(ev.svcp||{}).filter(([k])=>ev.svc?.[k]).map(([k,v])=><div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"2px 0"}}><span style={{textTransform:"capitalize"}}>{k}</span><span style={{fontWeight:600}}>{fFmt(v,ev.valuta)}</span></div>)}
+
+              {/* Split per membru */}
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Total per membru</div>
+                  <button onClick={()=>{const sp={};MEMBERS.forEach(m=>{sp[m.id]=Math.round(shares[m.id]*100)/100;});upd({sp});showToast("Split aplicat ✓");}} style={{...sty.b,fontSize:10,padding:"3px 10px"}}>Aplică →</button>
+                </div>
+                {MEMBERS.map(m=>(
+                  <div key={m.id} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${th.bl}`}}>
+                    <div style={{width:26,height:26,borderRadius:"50%",background:th.a,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:th.bg,flexShrink:0}}>{m.n[0]}</div>
+                    <span style={{fontSize:12,flex:1}}>{m.n.split(" ")[0]}</span>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:700}}>{fv(shares[m.id]||0)}</div>
+                      {[ev.leadId,ev.adminId,ev.socialId,ev.stageId].includes(m.id)&&<div style={{fontSize:9,color:"#f59e0b"}}>+bonus rol</div>}
+                    </div>
+                  </div>
+                ))}
               </div>
-              {exNeprevazute.length>0&&<div style={{marginTop:10}}>
-                <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Alte cheltuieli neprevăzute</div>
-                {exNeprevazute.map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",fontSize:11,padding:"2px 0"}}><span>{x.n||"Cheltuială"}{x.direct?" (direct)":""}</span><span style={{fontWeight:600,color:"#ef4444"}}>{fFmt(x.a,ev.valuta)}</span></div>)}
-              </div>}
+
+              {/* Fond total eveniment */}
+              <div style={{padding:"10px 14px",borderRadius:8,background:"rgba(99,102,241,.08)",border:"1px solid rgba(99,102,241,.2)"}}>
+                <div style={{display:"flex",justifyContent:"space-between"}}>
+                  <span style={{fontSize:12,color:"#a5b4fc"}}>💰 Fond 5% din acest eveniment</span>
+                  <span style={{fontSize:14,fontWeight:700,color:"#818cf8"}}>{fv(fond5)}</span>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>;
