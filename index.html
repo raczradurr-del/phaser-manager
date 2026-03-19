@@ -3348,12 +3348,14 @@ function App() {
     let qDate = q.replace(/\./g,"-").replace(/(\d{1,2})-(\d{1,2})-(\d{4})/,(_,d,m,y)=>`${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`);
     const now = new Date();
     const y = now.getFullYear();
+    const yearMatch = q.match(/\b(20\d{2})\b/);
+    const searchYear = yearMatch ? parseInt(yearMatch[1],10) : y;
     for (const [name, num] of Object.entries(MONTHS_RO)) {
       if (q.includes(name)) {
-        const dMatch = q.match(/\b(\d{1,2})\b/);
+        const dMatch = q.replace(/\b20\d{2}\b/,"").match(/\b(\d{1,2})\b/);
         const day = dMatch ? parseInt(dMatch[1],10) : null;
-        if (day!=null&&day>=1&&day<=31) qDate = `${y}-${String(num).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-        else qDate = `${y}-${String(num).padStart(2,"0")}`;
+        if (day!=null&&day>=1&&day<=31) qDate = `${searchYear}-${String(num).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+        else qDate = `${searchYear}-${String(num).padStart(2,"0")}`;
         break;
       }
     }
@@ -3376,7 +3378,7 @@ function App() {
     const evMatches = evs.filter(e=>{
       if([e.cn,e.type,e.venue,e.city,e.notes,e.desc,e.title].some(f=>String(f||"").toLowerCase().includes(q))) return true;
       if(e.date&&(e.date.includes(q)||e.date.includes(qDate)||fD(e.date).toLowerCase().includes(q))) return true;
-      if(e.date) for (const [name, num] of Object.entries(MONTHS_RO)) if (q.includes(name) && e.date.startsWith(`${y}-${String(num).padStart(2,"0")}`)) return true;
+      if(e.date) for (const [name, num] of Object.entries(MONTHS_RO)) if (q.includes(name) && e.date.startsWith(`${searchYear}-${String(num).padStart(2,"0")}`)) return true;
       return false;
     });
     const taskMatchesSearch = t=>{ if((t.text||"").toLowerCase().includes(q)) return true; if((t.notes||"").toLowerCase().includes(q)) return true; if((t.tags||[]).some(tag=>tag.toLowerCase().includes(q))) return true; if((t.subtasks||[]).some(s=>taskMatchesSearch(s))) return true; return false; };
