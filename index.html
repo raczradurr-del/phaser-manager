@@ -93,8 +93,12 @@ function useLocalStorageState(key, initial, opts = {}) {
 }
 
 function useToasts(duration = 2500) {
-  const [toast, setToast] = useState({ visible: false, message: "" });
-  const showToast = msg => { setToast({ visible: true, message: msg }); setTimeout(() => setToast({ visible: false, message: "" }), duration); };
+  const [toast, setToast] = useState({ visible: false, message: "", variant: "success" });
+  const showToast = (msg, variant = "success", dur) => {
+    const ms = dur != null ? dur : (variant === "error" ? 5200 : duration);
+    setToast({ visible: true, message: msg, variant });
+    setTimeout(() => setToast({ visible: false, message: "", variant: "success" }), ms);
+  };
   return { toast, showToast };
 }
 
@@ -225,7 +229,6 @@ const getSvcCostBreakdown = (ev, prices) => {
   const p = prices || {};
   const CURS = ev?.cursLei || 5;
   const svc = ev?.svc || {}; const svcp = ev?.svcp || {};
-  const tehnicPerSvc = p.tehnicPerService ?? 120;
   const sunetCost = p.sunetCost ?? 150;
   const luminiCost = p.luminiCost ?? (p.lumini ?? 500);
   const ecranCost = p.ecranCost ?? (p.ecran ?? 600);
@@ -233,19 +236,13 @@ const getSvcCostBreakdown = (ev, prices) => {
   const djCost = p.djCost ?? 0;
   const leiPerPlate = p.scenaLeiPerPlate ?? 50;
   const plates = Math.max(0, ev?.scenaPlates ?? 12);
-  const tehnicCount = ["sunet","lumini","ecran","scena"].filter(k=>svc[k]).length;
   const out = [];
   if(svc.sunet){ const c=sunetCost; out.push({k:"sunet",label:SVC_COST_LABELS.sunet,cost:Math.round(c*100)/100}); }
   if(svc.lumini){ const c=Math.round(luminiCost*100)/100; out.push({k:"lumini",label:SVC_COST_LABELS.lumini,cost:c}); }
   if(svc.ecran){ const c=Math.round(ecranCost*100)/100; out.push({k:"ecran",label:SVC_COST_LABELS.ecran,cost:c}); }
   if(svc.scena){ const c=Math.round((scenaCost+plates*leiPerPlate/CURS)*100)/100; out.push({k:"scena",label:SVC_COST_LABELS.scena,cost:c}); }
   if(svc.dj&&djCost>0){ const c=Math.round(djCost*100)/100; out.push({k:"dj",label:"DJ",cost:c}); }
-  if(tehnicCount>0){
-    const tehnicBaza=1*tehnicPerSvc;
-    const tehnicExtra=(tehnicCount-1)*tehnicPerSvc;
-    out.push({k:"tehnicBaza",label:"Tehnic bază (1× la fiecare eveniment)",cost:Math.round(tehnicBaza*100)/100});
-    if(tehnicExtra>0) out.push({k:"tehnicExtra",label:`Tehnic extra (${tehnicCount-1} servicii)`,cost:Math.round(tehnicExtra*100)/100});
-  }
+  // Tehnician / extra tehnicieni: doar din „Cheltuieli fixe logistică” (lei), nu și ca linie furnizor — evită dublarea cu „Tehnic bază”
   return out;
 };
 
@@ -267,7 +264,7 @@ const validatePw = (pw) => {
   return null;
 };
 const SPLIT_PRIVATE = {m1:24,m2:19,m3:19,m4:19,m5:19}; // Carina 24%, restul 19% fiecare
-const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei
+const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100,technicianExtra:0}; // lei — technicianExtra = ore/servicii tehnice suplimentare (înainte în „Tehnic extra” din cost furnizori)
 const CURS_DEFAULT = 5; // 1€ = 5 lei
 const calcFond7 = (ev) => {
   const CURS = ev.cursLei||CURS_DEFAULT;
@@ -275,7 +272,7 @@ const calcFond7 = (ev) => {
   const onFirma = ev.payType==="firma";
   const taxVenit = onFirma ? fee*0.01 : 0;
   const fc = ev.fixedCosts||DEFAULT_FIXED_COSTS;
-  const fcEur = ((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0))/CURS;
+  const fcEur = ((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0)+(fc.technicianExtra||0))/CURS;
   const netAfterFixed = Math.max(0, fee - taxVenit - fcEur);
   return Math.round(netAfterFixed*0.07*100)/100;
 };
@@ -606,9 +603,11 @@ function BadgeStatusSelect({s, th, evId, onStatusChange}) {
   </div>;
 }
 
-function Toast({message, visible}) {
+function Toast({message, visible, variant}) {
   if(!visible) return null;
-  return <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",padding:"12px 24px",borderRadius:10,background:"#111",border:"1px solid #22c55e",boxShadow:"0 8px 32px rgba(0,0,0,.4)",zIndex:9999,display:"flex",alignItems:"center",gap:10,fontSize:13,fontWeight:600,color:"#22c55e"}}><IcCheck s={16}/> {message}</div>;
+  const err = variant === "error";
+  const c = err ? "#ef4444" : "#22c55e";
+  return <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",maxWidth:"min(92vw,420px)",padding:"12px 20px",borderRadius:10,background:"#111",border:`1px solid ${c}`,boxShadow:"0 8px 32px rgba(0,0,0,.4)",zIndex:9999,display:"flex",alignItems:"flex-start",gap:10,fontSize:13,fontWeight:600,color:c,lineHeight:1.4}}>{err?<span style={{flexShrink:0,width:20,textAlign:"center"}}>⚠</span>:<IcCheck s={16}/>}<span style={{flex:1}}>{message}</span></div>;
 }
 
 // ─── Tasks (Notion-style) ───
@@ -869,8 +868,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
   const [selectedIds, setSelectedIds] = useState([]);
   const toggleSel = (id) => setSelectedIds(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
   const now = new Date();
-  const confViitoare = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)&&new Date(e.date+"T00:00:00")>=now).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const confTrecute = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)&&new Date(e.date+"T00:00:00")<now).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const confConfirmate = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const respinseOffers = evs.filter(e=>e.st==="respins"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.cr||0)-new Date(a.cr||0));
   const activeOffers = evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)&&(!filterCat||e.cat===filterCat));
   const activeSorted = [...activeOffers].sort((a,b)=>{
@@ -910,7 +908,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
       <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div>
           <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Oferte</h1>
-          <p style={{color:th.tm,fontSize:12,marginTop:2}}>{filterSt===""?activeOffers.length+confViitoare.length+confTrecute.length+respinseOffers.length:active.length} oferte</p>
+          <p style={{color:th.tm,fontSize:12,marginTop:2}}>{filterSt===""?activeOffers.length+confConfirmate.length+respinseOffers.length:active.length} oferte</p>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <div style={{display:"flex",gap:2,padding:4,background:th.h,borderRadius:8,border:`1px solid ${th.b}`}}>
@@ -1007,39 +1005,20 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                 ))}</tbody>
               </table>}
             </div>
-            {/* Oferte confirmate - Viitoare + Trecute */}
-            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte confirmate – Viitoare ({confViitoare.length})</div>
+            {/* Oferte confirmate — o singură listă (fără împărțire viitor/trecut) */}
+            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte confirmate ({confConfirmate.length})</div>
             <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden",marginBottom:20}} className={mob?"table-scroll-mob":""}>
-              {confViitoare.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă confirmată viitoare</div>}
-              {confViitoare.length>0&&<table style={{width:"100%",borderCollapse:"collapse",minWidth:mob?480:undefined}}>
+              {confConfirmate.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă confirmată</div>}
+              {confConfirmate.length>0&&<table style={{width:"100%",borderCollapse:"collapse",minWidth:mob?480:undefined}}>
                 <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
-                  {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={confViitoare.length>0&&confViitoare.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=confViitoare.map(e=>e.id);const all=confViitoare.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
+                  {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={confConfirmate.length>0&&confConfirmate.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=confConfirmate.map(e=>e.id);const all=confConfirmate.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
                   {["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                 </tr></thead>
-                <tbody>{confViitoare.map((ev,i)=>(
+                <tbody>{confConfirmate.map((ev)=>(
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                     {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
-                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div></td>
+                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}{ev.date&&new Date(ev.date+"T00:00:00")>=now?<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div>:null}</td>
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{ev.type||"—"}</td>
-                    <td style={{padding:"10px 12px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
-                    <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
-                  </tr>
-                ))}</tbody>
-              </table>}
-            </div>
-            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte confirmate – Trecute ({confTrecute.length})</div>
-            <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden",marginBottom:20}} className={mob?"table-scroll-mob":""}>
-              {confTrecute.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă trecută</div>}
-              {confTrecute.length>0&&<table style={{width:"100%",borderCollapse:"collapse",minWidth:mob?480:undefined}}>
-                <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
-                  {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={confTrecute.length>0&&confTrecute.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=confTrecute.map(e=>e.id);const all=confTrecute.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
-                  {["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
-                </tr></thead>
-                <tbody>{confTrecute.map((ev,i)=>(
-                  <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent",opacity:.7}} onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{e.currentTarget.style.opacity=".7";if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
-                    {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
-                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
-                    <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.type||"—"}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                   </tr>
@@ -2275,7 +2254,12 @@ function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient }) {
       showToast?.("Link copiat în clipboard ✓ Trimite-l oricui.");
     } catch (e) {
       console.error(e);
-      showToast?.("Eroare: "+ (e?.message||"Bucket fisa-public inexistent. Adaugă-l în Supabase Storage."));
+      const raw = (e?.message || e?.error_description || "").trim();
+      const bucketMissing = /bucket not found/i.test(raw);
+      const msg = bucketMissing
+        ? "Bucket „fisa-public” nu există în Supabase. Dashboard → Storage → New bucket: id „fisa-public”, Public. Sau rulează secțiunea 3b din supabase-setup.sql (proiectul Phaser)."
+        : ("Eroare: " + (raw || "Upload eșuat."));
+      showToast?.(msg, "error");
     }
     setLoading(false);
   };
@@ -5183,7 +5167,7 @@ function App() {
               const avF=ev.avFirma??(ev.payType==="firma"); const rF=ev.restFirma??(ev.payType==="firma");
               const taxV=Math.round(((avF?dep:0)+(rF?rest:0))*0.01*100)/100;
               const fc={...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{})};
-              const fcE=((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0))/C;
+              const fcE=((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0)+(fc.technicianExtra||0))/C;
               const fc16=rF?Math.round(fcE*0.16*100)/100:0;
               const net=Math.max(0,fee-taxV-fcE-fc16);
               const f7=Math.round(net*0.07*100)/100;
@@ -5726,7 +5710,7 @@ function App() {
           const avF=e.avFirma??(e.payType==="firma");const rF=e.restFirma??(e.payType==="firma");
           const impV=Math.round(((avF?d:0)+(rF?r:0))*0.01*100)/100;
           const fc={...DEFAULT_FIXED_COSTS,...(e.fixedCosts||{})};
-          const fcL=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);
+          const fcL=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0)+(fc.technicianExtra||0);
           const fcE=fcL/C;const fc16=rF?Math.round(fcE*0.16*100)/100:0;
           const net=Math.max(0,tot-impV-fcE-fc16);
           const f5=Math.round(net*0.05*100)/100;const dF=net-f5;
@@ -5772,7 +5756,7 @@ function App() {
 
         // 2. Cheltuieli fixe (lei → €)
         const fc={...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{})};
-        const fcLeiTotal=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);
+        const fcLeiTotal=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0)+(fc.technicianExtra||0);
         const fcEur=fcLeiTotal/CURS;
         // Dacă restul e pe firmă, logistica se bruttifică cu 16% dividende
         const fc16=restFirma?Math.round(fcEur*0.16*100)/100:0;
@@ -5895,7 +5879,7 @@ function App() {
                   <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Cheltuieli fixe logistică</div>
                   <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS}})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
                 </div>
-                {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Scule"},{k:"soundman",l:"Sunetist"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                {[{k:"technician",l:"Tehnician (bază)"},{k:"technicianExtra",l:"Tehnic suplimentar"},{k:"equipment",l:"Scule"},{k:"soundman",l:"Sunetist"},{k:"transport",l:"Transport"}].map(({k,l})=>(
                   <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                     <span style={{fontSize:12,flex:1}}>{l}</span>
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -5926,7 +5910,6 @@ function App() {
                   <Row l="Net după cheltuieli" v={fv(netDupaFixed)} bold/>
                   <Row l="Fond 7%" v={"-"+fv(fond7)} c="#6366f1"/>
                   {restFirma&&<Row l="Dividende 16% (pe rest)" v={"-"+fv(div16)} c="#ef4444"/>}
-                  <Row l="Social Media Manager (2%)" v={"-"+fv(socialAmt)} c="#8b5cf6"/>
                   {(ev.leadId||ev.leadCustom)&&<Row l={`Lead ${isPrivate?"2%":"1%"} — ${leadName}`} v={"-"+fv(leadAmt)} c="#f59e0b"/>}
                   {ev.adminId&&<Row l={`Administrator 2% — ${MEMBERS.find(m=>m.id===ev.adminId)?.short||""}`} v={"-"+fv(adminAmt)} c="#f59e0b"/>}
                   {ev.stageId&&<Row l={`Stage Manager 2% — ${MEMBERS.find(m=>m.id===ev.stageId)?.short||""}`} v={"-"+fv(stageAmt)} c="#f59e0b"/>}
@@ -5992,8 +5975,11 @@ function App() {
                   const base=baseShares[m.id]||0;
                   const rol=roleBonus[m.id]||0;
                   const total=shares[m.id]||0;
-                  const hasRol=rol>0;
-                  const rolLabel=ev.leadId===m.id?"Lead":ev.adminId===m.id?"Administrator":ev.stageId===m.id?"Stage Manager":m.id==="m1"&&socialAmt>0?"Social Media":null;
+                  const socialInCantat=m.id==="m1";
+                  const baseDisp=socialInCantat?base+socialAmt:base;
+                  const rolDisp=socialInCantat?rol-socialAmt:rol;
+                  const hasRol=rolDisp>0.005;
+                  const rolLabel=ev.leadId===m.id&&!ev.leadCustom?"Lead":ev.adminId===m.id?"Administrator":ev.stageId===m.id?"Stage Manager":null;
                   return (
                   <div key={m.id} style={{padding:"8px 0",borderBottom:`1px solid ${th.bl}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -6002,8 +5988,8 @@ function App() {
                       <div style={{textAlign:"right",fontSize:13,fontWeight:700}}>{fv(total)}</div>
                     </div>
                     {hasRol&&<div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:4,marginLeft:34,fontSize:11,color:th.tm}}>
-                      <span>Parte cantat: {fv(base)}</span>
-                      <span style={{color:"#f59e0b",fontWeight:600}}>{rolLabel||"Bonus rol"}: {fv(rol)}</span>
+                      <span>Parte cantat: {fv(baseDisp)}</span>
+                      <span style={{color:"#f59e0b",fontWeight:600}}>{rolLabel||"Bonus rol"}: {fv(rolDisp)}</span>
                     </div>}
                   </div>
                 );})}
@@ -6091,7 +6077,7 @@ function App() {
       </div>}
 
       <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
-      <Toast message={toast.message} visible={toast.visible}/>
+      <Toast message={toast.message} visible={toast.visible} variant={toast.variant}/>
     </div>
   );
 }
