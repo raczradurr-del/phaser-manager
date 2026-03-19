@@ -1100,7 +1100,7 @@ function ContractView({ ev, th, contractFields, onContractChange }) {
   );
 }
 // ─── OFFER PREVIEW ───
-function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, onClose, onEdit, sty, templates, memberProfiles, showToast }) {
+function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, onClose, onEdit, sty, templates, memberProfiles, showToast, initialTab }) {
   const [copied, setCopied] = useState(false);
   const [mediaTitle, setMediaTitle] = useState(ev.mediaTitle||"PHASER Live");
   const [videos, setVideos] = useState(ev.videos||DEFAULT_VIDEOS);
@@ -1108,7 +1108,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const [covers, setCovers] = useState(ev.covers||DEFAULT_COVERS);
   const [showPlaylist, setShowPlaylist] = useState(true);
   const [configVisible, setConfigVisible] = useState(false);
-  const [tab, setTab] = useState("oferta");
+  const [tab, setTab] = useState(initialTab||"oferta");
   const [localSt, setLocalSt] = useState(evStatus);
   const [playlistSearch, setPlaylistSearch] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -3009,7 +3009,16 @@ function App() {
   const { modal, payload, openModal, closeModal } = useModal();
   const mData = useMemo(() => {
     if (!modal || payload == null) return null;
-    if (modal === "detail" || modal === "finance" || modal === "oferta") return typeof payload === "string" ? evs.find(e => e.id === payload) : payload;
+    if (modal === "detail" || modal === "finance") return typeof payload === "string" ? evs.find(e => e.id === payload) : payload;
+    if (modal === "oferta") {
+      const p = payload;
+      if (typeof p === "object" && p?.evId) {
+        const ev = evs.find(e => e.id === p.evId);
+        return ev ? { ev, initialTab: p.initialTab } : null;
+      }
+      const ev = typeof payload === "string" ? evs.find(e => e.id === payload) : payload;
+      return ev;
+    }
     if (modal === "form") return typeof payload === "string" ? evs.find(e => e.id === payload) : payload;
     if (modal === "pick") return payload;
     return null;
@@ -5025,8 +5034,9 @@ function App() {
                 </div>
               </div>}
 
-              <div style={{display:"flex",gap:8,justifyContent:mob?"center":"flex-end",flexWrap:"wrap",marginTop:16,paddingTop:12,borderTop:`1px solid ${th.b}`}}>
-                <button onClick={()=>{closeModal();setTimeout(()=>openModal("oferta",ev.id),80);}} style={sty.b}><IcFile s={13}/> Ofertă</button>
+              <div style={{display:"flex",gap:4,justifyContent:mob?"center":"flex-end",flexWrap:"wrap",marginTop:16,paddingTop:12,borderTop:`1px solid ${th.b}`}}>
+                <button onClick={()=>{closeModal();setTimeout(()=>openModal("oferta",ev.id),80);}} style={sty.bg}><IcFile s={13}/> Ofertă</button>
+                {["asteptare","plata_avans","confirmat"].includes(ev.st)&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("oferta",{evId:ev.id,initialTab:"contract"}),80);}} style={sty.bg}><IcDoc s={13}/> Contract</button>}
                 {(isConfirmed||ev.st==="plata_avans")&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("finance",ev.id),80);}} style={sty.bg}><IcMoney s={13}/> Finanțe</button>}
                 {p.e&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}} style={sty.bg}><IcEdit s={13}/> Editează</button>}
                 {p.d&&<button onClick={()=>{if(window.confirm("Ștergi?"))delEv(ev.id)}} style={{...sty.bg,color:"#ef4444",borderColor:"#ef4444"}}><IcTrash s={13}/> Șterge</button>}
@@ -5351,20 +5361,21 @@ function App() {
       })()}
 
             {/* OFFER PREVIEW */}
-      {modal==="oferta"&&mData&&<OfferPreview
-        ev={mData}
-        evStatus={mData.st}
+      {modal==="oferta"&&mData&&(()=>{const ev=mData.ev||mData; return <OfferPreview
+        ev={ev}
+        initialTab={mData.initialTab}
+        evStatus={ev.st}
         onStatusChange={updSt}
         onOfferUpdate={(id,up)=>{setEvs(p=>p.map(e=>e.id===id?{...e,...up}:e));}}
         th={th}
         mob={mob}
         onClose={closeModal}
-        onEdit={p.e?()=>{closeModal();setTimeout(()=>openModal("form",mData.id),80);}:undefined}
+        onEdit={p.e?()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}:undefined}
         memberProfiles={memberProfiles}
         sty={sty}
         templates={templates}
         showToast={showToast}
-      />}
+      />})()}
 
       {/* Swipe indicator dots — mobile only */}
       {mob&&(()=>{
