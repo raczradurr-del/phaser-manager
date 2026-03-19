@@ -3510,15 +3510,12 @@ function App() {
         <div style={{width:40,height:1,background:"#222"}}/>
 
         {authStep==="role"&&<div style={aC}>
-          <div style={{textAlign:"center",marginBottom:28}}>
-            <div style={{fontSize:9,color:"#3a3a3a",letterSpacing:3,textTransform:"uppercase"}}>Cine ești?</div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>
-            <button onClick={()=>{setLoginRole("membru");setAuthStep("method");}} style={{...aBt,padding:18,fontSize:15}}>
-              🎸 &nbsp;Sunt Membru
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <button onClick={()=>{setLoginRole("membru");setAuthStep("method");}} style={{width:"100%",padding:"20px 18px",background:"#161616",color:"#fff",border:"1px solid #303030",borderRadius:12,fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:12,letterSpacing:.3}}>
+              <span style={{fontSize:22}}>🎸</span> Membru
             </button>
-            <button onClick={()=>{setLoginRole("furnizor");setAuthStep("login");setLoginEmail(FURNIZOR_EMAIL);}} style={{...aBo,padding:18,fontSize:15}}>
-              🏢 &nbsp;Sunt Furnizor
+            <button onClick={()=>{setLoginRole("furnizor");setAuthStep("login");setLoginEmail(FURNIZOR_EMAIL);}} style={{width:"100%",padding:"20px 18px",background:"#161616",color:"#fff",border:"1px solid #303030",borderRadius:12,fontSize:15,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:12,letterSpacing:.3}}>
+              <span style={{fontSize:22}}>🏢</span> Furnizor
             </button>
           </div>
         </div>}
