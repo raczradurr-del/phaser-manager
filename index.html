@@ -240,18 +240,26 @@ const getSvcCostBreakdown = (ev, prices) => {
   if(svc.ecran){ const c=Math.round(ecranCost*100)/100; out.push({k:"ecran",label:SVC_COST_LABELS.ecran,cost:c}); }
   if(svc.scena){ const c=Math.round(scenaCost*100)/100; out.push({k:"scena",label:SVC_COST_LABELS.scena,cost:c}); }
   if(svc.dj&&djCost>0){ const c=Math.round(djCost*100)/100; out.push({k:"dj",label:"DJ",cost:c}); }
-  // Tehnici: dacă există orice serviciu în afară de DJ → 2 persoane; la podium / lumini / LED → +X € per serviciu × nr. tehnicieni
+  // Tehnici: non-DJ → 2 pers.; Supliment: DOAR pentru podium (scenă), lumini, ecran LED — câte servicii bifate × tarif € × nr. tehnicieni (sunetul NU intră aici)
   const hasNonDjSvc = !!(svc.sunet || svc.lumini || svc.ecran || svc.scena);
   const techCount = hasNonDjSvc ? 2 : (svc.dj ? 1 : 0);
-  const tehnicRate = p.tehnicPerService ?? 120;
-  const supplPer = p.tehnicExtraPerService ?? 40;
+  const tehnicRate = Math.max(0,Number(p.tehnicPerService ?? 120)||0);
+  const supplRaw = p.tehnicExtraPerService;
+  const supplPer = supplRaw==null||supplRaw===""?40:Math.max(0,Number(supplRaw)||0);
   if(hasNonDjSvc){
     out.push({k:"tehnic2Auto",label:"Tehnic nr.2 (automat)",cost:Math.round(tehnicRate*100)/100});
   }
-  const bonusScenaLumLed = (svc.scena?1:0)+(svc.lumini?1:0)+(svc.ecran?1:0);
-  if(techCount>0 && bonusScenaLumLed>0){
-    const c=Math.round(supplPer*bonusScenaLumLed*techCount*100)/100;
-    out.push({k:"tehnicSupplPlatouri",label:`Supliment tehnic podium / lumini / LED (${bonusScenaLumLed}×${supplPer}€×${techCount} pers.)`,cost:c});
+  const TEHNIC_SUPPL_SVC = [
+    {k:"scena",l:"Podium"},
+    {k:"lumini",l:"Lumini"},
+    {k:"ecran",l:"Ecran LED"},
+  ];
+  const activeSuppl = TEHNIC_SUPPL_SVC.filter(({k})=>svc[k]);
+  const nSuppl = activeSuppl.length;
+  if(techCount>0 && nSuppl>0 && supplPer>0){
+    const c=Math.round(supplPer*nSuppl*techCount*100)/100;
+    const nume=activeSuppl.map(x=>x.l).join(", ");
+    out.push({k:"tehnicSupplPlatouri",label:`Supliment tehnic: ${nume} — ${nSuppl} serv. × ${supplPer}€ × ${techCount} pers.`,cost:c});
   }
   return out;
 };
@@ -1023,14 +1031,13 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
               {confConfirmate.length>0&&<table style={{width:"100%",borderCollapse:"collapse",minWidth:mob?480:undefined}}>
                 <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
                   {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={confConfirmate.length>0&&confConfirmate.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=confConfirmate.map(e=>e.id);const all=confConfirmate.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
-                  {["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                  {["Data","Tipul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                 </tr></thead>
                 <tbody>{confConfirmate.map((ev)=>(
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                     {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
                     <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}{ev.date&&new Date(ev.date+"T00:00:00")>=now?<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div>:null}</td>
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{ev.type||"—"}</td>
-                    <td style={{padding:"10px 12px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                   </tr>
                 ))}</tbody>
@@ -4521,7 +4528,7 @@ function App() {
                 <table style={{width:"100%",minWidth:mob?480:undefined}}>
                   <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
                     {(p.d||p.e)&&<th style={{padding:"9px 12px",width:36}}><input type="checkbox" checked={fEvs.length>0&&fEvs.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=fEvs.map(e=>e.id);const all=fEvs.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}
-                    {["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"9px 12px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                    {["Data","Tipul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"9px 12px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                   </tr></thead>
                   <tbody>{fEvs.map(ev=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
@@ -4530,7 +4537,6 @@ function App() {
                       {(p.d||p.e)&&<td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"9px 12px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:600}}>{ev.type||"—"}</div></td>
-                      <td style={{padding:"9px 12px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{[ev.venue,ev.city].filter(Boolean).join(", ")||"—"}</td>
                     </tr>
                   )}</tbody>
@@ -4543,7 +4549,7 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden",marginBottom:20}} className={mob?"table-scroll-mob":""}>
                 {viitoare.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment confirmat viitor</div>}
                 {viitoare.length>0&&<table style={{width:"100%",minWidth:mob?480:undefined}}>
-                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={viitoare.length>0&&viitoare.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=viitoare.map(e=>e.id);const all=viitoare.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}{p.e&&<th style={{width:44}}/>}</tr></thead>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={viitoare.length>0&&viitoare.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=viitoare.map(e=>e.id);const all=viitoare.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Data","Tipul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}{p.e&&<th style={{width:44}}/>}</tr></thead>
                   <tbody>{viitoare.map((ev,i)=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<viitoare.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
                       onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
@@ -4551,7 +4557,6 @@ function App() {
                       {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div></td>
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:700}}>{ev.type||"—"}</div></td>
-                      <td style={{padding:"10px 14px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                       {p.e&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><button onClick={()=>openModal("form",ev.id)} style={{padding:4,borderRadius:4,border:`1px solid ${th.b}`,background:"transparent",color:th.tm,cursor:"pointer"}}><IcEdit s={13}/></button></td>}
                     </tr>
@@ -4563,7 +4568,7 @@ function App() {
               <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden"}} className={mob?"table-scroll-mob":""}>
                 {trecute.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment trecut</div>}
                 {trecute.length>0&&<table style={{width:"100%",minWidth:mob?480:undefined}}>
-                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={trecute.length>0&&trecute.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=trecute.map(e=>e.id);const all=trecute.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Data","Tipul evenimentului","Specificul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}</tr></thead>
+                  <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>{(p.d||p.e)&&<th style={{padding:"10px 14px",width:36}}><input type="checkbox" checked={trecute.length>0&&trecute.every(e=>selectedEvIds.includes(e.id))} onChange={()=>{const ids=trecute.map(e=>e.id);const all=trecute.every(e=>selectedEvIds.includes(e.id));setSelectedEvIds(all?selectedEvIds.filter(id=>!ids.includes(id)):[...new Set([...selectedEvIds,...ids])]);}} style={{cursor:"pointer"}}/></th>}{["Data","Tipul evenimentului","Locația evenimentului"].map(h=><th key={h} style={{padding:"10px 14px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}</tr></thead>
                   <tbody>{trecute.map((ev,i)=>
                     <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:i<trecute.length-1?`1px solid ${th.bl}`:"none",cursor:"pointer",opacity:.7,background:selectedEvIds.includes(ev.id)?th.ab:"transparent"}}
                       onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
@@ -4571,7 +4576,6 @@ function App() {
                       {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
                       <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}</td>
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:600}}>{ev.type||"—"}</div></td>
-                      <td style={{padding:"10px 14px",fontSize:11}}>{ev.cn||(ev.cat==="private"?"Privat":"Public")||"—"}</td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                     </tr>
                   )}</tbody>
@@ -5226,18 +5230,16 @@ function App() {
                     <span style={{fontSize:14,fontWeight:800}}>{fv2(tot)}</span>
                   </div>
                   <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"hidden"}}>
-                    <table style={{width:"100%",minWidth:mob?520:undefined,fontSize:12,borderCollapse:"collapse"}}>
+                    <table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12,borderCollapse:"collapse"}}>
                       <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
-                        {["Data","Tipul","Specificul","Descriere","Suma","Status"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                        {["Data","Tipul","Descriere","Suma","Status"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                       </tr></thead>
                       <tbody>{evsForRole.map(ev=>{
                         const d=memberDetail(ev,finMember); const amt=d[roleKey];
                         if(amt<=0) return null;
-                        const spec=ev.cn||(ev.cat==="private"?"Privat":"Public")||"—";
                         return <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
                           <td style={{padding:"8px 10px"}}>{fD2(ev.date)}</td>
                           <td style={{padding:"8px 10px"}}>{ev.type||"—"}</td>
-                          <td style={{padding:"8px 10px",color:th.tm}}>{spec}</td>
                           <td style={{padding:"8px 10px",fontSize:11,color:th.tm,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ev.desc||""}>{ev.desc||"—"}</td>
                           <td style={{padding:"8px 10px",fontWeight:700,color:roleColor}}>{fv2(amt)}</td>
                           <td style={{padding:"8px 10px",fontSize:10,color:ev.restPaid?"#22c55e":"#f59e0b"}}>{ev.restPaid?"✅ primit":"⏳ în așteptare"}</td>
