@@ -1732,12 +1732,12 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     if (!sb) { showToast&&showToast("Link partajabil necesită Supabase configurat.","error"); return; }
     setLinkState(s=>({...s, loading:true}));
     try {
-      let html;
-      if (tab==="contract") html = getContractHtmlForWorker();
-      else html = getOfferHtmlForWorker();
-      const fid = uid();
+      let rawHtml;
+      if (tab==="contract") rawHtml = getContractHtmlForWorker();
+      else rawHtml = getOfferHtmlForWorker();
+      const html = rawHtml.replace(/[^\x00-\x7F]/g, c => `&#${c.codePointAt(0)};`);
       const prefix = tab==="contract" ? "contract" : "offer";
-      const path = `${prefix}-${fid}.html`;
+      const path = `${prefix}-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
       const { error } = await sb.storage.from("fisa-public").upload(path, blob, {contentType:"text/html; charset=utf-8", upsert:true});
       if (error) throw error;
@@ -2328,52 +2328,78 @@ function FisaPdfButton({ ev, showToast }) {
 }
 
 // FisaLinkButton — generează link partajabil pentru fișa evenimentului (Supabase Storage)
-function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient }) {
+// Fișier deterministic: fisa-{ev.id}.html — același fișier, actualizat la re-upload
+function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv }) {
   const [loading, setLoading] = useState(false);
-  const [linkState, setLinkState] = useState({url:null, show:false, copied:false});
-  const handleGetLink = async () => {
-    if (linkState.url) { setLinkState(s=>({...s, show:!s.show})); return; }
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // URL salvat în event (persistă între sesiuni); fallback la state local
+  const savedUrl = ev.fisaUrl || null;
+  const [localUrl, setLocalUrl] = useState(savedUrl);
+  const url = localUrl || savedUrl;
+
+  const doUpload = async () => {
     const sb = getSbClient?.();
-    if (!sb) { showToast?.("Link partajabil necesita Supabase. Configureaza bucket-ul fisa-public."); return; }
+    if (!sb) { showToast?.("Link partajabil necesita Supabase configurat."); return; }
     setLoading(true);
     try {
-      const html = buildFisaHtml(ev);
-      const fid = uid();
-      const path = `fisa-${fid}.html`;
+      const rawHtml = buildFisaHtml(ev);
+      const html = rawHtml.replace(/[^\x00-\x7F]/g, c => `&#${c.codePointAt(0)};`);
+      const path = `fisa-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
       const { error } = await sb.storage.from("fisa-public").upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
       if (error) throw error;
       const { data: { publicUrl } } = sb.storage.from("fisa-public").getPublicUrl(path);
-      setLinkState({url:publicUrl, show:true, copied:false});
+      setLocalUrl(publicUrl);
+      if (updEv) updEv({ fisaUrl: publicUrl });
+      setShow(true);
       showToast?.("Link generat ✓");
     } catch (e) {
       const raw = (e?.message || e?.error_description || "").trim();
       const msg = /bucket not found/i.test(raw)
         ? "Bucket 'fisa-public' nu exista in Supabase. Dashboard -> Storage -> New bucket: id 'fisa-public', Public."
-        : ("Eroare: " + (raw || "Upload eșuat."));
+        : ("Eroare: " + (raw || "Upload esuat."));
       showToast?.(msg, "error");
     }
     setLoading(false);
   };
+
+  const handleGetLink = () => {
+    if (url) { setShow(s => !s); }
+    else { doUpload(); }
+  };
+
+  const copyUrl = async () => {
+    if (!url) return;
+    try { await navigator.clipboard.writeText(url); }
+    catch(e) { const ta=document.createElement("textarea");ta.value=url;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta); }
+    setCopied(true); setTimeout(()=>setCopied(false), 2000);
+  };
+
   return (
     <div style={{position:"relative"}}>
-      <button onClick={handleGetLink} disabled={pdfLoading||loading} style={{padding:"8px 16px",borderRadius:8,border:"none",background:linkState.show?"#2563eb":"#3b82f6",color:"#fff",fontWeight:700,fontSize:12,cursor:(pdfLoading||loading)?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||loading)?0.7:1}}>
+      <button onClick={handleGetLink} disabled={pdfLoading||loading} style={{padding:"8px 16px",borderRadius:8,border:"none",background:show?"#2563eb":"#3b82f6",color:"#fff",fontWeight:700,fontSize:12,cursor:(pdfLoading||loading)?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||loading)?0.7:1}}>
         {loading?"⏳":"🔗"} Link
       </button>
-      {linkState.show&&<><div style={{position:"fixed",inset:0,zIndex:49}} onClick={()=>setLinkState(s=>({...s,show:false}))}/>
-      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",borderRadius:12,padding:16,width:"min(320px, 90vw)",zIndex:1100,boxShadow:"0 12px 40px rgba(0,0,0,.8)",border:"1px solid rgba(255,255,255,.15)"}}>
-        <div style={{fontSize:10,color:"rgba(255,255,255,.5)",marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Link partajabil</div>
-        <div style={{display:"flex",gap:6,marginBottom:10}}>
-          <input value={linkState.url} readOnly onClick={e=>e.target.select()} style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.15)",background:"rgba(255,255,255,.06)",color:"rgba(255,255,255,.6)",fontSize:10,fontFamily:"monospace",minWidth:0}}/>
-          <button onClick={async()=>{try{await navigator.clipboard.writeText(linkState.url);}catch(e){const ta=document.createElement("textarea");ta.value=linkState.url;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}setLinkState(s=>({...s,copied:true}));setTimeout(()=>setLinkState(s=>({...s,copied:false})),2000);}} style={{padding:"6px 10px",borderRadius:6,border:"none",background:linkState.copied?"#22c55e":"#333",color:"#fff",fontSize:11,cursor:"pointer",flexShrink:0,fontWeight:600}}>
-            {linkState.copied?"✓":"📋"}
+      {show&&url&&<>
+        <div style={{position:"fixed",inset:0,zIndex:49}} onClick={()=>setShow(false)}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"#1a1a1a",borderRadius:12,padding:16,width:"min(320px, 90vw)",zIndex:1100,boxShadow:"0 12px 40px rgba(0,0,0,.8)",border:"1px solid rgba(255,255,255,.15)"}}>
+          <div style={{fontSize:10,color:"rgba(255,255,255,.5)",marginBottom:8,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Link partajabil · Fișa evenimentului</div>
+          <div style={{display:"flex",gap:6,marginBottom:10}}>
+            <input value={url} readOnly onClick={e=>e.target.select()} style={{flex:1,padding:"6px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,.15)",background:"rgba(255,255,255,.06)",color:"rgba(255,255,255,.6)",fontSize:10,fontFamily:"monospace",minWidth:0}}/>
+            <button onClick={copyUrl} style={{padding:"6px 10px",borderRadius:6,border:"none",background:copied?"#22c55e":"#333",color:"#fff",fontSize:11,cursor:"pointer",flexShrink:0,fontWeight:600}}>
+              {copied?"✓":"📋"}
+            </button>
+          </div>
+          <a href={"https://wa.me/?text="+encodeURIComponent(url)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px 16px",borderRadius:8,background:"#25d366",color:"#fff",fontWeight:700,fontSize:13,textDecoration:"none",width:"100%",marginBottom:8}}>
+            <span style={{fontSize:16}}>💬</span> Trimite pe WhatsApp
+          </a>
+          <button onClick={()=>{setShow(false);doUpload();}} disabled={loading} style={{width:"100%",padding:"6px",borderRadius:6,border:"1px solid rgba(255,255,255,.15)",background:"transparent",color:"rgba(255,255,255,.5)",fontSize:11,cursor:"pointer",marginBottom:4}}>
+            {loading?"⏳ Se actualizează...":"↻ Actualizează fișa"}
           </button>
+          <button onClick={()=>setShow(false)} style={{width:"100%",padding:"5px",borderRadius:6,border:"none",background:"transparent",color:"rgba(255,255,255,.3)",fontSize:10,cursor:"pointer"}}>Închide</button>
         </div>
-        <a href={"https://wa.me/?text="+encodeURIComponent(linkState.url)} target="_blank" rel="noreferrer" style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"10px 16px",borderRadius:8,background:"#25d366",color:"#fff",fontWeight:700,fontSize:13,textDecoration:"none",width:"100%"}}>
-          <span style={{fontSize:16}}>💬</span> Trimite pe WhatsApp
-        </a>
-        <button onClick={()=>setLinkState(s=>({...s,show:false}))} style={{marginTop:8,width:"100%",padding:"5px",borderRadius:6,border:"1px solid rgba(255,255,255,.1)",background:"transparent",color:"rgba(255,255,255,.4)",fontSize:11,cursor:"pointer"}}>Închide</button>
-      </div></> }
+      </>}
     </div>
   );
 }
@@ -5715,7 +5741,7 @@ function App() {
                 {detailTab==="fisa"&&<>
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
                     <FisaPdfButton ev={ev} showToast={showToast}/>
-                    <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null}/>
+                    <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} updEv={updEv}/>
                   </div>
                   <FisaEveniment ev={ev} updEv={updEv} th={th} SVC_LABELS={SVC_LABELS} fFmt={fFmt} fD={fD} editable={true} sty={sty} mob={mob} showPaymentCards={false} showToast={showToast}/>
                 </>}
