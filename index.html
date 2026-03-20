@@ -1735,7 +1735,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       let rawHtml;
       if (tab==="contract") rawHtml = getContractHtmlForWorker();
       else rawHtml = getOfferHtmlForWorker();
-      const html = rawHtml.replace(/[^\x00-\x7F]/g, c => `&#${c.codePointAt(0)};`);
+      const html = rawHtml.replace(/[^\u0000-\u007F]/gu, c => `&#${c.codePointAt(0)};`);
       const prefix = tab==="contract" ? "contract" : "offer";
       const path = `${prefix}-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
@@ -2344,7 +2344,7 @@ function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv }) {
     setLoading(true);
     try {
       const rawHtml = buildFisaHtml(ev);
-      const html = rawHtml.replace(/[^\x00-\x7F]/g, c => `&#${c.codePointAt(0)};`);
+      const html = rawHtml.replace(/[^\u0000-\u007F]/gu, c => `&#${c.codePointAt(0)};`);
       const path = `fisa-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
       const { error } = await sb.storage.from("fisa-public").upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
