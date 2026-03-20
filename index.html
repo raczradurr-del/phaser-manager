@@ -414,7 +414,7 @@ const RIDER_TEHNIC = {
 // STORAGE & SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 const PHASER_V = 3;
-const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", creative: "phaser_creative", memberProfiles: "phaser_member_profiles" };
+const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", playlistVersions: "phaser_playlist_versions", creative: "phaser_creative", memberProfiles: "phaser_member_profiles" };
 const SUPABASE_URL = "https://qtiosqtcrqgmlkwcrnpu.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF0aW9zcXRjcnFnbWxrd2NybnB1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMzNTY2MzEsImV4cCI6MjA4ODkzMjYzMX0.VR4MZArOnsc-DuLF3H3ZH-0PyfnBANyMiv8i31vxBnA";
 const SUPABASE_CFG = (()=>{ try { const s=localStorage.getItem("phaser_supabase_cfg"); const fromLs=s?JSON.parse(s):{}; return { url: fromLs.url||SUPABASE_URL, key: fromLs.key||SUPABASE_ANON_KEY }; } catch(e){ return { url: SUPABASE_URL, key: SUPABASE_ANON_KEY }; } })();
@@ -539,6 +539,14 @@ const loadRiderVersions = () => {
 const loadPressKitVersions = () => {
   try {
     const s = localStorage.getItem(LS_KEYS.pressKitVersions);
+    if (s) return JSON.parse(s);
+  } catch(e) {}
+  return [];
+};
+// Versiuni playlist — phaser_playlist_versions: [{ id, ts, label, data, active }]
+const loadPlaylistVersions = () => {
+  try {
+    const s = localStorage.getItem(LS_KEYS.playlistVersions);
     if (s) return JSON.parse(s);
   } catch(e) {}
   return [];
@@ -3655,6 +3663,7 @@ function App() {
   const docsSectTab = sectTab==="poveste" ? "playlist" : sectTab;
   const [riderVersions, setRiderVersions] = useState(loadRiderVersions);
   const [pressKitVersions, setPressKitVersions] = useState(loadPressKitVersions);
+  const [playlistVersions, setPlaylistVersions] = useState(loadPlaylistVersions);
   const [memberProfiles, setMemberProfiles] = useState(loadMemberProfiles);
   const { toast, showToast } = useToasts();
   const saveMemberProfile = (memberId, data) => { setMemberProfiles(p=>{ const n={...p,[memberId]:{...(p[memberId]||{}),...data}}; try{localStorage.setItem(LS_KEYS.memberProfiles,JSON.stringify(n));}catch(e){} return n; }); };
@@ -3690,6 +3699,7 @@ function App() {
           if(remote.templates){ setTemplates(remote.templates); try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(remote.templates));}catch(e){} }
           if(Array.isArray(remote.riderVersions)){ setRiderVersions(remote.riderVersions); try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(remote.riderVersions));}catch(e){} }
           if(Array.isArray(remote.pressKitVersions)){ setPressKitVersions(remote.pressKitVersions); try{localStorage.setItem(LS_KEYS.pressKitVersions,JSON.stringify(remote.pressKitVersions));}catch(e){} }
+          if(Array.isArray(remote.playlistVersions)){ setPlaylistVersions(remote.playlistVersions); try{localStorage.setItem(LS_KEYS.playlistVersions,JSON.stringify(remote.playlistVersions));}catch(e){} }
           if(remote.creative){ try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(remote.creative));}catch(e){} }
           if(remote.memberProfiles){ setMemberProfiles(remote.memberProfiles); try{localStorage.setItem(LS_KEYS.memberProfiles,JSON.stringify(remote.memberProfiles));}catch(e){} }
           localStorage.setItem("phaser_sync_ts",String(remote._ts));
@@ -3713,7 +3723,7 @@ function App() {
       const ts=Date.now();
       const syncData={
         evs,tasks,genExp,annualCosts,gigsPerYear,templates,
-        riderVersions,pressKitVersions,memberProfiles,
+        riderVersions,pressKitVersions,playlistVersions,memberProfiles,
         creative:loadCreative(),
         _ts:ts
       };
@@ -3733,7 +3743,7 @@ function App() {
           setSyncStatus("error");
         });
     },2000);
-  },[evs,tasks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,memberProfiles]);
+  },[evs,tasks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles]);
 
   // ─── GOOGLE CALENDAR STATE ───
   const [gcalToken, setGcalToken] = useState(() => {
@@ -3974,6 +3984,33 @@ function App() {
     if (!ver?.data) return;
     setTemplates(t => ({ ...t, pressKitPublic: normPressKitPublic(ver.data) }));
     showToast(`Restaurat: ${ver.label}`);
+  };
+
+  const savePlaylistToStorage = (asNewVersion) => {
+    try {
+      const currentPlaylist = templates.playlist && templates.playlist.length > 0 ? templates.playlist : DEFAULT_COVERS;
+      const label = asNewVersion ? (prompt("Nume versiune playlist (ex: Corporate 2025):") || "Versiune " + new Date().toLocaleDateString("ro")) : null;
+      if (asNewVersion && label !== null) {
+        const versions = loadPlaylistVersions();
+        const newVer = { id: uid(), ts: Date.now(), label, data: currentPlaylist };
+        const updated = [newVer, ...versions].slice(0, 20);
+        localStorage.setItem(LS_KEYS.playlistVersions, JSON.stringify(updated));
+        setPlaylistVersions(updated);
+      }
+      saveTemplates(tpl => ({ ...tpl, playlist: currentPlaylist }));
+      showToast(asNewVersion && label !== null ? `Versiune "${label}" salvată` : "Playlist salvat");
+    } catch(e) {}
+  };
+  const restorePlaylistVersion = (ver) => {
+    if (!ver?.data) return;
+    saveTemplates(tpl => ({ ...tpl, playlist: ver.data }));
+    showToast(`Restaurat: ${ver.label}`);
+  };
+  const deletePlaylistVersion = (id) => {
+    const updated = playlistVersions.filter(v => v.id !== id);
+    localStorage.setItem(LS_KEYS.playlistVersions, JSON.stringify(updated));
+    setPlaylistVersions(updated);
+    showToast("Versiune ștearsă");
   };
 
   const sty = {
@@ -4668,25 +4705,80 @@ function App() {
                 </div>
                 <button onClick={()=>{saveTemplates(tpl=>({...tpl,servicePrices:templates.servicePrices}));showToast("Prețuri salvate — se aplică la oferte noi");}} style={{...sty.bg,marginTop:16}}>Salvează prețuri</button>
               </div>}
-              {docsSectTab==="playlist"&&<div>
-                <label style={sty.l}>Playlist — {((templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS).length} piese</label>
-                <p style={{fontSize:11,color:th.tm,marginBottom:10}}>Lista pentru oferte private. Download / Share.</p>
-                <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                  <button onClick={()=>{const t=prompt("Titlu piesă:");const a=prompt("Artist:");if(t)saveTemplates(tpl=>({...tpl,playlist:[...(tpl.playlist||DEFAULT_COVERS),{id:uid(),title:t,artist:a||"",checked:true}]}));}} style={sty.bg}><IcPlus s={12}/> Adaugă</button>
-                  <button onClick={()=>{const pl=(templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS; const txt=pl.map((c,i)=>`${i+1}. ${c.title} — ${c.artist}`).join("\n"); const blob=new Blob([txt],{type:"text/plain"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="phaser-playlist.txt"; a.click(); URL.revokeObjectURL(a.href);}} style={sty.bg}>⬇ Download</button>
-                  <button onClick={async ()=>{const pl=(templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS; const txt=pl.map((c,i)=>`${i+1}. ${c.title} — ${c.artist}`).join("\n"); try{await navigator.clipboard.writeText(txt); if(navigator.share){await navigator.share({title:"PHASER Playlist",text:txt});}}catch(e){try{const ta=document.createElement("textarea");ta.value=txt;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}catch(x){}} alert("Playlist copiat! Poți lipi unde vrei.");}} style={sty.bg}>📤 Share / Copiază</button>
-                </div>
-                <div style={{maxHeight:320,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
-                  {((templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS).map((c,i)=>(
-                    <div key={c.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderRadius:6,border:`1px solid ${th.b}`,background:th.h}}>
-                      <span style={{fontSize:10,color:th.tm,minWidth:20}}>{i+1}.</span>
-                      <input value={c.title} onChange={e=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).map(x=>x.id===c.id?{...x,title:e.target.value}:x)}))} style={{...sty.i,flex:1,padding:"4px 8px",fontSize:12}}/>
-                      <input value={c.artist||""} onChange={e=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).map(x=>x.id===c.id?{...x,artist:e.target.value}:x)}))} style={{...sty.i,width:140,padding:"4px 8px",fontSize:11}} placeholder="Artist"/>
-                      <button onClick={()=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).filter(x=>x.id!==c.id)}))} style={{padding:4,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/></button>
-                    </div>
-                  ))}
-                </div>
-              </div>}
+              {docsSectTab==="playlist"&&(()=>{
+                const pl = (templates.playlist&&templates.playlist.length>0)?templates.playlist:DEFAULT_COVERS;
+                const downloadPlaylistPdf = async () => {
+                  try {
+                    showToast("Se generează PDF playlist...", "success", 1500);
+                    const rows = pl.map((c,i) => `<tr style="border-bottom:1px solid #f0f0f0;"><td style="padding:7px 12px;font-size:12px;color:#888;width:32px;text-align:right;font-weight:500;">${i+1}</td><td style="padding:7px 14px 7px 8px;font-size:13px;font-weight:600;color:#111;">${c.title||""}</td><td style="padding:7px 14px 7px 4px;font-size:12px;color:#555;">${c.artist||""}</td></tr>`).join("");
+                    const html = `<div style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;background:#fff;padding:0;">
+                      <div style="background:linear-gradient(135deg,#1a1510 0%,#2d2419 100%);padding:14px 22px;display:flex;align-items:center;justify-content:space-between;border-radius:12px 12px 0 0;">
+                        <img src="${ZGV_LOGO}" alt="Za Good Vibes" style="height:36px;object-fit:contain;filter:brightness(0) invert(1);" onerror="this.style.display='none'"/>
+                        <div style="text-align:center;flex:1;">
+                          <div style="font-size:9px;font-weight:700;color:rgba(251,191,36,.7);letter-spacing:3px;text-transform:uppercase;">Repertoriu</div>
+                          <div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:2px;">PLAYLIST</div>
+                        </div>
+                        <img src="${LOGO_URL}" alt="PHASER" style="height:26px;object-fit:contain;filter:brightness(0) invert(1);" onerror="this.style.display='none'"/>
+                      </div>
+                      <div style="background:#fff;border-radius:0 0 12px 12px;border:1px solid #e8e8e8;border-top:none;overflow:hidden;">
+                        <table style="width:100%;border-collapse:collapse;">${rows}</table>
+                        <div style="padding:10px 14px;border-top:2px solid #f5f5f5;text-align:right;font-size:10px;color:#aaa;">${pl.length} piese · PHASER © ${new Date().getFullYear()}</div>
+                      </div>
+                    </div>`;
+                    const wrapper = document.createElement("div");
+                    wrapper.style.cssText = "position:fixed;left:-9999px;top:0;width:600px;background:#fff;";
+                    wrapper.innerHTML = html;
+                    document.body.appendChild(wrapper);
+                    await new Promise(r=>setTimeout(r,100));
+                    await html2pdf().set({
+                      margin: 10, filename: "phaser-playlist.pdf",
+                      image: { type: "jpeg", quality: 0.98 },
+                      html2canvas: { scale: 2, useCORS: true },
+                      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+                    }).from(wrapper).save();
+                    document.body.removeChild(wrapper);
+                    showToast("PDF playlist descărcat ✓");
+                  } catch(e) { showToast("Eroare la generare PDF", "error"); }
+                };
+                return <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:8}}>
+                    <label style={sty.l}>Playlist — {pl.length} piese</label>
+                    <span style={{fontSize:10,color:th.tm}}>Template implicit pentru oferte private</span>
+                  </div>
+                  {/* Toolbar principal */}
+                  <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+                    <button onClick={()=>{const t=prompt("Titlu piesă:");const a=prompt("Artist:");if(t)saveTemplates(tpl=>({...tpl,playlist:[...(tpl.playlist||DEFAULT_COVERS),{id:uid(),title:t,artist:a||"",checked:true}]}));}} style={{...sty.bg,fontSize:12,padding:"5px 10px"}}><IcPlus s={11}/> Adaugă</button>
+                    <button onClick={()=>{const sorted=[...pl].sort((a,b)=>a.title.localeCompare(b.title,"ro",{sensitivity:"base"}));saveTemplates(tpl=>({...tpl,playlist:sorted}));showToast("Sortat alfabetic ✓");}} style={{...sty.bg,fontSize:12,padding:"5px 10px"}}>🔤 Alfabetic</button>
+                    <button onClick={()=>savePlaylistToStorage(false)} style={{...sty.b,fontSize:12,padding:"5px 12px"}}>💾 Salvează</button>
+                    <button onClick={()=>savePlaylistToStorage(true)} style={{...sty.bg,fontSize:12,padding:"5px 10px"}}>📌 Versiune nouă</button>
+                    <button onClick={downloadPlaylistPdf} style={{...sty.bg,fontSize:12,padding:"5px 10px"}}>⬇ PDF</button>
+                    <button onClick={async()=>{const txt=pl.map((c,i)=>`${i+1}. ${c.title} — ${c.artist}`).join("\n");try{await navigator.clipboard.writeText(txt);}catch(e){const ta=document.createElement("textarea");ta.value=txt;ta.style.cssText="position:fixed;opacity:0";document.body.appendChild(ta);ta.select();document.execCommand("copy");document.body.removeChild(ta);}showToast("Playlist copiat ✓");}} style={{...sty.bg,fontSize:12,padding:"5px 10px"}}>📋 Copiază</button>
+                  </div>
+                  {/* Versiuni salvate */}
+                  {playlistVersions.length>0&&<div style={{display:"flex",gap:6,marginBottom:10,alignItems:"center",flexWrap:"wrap",padding:"8px 12px",background:th.h,borderRadius:8,border:`1px solid ${th.b}`}}>
+                    <span style={{fontSize:11,color:th.tm,fontWeight:600}}>Versiuni:</span>
+                    <select onChange={e=>{const v=playlistVersions.find(x=>x.id===e.target.value);if(v)restorePlaylistVersion(v);e.target.value="";}} style={{...sty.i,padding:"4px 10px",fontSize:12,flex:1,maxWidth:240}} className="modernSel">
+                      <option value="">Restaurează versiune...</option>
+                      {playlistVersions.map(v=><option key={v.id} value={v.id}>{v.label} — {new Date(v.ts).toLocaleDateString("ro")}</option>)}
+                    </select>
+                    <select onChange={e=>{if(e.target.value&&window.confirm(`Ștergi versiunea "${playlistVersions.find(x=>x.id===e.target.value)?.label}"?`))deletePlaylistVersion(e.target.value);e.target.value="";}} style={{...sty.i,padding:"4px 10px",fontSize:12,maxWidth:180,color:"#ef4444"}} className="modernSel">
+                      <option value="">Șterge versiune...</option>
+                      {playlistVersions.map(v=><option key={v.id} value={v.id}>{v.label}</option>)}
+                    </select>
+                  </div>}
+                  {/* Lista piese */}
+                  <div style={{maxHeight:380,overflow:"auto",display:"flex",flexDirection:"column",gap:2}}>
+                    {pl.map((c,i)=>(
+                      <div key={c.id} style={{display:"flex",alignItems:"center",gap:6,padding:"5px 8px",borderRadius:6,border:`1px solid ${th.b}`,background:th.h}}>
+                        <span style={{fontSize:10,color:th.tm,minWidth:22,textAlign:"right",flexShrink:0}}>{i+1}.</span>
+                        <input value={c.title} onChange={e=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).map(x=>x.id===c.id?{...x,title:e.target.value}:x)}))} style={{...sty.i,flex:1,padding:"4px 8px",fontSize:12}} placeholder="Titlu piesă"/>
+                        <input value={c.artist||""} onChange={e=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).map(x=>x.id===c.id?{...x,artist:e.target.value}:x)}))} style={{...sty.i,width:130,padding:"4px 8px",fontSize:11}} placeholder="Artist"/>
+                        <button onClick={()=>saveTemplates(tpl=>({...tpl,playlist:(tpl.playlist||DEFAULT_COVERS).filter(x=>x.id!==c.id)}))} style={{padding:4,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer",flexShrink:0}}><IcTrash s={12}/></button>
+                      </div>
+                    ))}
+                  </div>
+                </div>;
+              })()}
               {docsSectTab==="media"&&(()=>{
                 const toEmbedUrl=(url)=>{ const vid=url?.match(/embed\/([^?&]+)/)?.[1]||url?.match(/(?:youtu\.be\/|v=)([^?&]+)/)?.[1]||""; return vid?"https://www.youtube.com/embed/"+vid:(url||""); };
                 const tplVideos=(templates.videos&&templates.videos.length>0)?templates.videos:DEFAULT_VIDEOS;
@@ -5894,33 +5986,70 @@ function App() {
             <div style={{padding:mob?"16px":"16px 20px",display:"flex",flexDirection:"column",gap:16}}>
 
               {/* Tip plată */}
-              <div>
-                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tip plată</div>
-                {/* Shortcuts rapide */}
-                <div style={{display:"flex",gap:6,marginBottom:10}}>
-                  {[{l:"🤝 Direct",av:false,re:false},{l:"📤 Avans pe firmă",av:true,re:false},{l:"🏢 Tot pe firmă",av:true,re:true}].map(({l,av,re})=>{
-                    const active=avFirma===av&&restFirma===re;
-                    return <button key={l} onClick={()=>upd({avFirma:av,restFirma:re})} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${active?th.a:th.b}`,background:active?th.ab:"transparent",color:active?th.a:th.tm,fontWeight:active?700:400,fontSize:10,cursor:"pointer",textAlign:"center"}}>{l}</button>;
-                  })}
-                </div>
-                {/* Granular toggles */}
-                <div style={{display:"flex",gap:6,marginBottom:8}}>
-                  {[{k:"avFirma",l:"Avans pe firmă",v:avFirma,amt:dep},{k:"restFirma",l:"Rest pe firmă",v:restFirma,amt:rest}].map(({k,l,v,amt})=>(
-                    <div key={k} onClick={()=>upd({[k]:!v})} style={{flex:1,padding:"8px 10px",borderRadius:8,border:`2px solid ${v?"#f59e0b":th.b}`,cursor:"pointer",background:v?"rgba(245,158,11,.07)":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:11,color:v?"#f59e0b":th.tm,fontWeight:v?600:400}}>{l}</span>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:11,fontWeight:700,color:v?"#f59e0b":th.tm}}>{fv(amt)}</div>
-                        {v&&<div style={{fontSize:9,color:"#f59e0b"}}>impozit 1%: {fv(amt*0.01)}</div>}
+              {(()=>{
+                const fetchBnr = async (patch) => {
+                  try {
+                    showToast("Se preia cursul BNR...", "success", 1500);
+                    const res = await fetch("https://api.frankfurter.app/latest?from=EUR&to=RON");
+                    const data = await res.json();
+                    const rate = Math.round(data.rates.RON * 100) / 100;
+                    const today = data.date;
+                    upd({cursLei: rate, ...(patch||{})});
+                    showToast(`Curs BNR ${today}: 1€ = ${rate} lei ✓`);
+                  } catch(e) {
+                    upd(patch||{});
+                    showToast("Nu s-a putut prelua cursul BNR — introdu manual", "error");
+                  }
+                };
+                const handlePayType = (av, re) => {
+                  const switchingToFirma = (av || re) && !(avFirma || restFirma);
+                  if (switchingToFirma) fetchBnr({avFirma:av, restFirma:re});
+                  else upd({avFirma:av, restFirma:re});
+                };
+                const handleToggle = (k, currentVal) => {
+                  const willBeFirma = !currentVal;
+                  const alreadyFirma = avFirma || restFirma;
+                  if (willBeFirma && !alreadyFirma) fetchBnr({[k]: true});
+                  else upd({[k]: !currentVal});
+                };
+                const CURS_ACT = ev.cursLei || CURS_DEFAULT;
+                return <div>
+                  <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tip plată</div>
+                  {/* Shortcuts rapide */}
+                  <div style={{display:"flex",gap:6,marginBottom:10}}>
+                    {[{l:"🤝 Direct",av:false,re:false},{l:"📤 Avans pe firmă",av:true,re:false},{l:"🏢 Tot pe firmă",av:true,re:true}].map(({l,av,re})=>{
+                      const active=avFirma===av&&restFirma===re;
+                      return <button key={l} onClick={()=>handlePayType(av,re)} style={{flex:1,padding:"8px 4px",borderRadius:8,border:`1px solid ${active?th.a:th.b}`,background:active?th.ab:"transparent",color:active?th.a:th.tm,fontWeight:active?700:400,fontSize:10,cursor:"pointer",textAlign:"center"}}>{l}</button>;
+                    })}
+                  </div>
+                  {/* Granular toggles */}
+                  <div style={{display:"flex",gap:6,marginBottom:8}}>
+                    {[{k:"avFirma",l:"Avans pe firmă",v:avFirma,amt:dep},{k:"restFirma",l:"Rest pe firmă",v:restFirma,amt:rest}].map(({k,l,v,amt})=>(
+                      <div key={k} onClick={()=>handleToggle(k,v)} style={{flex:1,padding:"8px 10px",borderRadius:8,border:`2px solid ${v?"#f59e0b":th.b}`,cursor:"pointer",background:v?"rgba(245,158,11,.07)":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:11,color:v?"#f59e0b":th.tm,fontWeight:v?600:400}}>{l}</span>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:11,fontWeight:700,color:v?"#f59e0b":th.tm}}>{fv(amt)}</div>
+                          {v&&isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(amt*CURS_ACT).toLocaleString("ro-RO")} lei</div>}
+                          {v&&!isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(amt*CURS_ACT).toLocaleString("ro-RO")} lei · imp. 1%: {Math.round(amt*0.01*CURS_ACT).toLocaleString("ro-RO")} lei</div>}
+                          {!v&&<div style={{fontSize:9,color:th.tm}}>impozit 1%: {fv(amt*0.01)}</div>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <span style={{fontSize:11,color:th.tm}}>Curs 1€ =</span>
-                  <input type="number" min={1} max={100} step={0.1} defaultValue={ev.cursLei||5} key={ev.id+"_curs"} onBlur={e=>{const v=parseFloat(e.target.value)||5;upd({cursLei:v});}} style={{...sty.i,width:60,padding:5,fontSize:12}} placeholder="5"/>
-                  <span style={{fontSize:11,color:th.tm}}>lei</span>
-                </div>
-              </div>
+                    ))}
+                  </div>
+                  {/* Curs BNR */}
+                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:th.tm}}>Curs 1€ =</span>
+                    <input type="number" min={1} max={100} step={0.01} defaultValue={ev.cursLei||5} key={ev.id+"_curs"} onBlur={e=>{const v=parseFloat(e.target.value)||5;upd({cursLei:v});}} style={{...sty.i,width:70,padding:5,fontSize:12}} placeholder="5.00"/>
+                    <span style={{fontSize:11,color:th.tm}}>lei</span>
+                    <button onClick={()=>fetchBnr()} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,border:`1px solid ${th.b}`,background:"transparent",color:"#f59e0b",fontSize:11,cursor:"pointer",fontWeight:600}}>↻ BNR azi</button>
+                    {(avFirma||restFirma)&&<div style={{fontSize:10,color:th.tm,width:"100%",marginTop:2}}>
+                      {avFirma&&<span>Avans: <strong style={{color:"#f59e0b"}}>{Math.round(dep*CURS_ACT).toLocaleString("ro-RO")} lei</strong></span>}
+                      {avFirma&&restFirma&&<span style={{margin:"0 6px"}}>·</span>}
+                      {restFirma&&<span>Rest: <strong style={{color:"#f59e0b"}}>{Math.round(rest*CURS_ACT).toLocaleString("ro-RO")} lei</strong></span>}
+                    </div>}
+                  </div>
+                </div>;
+              })()}
 
               {/* Plăți primite */}
               <div>
