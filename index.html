@@ -1746,7 +1746,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     } catch(e) {
       const raw=(e?.message||"").trim();
       const msg=/bucket not found/i.test(raw)
-        ? "Bucket „fisa-public" lipsă în Supabase. Dashboard → Storage → New bucket: id „fisa-public", Public."
+        ? "Bucket 'fisa-public' lipsă în Supabase. Dashboard → Storage → New bucket: id 'fisa-public', Public."
         : ("Eroare: "+(raw||"Upload eșuat"));
       showToast&&showToast(msg,"error");
       setLinkState(s=>({...s, loading:false}));
