@@ -5801,6 +5801,8 @@ function App() {
           return {...ne,sp:calcShares(ne)};
         }));
         const CURS=ev.cursLei||CURS_DEFAULT;
+        const isLei=ev.valuta==="lei";
+        const MULT=isLei?CURS:1; // multiplicator: conversia EUR→moneda evenimentului
         const isPrivate=ev.cat==="private";
         // Partial firmă: avans și/sau rest separat
         const avFirma=ev.avFirma??(ev.payType==="firma");
@@ -5814,16 +5816,18 @@ function App() {
 
         // 1. Impozit pe venit 1% — doar pe porțiunea pe firmă
         const impVenit=Math.round(((avFirma?dep:0)+(restFirma?rest:0))*0.01*100)/100;
-        const svcCost=typeof getSvcCost==="function"?getSvcCost(ev,templates?.servicePrices):0;
+        const svcCostEur=typeof getSvcCost==="function"?getSvcCost(ev,templates?.servicePrices):0;
+        const svcCost=Math.round(svcCostEur*MULT*100)/100; // în moneda evenimentului
         const netDupaTax=Math.max(0,total-impVenit-svcCost);
 
-        // 2. Cheltuieli fixe (lei → €)
+        // 2. Cheltuieli fixe — în moneda evenimentului
         const fc={...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{})};
         const fcLeiTotal=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);
         const fcEur=fcLeiTotal/CURS;
+        const fcBase=isLei?fcLeiTotal:fcEur; // în moneda evenimentului
         // Dacă restul e pe firmă, logistica se bruttifică cu 16% dividende
-        const fc16=restFirma?Math.round(fcEur*0.16*100)/100:0;
-        const fcEurEffective=fcEur+fc16;
+        const fc16=restFirma?Math.round(fcBase*0.16*100)/100:0;
+        const fcEurEffective=fcBase+fc16; // în moneda evenimentului
 
         // 3. Net după cheltuieli fixe
         const netDupaFixed=Math.max(0,netDupaTax-fcEurEffective);
@@ -5867,7 +5871,7 @@ function App() {
         const shares={};
         MEMBERS.forEach(m=>{ shares[m.id]=(baseShares[m.id]||0)+(roleBonus[m.id]||0); });
 
-        const fv=(v)=>v.toLocaleString("ro-RO",{minimumFractionDigits:0,maximumFractionDigits:2})+"€";
+        const fv=(v)=>v.toLocaleString("ro-RO",{minimumFractionDigits:0,maximumFractionDigits:2})+(isLei?" lei":"€");
         const fvl=(v)=>Math.round(v).toLocaleString("ro-RO")+" lei";
         const Row=({l,v,c,bold})=><div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${th.bl}`}}>
           <span style={{fontSize:12,color:th.tm}}>{l}</span>
@@ -5959,13 +5963,13 @@ function App() {
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
                       <input type="number" value={(ev.fixedCosts||DEFAULT_FIXED_COSTS)[k]??""} onChange={e=>{const v=e.target.value;upd({fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),[k]:v===''?0:Number(v)||0}});}} style={{...sty.i,width:70,padding:4,fontSize:12,textAlign:"right"}} placeholder="0"/>
                       <span style={{fontSize:11,color:th.tm,width:22}}>lei</span>
-                      <span style={{fontSize:11,color:th.tm,width:36}}>{fv(((ev.fixedCosts||DEFAULT_FIXED_COSTS)[k]||0)/CURS)}</span>
+                      {!isLei&&<span style={{fontSize:11,color:th.tm,width:36}}>{fv(((ev.fixedCosts||DEFAULT_FIXED_COSTS)[k]||0)/CURS)}</span>}
                     </div>
                   </div>
                 ))}
                 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:`1px solid ${th.b}`,marginTop:4}}>
                   <span style={{fontSize:12,fontWeight:600}}>Total logistică</span>
-                  <span style={{fontSize:12,fontWeight:700,color:"#ef4444"}}>{fvl(fcLeiTotal)} / {fv(fcEur)}{onFirma?<span style={{fontSize:10,color:th.tm}}> (+16% div. = {fv(fcEur*1.16)})</span>:null}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#ef4444"}}>{isLei?fv(fcBase):`${fvl(fcLeiTotal)} / ${fv(fcEur)}`}{onFirma?<span style={{fontSize:10,color:th.tm}}> (+16% div. = {fv(fcBase*1.16)})</span>:null}</span>
                 </div>
               </div>
 
@@ -5977,9 +5981,9 @@ function App() {
                   {avFirma&&<Row l={`Avans pe firmă 1% (din ${fv(dep)})`} v={"-"+fv(dep*0.01)} c="#f59e0b"/>}
                   {restFirma&&<Row l={`Rest pe firmă 1% (din ${fv(rest)})`} v={"-"+fv(rest*0.01)} c="#f59e0b"/>}
                   {impVenit>0&&<Row l="Total impozit venit 1%" v={"-"+fv(impVenit)} c="#ef4444"/>}
-                  {svcCost>0&&<>{typeof getSvcCostBreakdown==="function"&&getSvcCostBreakdown(ev,templates?.servicePrices).map(({label,cost})=><Row key={label} l={label} v={"-"+fv(cost)} c="#ef4444"/>)}{<Row l="Cost servicii tehnice (furnizori) — total" v={"-"+fv(svcCost)} c="#ef4444" bold/>}</>}
+                  {svcCost>0&&<>{typeof getSvcCostBreakdown==="function"&&getSvcCostBreakdown(ev,templates?.servicePrices).map(({label,cost})=><Row key={label} l={label} v={"-"+fv(Math.round(cost*MULT*100)/100)} c="#ef4444"/>)}{<Row l="Cost servicii tehnice (furnizori) — total" v={"-"+fv(svcCost)} c="#ef4444" bold/>}</>}
                   {ev.dp&&<Row l="Avans (intrat în fond)" v={"-"+fv(dep)} c="#818cf8"/>}
-                  <Row l={`Cheltuieli fixe (${fvl(fcLeiTotal)})`} v={"-"+fv(fcEur)} c="#ef4444"/>
+                  <Row l={isLei?`Cheltuieli fixe`:`Cheltuieli fixe (${fvl(fcLeiTotal)})`} v={"-"+fv(fcBase)} c="#ef4444"/>
                   {fc16>0&&<Row l="16% div. pe logistică (pe firmă)" v={"-"+fv(fc16)} c="#ef4444"/>}
                   <Row l="Net după cheltuieli" v={fv(netDupaFixed)} bold/>
                   <Row l={ev.dp?`Fond extra (${fondDupCheltPct}%)`:`Fond (${fondDupCheltPct}%)`} v={"-"+fv(fond7)} c="#6366f1"/>
@@ -5999,7 +6003,7 @@ function App() {
                 <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Rezumat taxe & retenții</div>
                 <div style={{display:"flex",flexDirection:"column",gap:4}}>
                   {/* Cost total servicii — furnizori tehnici + logistică fixă */}
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:th.tm}}>Cost servicii tehnice (furnizori)</span><span style={{color:"#ef4444",fontWeight:600}}>-{fv(svcCost+fcEur)}</span></div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:th.tm}}>Cost servicii tehnice (furnizori)</span><span style={{color:"#ef4444",fontWeight:600}}>-{fv(svcCost+fcBase)}</span></div>
                   {/* Impozit pe venit */}
                   {impVenit>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11}}><span style={{color:th.tm}}>Impozit pe venit 1% {avFirma&&restFirma?"(total)":avFirma?"(avans)":"(rest)"}</span><span style={{color:"#ef4444",fontWeight:600}}>-{fv(impVenit)}</span></div>}
                   {/* Dividende — logistică + profit */}
