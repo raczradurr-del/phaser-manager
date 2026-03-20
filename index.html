@@ -234,15 +234,25 @@ const getSvcCostBreakdown = (ev, prices) => {
   const ecranCost = p.ecranCost ?? (p.ecran ?? 600);
   const scenaCost = p.scenaCost ?? (p.scena ?? 300);
   const djCost = p.djCost ?? 0;
-  const leiPerPlate = p.scenaLeiPerPlate ?? 0;
-  const plates = Math.max(0, ev?.scenaPlates ?? 12);
   const out = [];
   if(svc.sunet){ const c=sunetCost; out.push({k:"sunet",label:SVC_COST_LABELS.sunet,cost:Math.round(c*100)/100}); }
   if(svc.lumini){ const c=Math.round(luminiCost*100)/100; out.push({k:"lumini",label:SVC_COST_LABELS.lumini,cost:c}); }
   if(svc.ecran){ const c=Math.round(ecranCost*100)/100; out.push({k:"ecran",label:SVC_COST_LABELS.ecran,cost:c}); }
-  if(svc.scena){ const c=Math.round((scenaCost+plates*leiPerPlate/CURS)*100)/100; out.push({k:"scena",label:SVC_COST_LABELS.scena,cost:c}); }
+  if(svc.scena){ const c=Math.round(scenaCost*100)/100; out.push({k:"scena",label:SVC_COST_LABELS.scena,cost:c}); }
   if(svc.dj&&djCost>0){ const c=Math.round(djCost*100)/100; out.push({k:"dj",label:"DJ",cost:c}); }
-  // Tehnician / extra tehnicieni: doar din „Cheltuieli fixe logistică” (lei), nu și ca linie furnizor — evită dublarea cu „Tehnic bază”
+  // Tehnici: dacă există orice serviciu în afară de DJ → 2 persoane; la podium / lumini / LED → +X € per serviciu × nr. tehnicieni
+  const hasNonDjSvc = !!(svc.sunet || svc.lumini || svc.ecran || svc.scena);
+  const techCount = hasNonDjSvc ? 2 : (svc.dj ? 1 : 0);
+  const tehnicRate = p.tehnicPerService ?? 120;
+  const supplPer = p.tehnicExtraPerService ?? 30;
+  if(hasNonDjSvc){
+    out.push({k:"tehnic2Auto",label:"Tehnic nr.2 (automat)",cost:Math.round(tehnicRate*100)/100});
+  }
+  const bonusScenaLumLed = (svc.scena?1:0)+(svc.lumini?1:0)+(svc.ecran?1:0);
+  if(techCount>0 && bonusScenaLumLed>0){
+    const c=Math.round(supplPer*bonusScenaLumLed*techCount*100)/100;
+    out.push({k:"tehnicSupplPlatouri",label:`Supliment tehnic podium / lumini / LED (${bonusScenaLumLed}×${supplPer}€×${techCount} pers.)`,cost:c});
+  }
   return out;
 };
 
@@ -493,7 +503,7 @@ const loadTemplates = () => {
       const d = JSON.parse(s);
       if (d && typeof d === "object") {
         d.pressKitPublic = normPressKitPublic(d.pressKitPublic);
-        d.servicePrices = d.servicePrices || { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, scenaLeiPerPlate:0, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:40 };
+        d.servicePrices = d.servicePrices || { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:30 };
         return d;
       }
     }
@@ -505,7 +515,7 @@ const loadTemplates = () => {
     riderStagePlot: { image: null, notes: "" },
     pressKitPublic: JSON.parse(JSON.stringify(DEFAULT_PRESS_KIT_PUBLIC)),
     poveste: "Suntem o gașcă de visători muzicali și artiști pasionați, gata să aducem vibe-ul ăla bun la evenimentul vostru. Trebuie doar să ne vezi live și vei înțelege că un show-ul este un tour de force încărcat cu intensitate dar și cu momente de sensibilitate simplă. Printre cuvinte, imagini și muzică spunem povestea tuturor, a celor ce iubesc sau a celor îndrăgostiți de viață.",
-    servicePrices: { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, scenaLeiPerPlate:0, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:40 }
+    servicePrices: { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:30 }
   };
 };
 // Versiuni rider — phaser_rider_versions: [{ id, ts, label, data }]
@@ -2183,8 +2193,8 @@ function TimeInput({ value, onChange, style, placeholder }) {
   const norm = (v) => { const m = (v||"").match(/^(\d{1,2}):(\d{2})$/); if(m){ const h=Math.min(23,Math.max(0,parseInt(m[1],10))); const min=Math.min(59,Math.max(0,parseInt(m[2],10))); return String(h).padStart(2,"0")+":"+String(min).padStart(2,"0"); } return v||""; };
   const handleChange = (e) => { const v = norm(e.target.value); onChange(v); };
   return (
-    <div style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
-      <input list={listId} value={value||""} onChange={handleChange} onBlur={(e)=>onChange(norm(e.target.value))} placeholder={placeholder||"09:00"} style={{...style,fontVariantNumeric:"tabular-nums"}} maxLength={5}/>
+    <div style={{position:"relative",display:"inline-flex",alignItems:"center",flexShrink:0}}>
+      <input list={listId} value={value||""} onChange={handleChange} onBlur={(e)=>onChange(norm(e.target.value))} placeholder={placeholder||"09:00"} style={{boxSizing:"border-box",fontVariantNumeric:"tabular-nums",minWidth:"7.5ch",...style}} maxLength={5}/>
       <datalist id={listId}>{TIME_OPTIONS.map(t=><option key={t} value={t}/>)}</datalist>
     </div>
   );
@@ -2507,7 +2517,7 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
           {(ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45)).map((d,i)=>(
             <div key={i} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
               <span style={{fontSize:11,color:th.tm,minWidth:28}}>R{i+1}:</span>
-              <TimeInput value={(ev.repStarts||[])[i]} onChange={t=>{const arr=[...(ev.repStarts||[])].slice(0,ev.rep||1);arr[i]=t;while(arr.length<(ev.rep||1))arr.push("");u("repStarts",arr);}} style={{...iStyle,width:70,textAlign:"center"}} placeholder="21:00"/>
+              <TimeInput value={(ev.repStarts||[])[i]} onChange={t=>{const arr=[...(ev.repStarts||[])].slice(0,ev.rep||1);arr[i]=t;while(arr.length<(ev.rep||1))arr.push("");u("repStarts",arr);}} style={{...iStyle,width:mob?96:84,textAlign:"center"}} placeholder="21:00"/>
               <input type="number" value={d} onChange={e=>{const arr=[...(ev.repDurs||Array(ev.rep||1).fill(ev.repDur||45))];arr[i]=Number(e.target.value)||45;u("repDurs",arr);}} style={{...iStyle,width:60}} min={5} max={120}/>
               <span style={{fontSize:11,color:th.tm}}>min</span>
             </div>
@@ -2591,7 +2601,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     fee: mData?.fee||(isP?PX.r[1]:PX.pub),
     valuta: mData?.valuta||"EUR",
     dep: (()=>{const tot=(mData?.fee||PX.r[1])+(isP?Object.entries(mData?.svcp||{}).reduce((s,[k,v])=>s+(mData?.svc?.[k]?v:0),0):0);return mData?.dep??Math.round(tot*0.1/10)*10;})(), dp: mData?.dp||false, zileRest: mData?.zileRest??5,
-    sp: mData?.sp||{}, svc: mData?.svc||{}, svcp: mData?.svcp||{sunet:templates?.servicePrices?.sunet??350,lumini:templates?.servicePrices?.lumini??500,ecran:templates?.servicePrices?.ecran??600,scena:templates?.servicePrices?.scena??300,dj:templates?.servicePrices?.dj??600}, scenaPlates: mData?.scenaPlates??12,
+    sp: mData?.sp||{}, svc: mData?.svc||{}, svcp: mData?.svcp||{sunet:templates?.servicePrices?.sunet??350,lumini:templates?.servicePrices?.lumini??500,ecran:templates?.servicePrices?.ecran??600,scena:templates?.servicePrices?.scena??300,dj:templates?.servicePrices?.dj??600},
     ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu"},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu"},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu"}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"", fisaExtra: mData?.fisaExtra||"", fisaExtraItems: mData?.fisaExtraItems||[], svcInfo: mData?.svcInfo||{},
     impozitVenit: mData?.impozitVenit??1, plataAvansFirma: mData?.plataAvansFirma ?? (mData?.plataDirect===false), plataRestFirma: mData?.plataRestFirma ?? (mData?.plataDirect===false), sumaAvansLei: mData?.sumaAvansLei??0, sumaRestLei: mData?.sumaRestLei??0, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10, fondPct2: mData?.fondPct2??10,
     videos: mData?.videos||tplVideos, covers: mData?.covers||(tplCovers.map(c=>({...c,checked:true}))),
@@ -2820,7 +2830,6 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                   </div>
                 </div>;
               })}
-              {fm.svc?.scena&&<div style={{marginTop:8,marginLeft:28}}><label style={{...sty.l,fontSize:10}}>Nr. plăci podium (cost furnizor)</label><input type="number" value={fm.scenaPlates??12} onChange={e=>u("scenaPlates",Math.max(0,Number(e.target.value)||0))} style={iStyle} min={1} placeholder="12"/></div>}
               <div style={{marginTop:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <label style={sty.l}>Extra personalizat</label>
@@ -2856,7 +2865,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                   {(fm.repDurs||Array(fm.rep||1).fill(45)).slice(0,fm.rep||1).map((d,i)=>(
                     <div key={i} style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       <span style={{fontSize:12,color:th.tm,minWidth:28}}>R{i+1}:</span>
-                      <TimeInput value={(fm.repStarts||[])[i]} onChange={t=>{const arr=[...(fm.repStarts||[])].slice(0,fm.rep||1);arr[i]=t;while(arr.length<(fm.rep||1))arr.push("");u("repStarts",arr);}} style={{...iStyle,width:80,textAlign:"center"}} placeholder="21:00"/>
+                      <TimeInput value={(fm.repStarts||[])[i]} onChange={t=>{const arr=[...(fm.repStarts||[])].slice(0,fm.rep||1);arr[i]=t;while(arr.length<(fm.rep||1))arr.push("");u("repStarts",arr);}} style={{...iStyle,width:mob?96:86,textAlign:"center"}} placeholder="21:00"/>
                       <input type="number" value={d} onChange={e=>{const arr=[...(fm.repDurs||Array(fm.rep||1).fill(45))];arr[i]=Number(e.target.value)||45;u("repDurs",arr);}} style={{...iStyle,width:65}} min={5} max={120}/>
                       <span style={{fontSize:11,color:th.tm}}>min</span>
                     </div>
@@ -4648,7 +4657,7 @@ function App() {
                 <label style={sty.l}>Prețuri servicii extra — furnizori</label>
                 <p style={{fontSize:11,color:th.tm,marginBottom:14}}>Prețurile salvate aici se folosesc la oferte noi. Costurile cu furnizorii se scad în finanțe când evenimentul e confirmat.</p>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:12}}>
-                  {[{k:"sunet",l:"Sistem sunet (client €)",def:350},{k:"sunetCost",l:"Sistem sunet (cost furnizor €)",def:150},{k:"lumini",l:"Sistem lumini (client €)",def:500},{k:"luminiCost",l:"Sistem lumini (cost furnizor €)",def:520},{k:"ecran",l:"Ecran LED (client €)",def:600},{k:"ecranCost",l:"Ecran LED (cost furnizor €)",def:560},{k:"scena",l:"Scenă/Podium (client €)",def:300},{k:"scenaCost",l:"Scenă/Podium (cost furnizor €)",def:260},{k:"scenaLeiPerPlate",l:"Podium lei/placă",def:0},{k:"dj",l:"DJ (client €)",def:600},{k:"djCost",l:"DJ (cost furnizor €)",def:0},{k:"tehnicPerService",l:"Tehnic per serviciu (€)",def:120},{k:"tehnicExtraPerService",l:"Extra/tehnic din lumini/ecran/podium (€)",def:40}].map(({k,l,def})=>(
+                  {[{k:"sunet",l:"Sistem sunet (client €)",def:350},{k:"sunetCost",l:"Sistem sunet (cost furnizor €)",def:150},{k:"lumini",l:"Sistem lumini (client €)",def:500},{k:"luminiCost",l:"Sistem lumini (cost furnizor €)",def:520},{k:"ecran",l:"Ecran LED (client €)",def:600},{k:"ecranCost",l:"Ecran LED (cost furnizor €)",def:560},{k:"scena",l:"Scenă/Podium (client €)",def:300},{k:"scenaCost",l:"Scenă/Podium (cost furnizor €)",def:260},{k:"dj",l:"DJ (client €)",def:600},{k:"djCost",l:"DJ (cost furnizor €)",def:0},{k:"tehnicPerService",l:"Tehnic nr.2 automat / pers. (€)",def:120},{k:"tehnicExtraPerService",l:"Supliment tehnic podium·lumini·LED (€/serv./pers.)",def:30}].map(({k,l,def})=>(
                     <div key={k}><label style={{...sty.l,fontSize:10}}>{l}</label><input type="number" value={(templates.servicePrices||{})[k]??def} onChange={e=>{const v=e.target.value;saveTemplates(tpl=>({...tpl,servicePrices:{...tpl.servicePrices,[k]:v===""?def:(Number(v)||def)}}));}} style={sty.i} placeholder={String(def)}/></div>
                   ))}
                 </div>
@@ -5870,7 +5879,6 @@ function App() {
                   </div>
                 </div>
                 {ev.dp&&ev.restPaid&&<div style={{fontSize:10,color:"#22c55e",fontWeight:600,textAlign:"center",marginTop:6}}>✓ Eveniment plătit integral — 7% fond activ</div>}
-                {ev.dp&&!ev.restPaid&&<div style={{fontSize:10,color:"#f59e0b",textAlign:"center",marginTop:6}}>Avans în fond · 7% se calculează după plata integrală</div>}
               </div>
 
               {/* Cheltuieli fixe editabile */}
