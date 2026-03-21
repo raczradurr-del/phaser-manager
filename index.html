@@ -191,6 +191,11 @@ const f$  = n => new Intl.NumberFormat("ro",{maximumFractionDigits:0}).format(n|
 const fFmt = (n,currency)=>new Intl.NumberFormat("ro",{maximumFractionDigits:0}).format(n||0)+(currency==="lei"?" lei":" €");
 const fD  = d => { if(!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("ro",{day:"numeric",month:"short",year:"numeric"}); };
 const fDFisa = d => { if(!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("ro",{day:"2-digit",month:"2-digit",year:"numeric"}); };
+/** Nume fișier sigur pe Windows/macOS (fără : * ? " < > | \ /). */
+const sanitizeExportFilename = (s) => String(s||"")
+  .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+  .replace(/\s+/g, " ")
+  .trim() || "PHASER-export";
 // Timing — parse/format datetime (YYYY-MM-DDTHH:mm sau HH:mm pentru backward compat)
 const parseDateTime = (val, evDate) => {
   if(!val) return {date:"",time:""};
@@ -1473,6 +1478,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const [playlistSearch, setPlaylistSearch] = useState("");
   const [pdfLoading, setPdfLoading] = useState(false);
   const [offerHtmlExportBusy, setOfferHtmlExportBusy] = useState(false);
+  const [offerHtmlClipboardBusy, setOfferHtmlClipboardBusy] = useState(false);
   const [contractFields, setContractFields] = useState({
     nr:"", dataSemnare:"", clientNume:ev.cn||"", clientEmail:ev.ce||"", clientTel:ev.cp||"",
     jud:"", mun:"", str:"", nr2:"", ap:"", ciSeria:"", ciNr:"", cnp:"",
@@ -1495,12 +1501,28 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     onStatusChange(ev.id, k);
   };
 
+  const eventDateDdMmYyyy = () => {
+    if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return "";
+    const [y, m, d] = ev.date.split("-");
+    return `${d}.${m}.${y}`;
+  };
+  /** Ofertă: «O1 15.06.2026». Contract: «C1 15.06.2026». */
+  const getOfferExportBasename = () => {
+    const dc = eventDateDdMmYyyy();
+    return sanitizeExportFilename(`O${ev.offerNr ?? "?"}${dc ? " " + dc : ""}`);
+  };
+  const getContractExportBasename = () => {
+    const dc = eventDateDdMmYyyy();
+    return sanitizeExportFilename(`C${ev.offerNr ?? "?"}${dc ? " " + dc : ""}`);
+  };
+  const getOfferContractExportBasename = (isContract) => (isContract ? getContractExportBasename() : getOfferExportBasename());
   const getPdfFilename = (kind) => {
-    const dateStr = (ev.date||"").split("-").reverse().join("-") || "event";
-    const evType = (ev.type||"Event").replace(/\s+/g,"-");
-    if (kind==="fisa")     return `Fisa-${evType}-${dateStr}.pdf`;
-    if (kind==="contract") return `Contract-O${ev.offerNr||"?"}-${dateStr}.pdf`;
-    return `Oferta-O${ev.offerNr||"?"}-${dateStr}.pdf`;
+    if (kind==="fisa") {
+      const dateStr = (ev.date||"").split("-").reverse().join("-") || "event";
+      const evType = (ev.type||"Event").replace(/\s+/g,"-");
+      return sanitizeExportFilename(`Fisa-${evType}-${dateStr}`) + ".pdf";
+    }
+    return getOfferContractExportBasename(kind==="contract") + ".pdf";
   };
 
   const exportHtmlAssetBase = () => {
@@ -1834,7 +1856,8 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       const file = new File([blob], getPdfFilename(kind), { type: "application/pdf" });
       if(navigator.share) {
         try {
-          await navigator.share({ title: kind==="fisa" ? `Fișa O${ev.offerNr||"?"}` : kind==="contract" ? `Contract O${ev.offerNr||"?"}` : `Oferta O${ev.offerNr||"?"}`, files: [file] });
+          const shareTitle = kind==="fisa" ? `Fișa O${ev.offerNr||"?"}` : getOfferContractExportBasename(kind==="contract");
+          await navigator.share({ title: shareTitle, files: [file] });
           showToast&&showToast("Distribuit ✓");
         } catch(shareErr) {
           if(shareErr?.name==="AbortError") return;
@@ -1851,14 +1874,40 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     setPdfLoading(false);
   };
 
+  const escHtmlTitle = (s) => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  const buildStandaloneOfferContractHtml = () => {
+    const rawInner = tab==="contract" ? getContractHtmlForWorker() : getOfferHtmlForWorker();
+    const docTitle = getOfferContractExportBasename(tab==="contract");
+    return `<!DOCTYPE html><html lang="ro"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>${escHtmlTitle(docTitle)}</title><style>body{margin:0;background:#f5f5f5}</style></head><body style="margin:0;background:#f5f5f5">${rawInner}</body></html>`;
+  };
+  const handleCopyOfferHtml = async () => {
+    setOfferHtmlClipboardBusy(true);
+    try {
+      const html = encodeHtmlCodePoints(buildStandaloneOfferContractHtml());
+      try {
+        await navigator.clipboard.writeText(html);
+      } catch (clipErr) {
+        const ta = document.createElement("textarea");
+        ta.value = html;
+        ta.style.cssText = "position:fixed;opacity:0;left:-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      showToast&&showToast("HTML copiat — lipește în mail sau salvează ca fișier .html");
+    } catch (e) {
+      showToast&&showToast("Nu s-a putut copia HTML", "error");
+      console.error(e);
+    } finally {
+      setOfferHtmlClipboardBusy(false);
+    }
+  };
   const handleExportOfferHtmlFile = () => {
     setOfferHtmlExportBusy(true);
     try {
-      const rawInner = tab==="contract" ? getContractHtmlForWorker() : getOfferHtmlForWorker();
-      const title = tab==="contract" ? "Contract" : "Ofertă";
-      const fullPage = `<!DOCTYPE html><html lang="ro"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>PHASER — ${title}</title><style>body{margin:0;background:#f5f5f5}</style></head><body style="margin:0;background:#f5f5f5">${rawInner}</body></html>`;
-      const html = encodeHtmlCodePoints(fullPage);
-      const fname = getPdfFilename(tab==="contract" ? "contract" : "offer").replace(/\.pdf$/i, ".html");
+      const html = encodeHtmlCodePoints(buildStandaloneOfferContractHtml());
+      const fname = getOfferContractExportBasename(tab==="contract") + ".html";
       const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const u = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -1866,7 +1915,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       a.download = fname;
       a.click();
       URL.revokeObjectURL(u);
-      showToast&&showToast("HTML descărcat — trimite fișierul pe WhatsApp, mail etc.");
+      showToast&&showToast("Fișier .html descărcat (extensia ajută sistemul să îl deschidă în browser).");
     } catch (e) {
       showToast&&showToast("Eroare la export HTML", "error");
       console.error(e);
@@ -1923,9 +1972,14 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             </button>
             {tab==="fisa"
               ? <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={pdfLoading} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null}/>
-              : <button onClick={handleExportOfferHtmlFile} disabled={pdfLoading||offerHtmlExportBusy} style={{padding:"8px 16px",borderRadius:8,border:"none",background:"#3b82f6",color:"#fff",fontWeight:700,fontSize:12,cursor:(pdfLoading||offerHtmlExportBusy)?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||offerHtmlExportBusy)?0.7:1}}>
-                  {offerHtmlExportBusy?"⏳":"📥"} HTML
-                </button>
+              : <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  <button type="button" onClick={handleCopyOfferHtml} disabled={pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy} title="Nu e URL permanent — e conținut copiat local" style={{padding:"8px 12px",borderRadius:8,border:"none",background:"#6366f1",color:"#fff",fontWeight:700,fontSize:12,cursor:(pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy)?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy)?0.7:1}}>
+                    {offerHtmlClipboardBusy?"⏳":"📋"} Copiază HTML
+                  </button>
+                  <button type="button" onClick={handleExportOfferHtmlFile} disabled={pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy} title="Extensia .html e opțională la copiere; la descărcare ajută sistemul" style={{padding:"8px 12px",borderRadius:8,border:"1px solid rgba(255,255,255,.35)",background:"transparent",color:"rgba(255,255,255,.95)",fontWeight:700,fontSize:12,cursor:(pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy)?"wait":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||offerHtmlExportBusy||offerHtmlClipboardBusy)?0.7:1}}>
+                    {offerHtmlExportBusy?"⏳":"📥"} .html
+                  </button>
+                </div>
             }
             <button onClick={onClose} style={{padding:mob?12:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:"rgba(255,255,255,.6)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX s={18}/></button>
           </div>
@@ -1948,8 +2002,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <img src={ZGV_LOGO} alt="Za good vibes" style={{height:40,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitFilter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
               <img src={LOGO_URL} alt="PHASER" style={{height:28,objectFit:"contain",filter:"brightness(0) invert(1)",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}} onError={e=>{e.target.style.display="none";}}/>
             </div>}
-            {/* Imagine header — cover photo 220px via background-image (mai fiabil in PDF) */}
-            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",height:"220px",backgroundImage:`url('${isPriv?(ev.coverPhoto||PK_IMG_OFERTA_PRIVAT_ZGV):(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)}')`,backgroundSize:"cover",backgroundPosition:"center 35%",WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}}/>}
+            {/* Cover: <img> — aliniat între preview, PDF (html2canvas) și export HTML */}
+            {(isPriv||pkPublic)&&<div style={{borderRadius:isPriv?"0":"16px 16px 0 0",height:220,overflow:"hidden",position:"relative",lineHeight:0,WebkitPrintColorAdjust:"exact",printColorAdjust:"exact"}}>
+              <img src={isPriv?(ev.coverPhoto||PK_IMG_OFERTA_PRIVAT_ZGV):(pkPublic?.heroImage||PK_IMG_OFERTA_PUBLIC_HEAD)} alt="" style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 35%",display:"block"}} onError={(e)=>{e.target.style.display="none";}}/>
+            </div>}
             {/* Header card — tip + data + locatie pe acelasi rand */}
             <div style={{background:"linear-gradient(135deg,#1a1510 0%,#2d2419 50%,#1a1510 100%)",borderRadius:(isPriv||pkPublic)?"0 0 16px 16px":"16px",padding:"14px 18px 14px",marginBottom:6,position:"relative",overflow:"hidden",border:"1px solid rgba(245,158,11,.15)",borderTop:(isPriv||pkPublic)?"none":"1px solid rgba(245,158,11,.15)"}}>
               <div style={{position:"absolute",top:0,right:0,width:240,height:240,background:"radial-gradient(circle,rgba(245,158,11,.08) 0%,transparent 70%)",pointerEvents:"none"}}/>
