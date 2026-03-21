@@ -12,3 +12,8 @@ CREATE POLICY "fisa_public_insert" ON storage.objects
 DROP POLICY IF EXISTS "fisa_public_update" ON storage.objects;
 CREATE POLICY "fisa_public_update" ON storage.objects
   FOR UPDATE USING (bucket_id = 'fisa-public');
+
+-- Ștergere din app când se elimină o ofertă (offer-/contract-/fisa-*.html)
+DROP POLICY IF EXISTS "fisa_public_delete" ON storage.objects;
+CREATE POLICY "fisa_public_delete" ON storage.objects
+  FOR DELETE USING (bucket_id = 'fisa-public');

@@ -120,6 +120,10 @@ DROP POLICY IF EXISTS "fisa_public_update" ON storage.objects;
 CREATE POLICY "fisa_public_update" ON storage.objects
   FOR UPDATE USING (bucket_id = 'fisa-public');
 
+DROP POLICY IF EXISTS "fisa_public_delete" ON storage.objects;
+CREATE POLICY "fisa_public_delete" ON storage.objects
+  FOR DELETE USING (bucket_id = 'fisa-public');
+
 -- ─────────────────────────────────────────────
 -- 4. Curăță tabele vechi
 -- ─────────────────────────────────────────────
