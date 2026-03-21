@@ -323,11 +323,11 @@ const getSvcCostBreakdown = (ev, prices) => {
 };
 
 const MEMBERS = [
-  {id:"m1",n:"Carina Dumitru",short:"Carina",r:"Vocal",  email:"carina@phaser.ro"},
-  {id:"m2",n:"Radu Racz",     short:"Radu",  r:"Bass",   email:"raczradurr@gmail.com"},
-  {id:"m3",n:"Lucian Oprișan",short:"Luci",  r:"Clape",  email:"lucian@phaser.ro"},
-  {id:"m4",n:"Arnold Birta",  short:"Arni",  r:"Tobe",   email:"arnold@phaser.ro"},
-  {id:"m5",n:"Sebastian Bârzeianu",short:"Sebi",r:"Chitară",email:"sebi@phaser.ro"}
+  {id:"m1",n:"Carina Dumitru",short:"Carina",r:"Vocal",  email:"carina@phaser.ro",emoji:"🎤"},
+  {id:"m2",n:"Radu Racz",     short:"Radu",  r:"Bass",   email:"raczradurr@gmail.com",emoji:"🎵"},
+  {id:"m3",n:"Lucian Oprișan",short:"Luci",  r:"Clape",  email:"lucian@phaser.ro",emoji:"🎹"},
+  {id:"m4",n:"Arnold Birta",  short:"Arni",  r:"Tobe",   email:"arnold@phaser.ro",emoji:"🥁"},
+  {id:"m5",n:"Sebastian Bârzeianu",short:"Sebi",r:"Chitară",email:"sebi@phaser.ro",emoji:"🎸"}
 ];
 const LS_SESSION_MEMBER = "phaser_session_member";
 const sessionUserFromStorage = () => {
@@ -4216,9 +4216,9 @@ function App() {
         <div style={{width:"100%",maxWidth:360,animation:"up .4s ease .08s both"}}>
           <div style={{fontSize:11,color:"#888",textTransform:"uppercase",letterSpacing:2,marginBottom:14,textAlign:"center"}}>Cine folosește aplicația?</div>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {MEMBERS.map(m => (
+            {[...MEMBERS].sort((a,b)=>a.short.localeCompare(b.short,"ro")).map(m => (
               <button key={m.id} type="button" onClick={()=>pickMember(m.id)} style={{width:"100%",padding:"18px 20px",background:"#161616",color:"#fff",border:"1px solid #303030",borderRadius:12,fontSize:16,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",letterSpacing:.2}}>
-                <span style={{display:"flex",alignItems:"center",gap:12}}><span style={{fontSize:22}}>🎸</span> {m.short}</span>
+                <span style={{display:"flex",alignItems:"center",gap:12}}><span style={{fontSize:22}} aria-hidden>{m.emoji||"🎵"}</span> {m.short}</span>
                 <span style={{fontSize:12,color:"#666",fontWeight:500}}>{m.r}</span>
               </button>
             ))}
