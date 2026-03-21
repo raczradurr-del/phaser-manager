@@ -103,6 +103,20 @@ const { useState, useEffect, useMemo, useRef, useId, useCallback } = React;
 // ─── CONFIG ───
 // URL Worker Cloudflare pentru PDF de calitate. Lasă gol pentru html2pdf (local).
 const PDF_WORKER_URL = "https://phaser-pdf-worker.raczradurr.workers.dev";
+// După `npx wrangler deploy` în folderul html-public-proxy — altfel Supabase poate servi .html ca text/plain (vezi sursă în browser).
+const OFFER_HTML_PROXY_URL = "https://phaser-html-proxy.raczradurr.workers.dev";
+const FISA_PUBLIC_BUCKET = "fisa-public";
+/** Link trimis clientului: prin proxy (text/html corect) sau direct Supabase dacă proxy e gol. */
+const buildShareableHtmlPublicUrl = (sb, objectPath) => {
+  const p = String(objectPath || "").replace(/^\/+/, "");
+  if (!p || !sb) return "";
+  const proxy = typeof OFFER_HTML_PROXY_URL === "string" && OFFER_HTML_PROXY_URL.trim().startsWith("http")
+    ? OFFER_HTML_PROXY_URL.trim().replace(/\/$/, "")
+    : "";
+  if (proxy) return `${proxy}/${p}`;
+  const { data } = sb.storage.from(FISA_PUBLIC_BUCKET).getPublicUrl(p);
+  return data?.publicUrl || "";
+};
 const generatePdfFromHtml = async (html) => {
   if (!PDF_WORKER_URL || !PDF_WORKER_URL.startsWith("http") || !html) return null;
   const ctrl = new AbortController();
@@ -1964,12 +1978,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       const prefix = tab==="contract" ? "contract" : "offer";
       const path = `${prefix}-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
-      const { error } = await sb.storage.from("fisa-public").upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
+      const { error } = await sb.storage.from(FISA_PUBLIC_BUCKET).upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
       if (error) throw error;
-      const pub = sb.storage.from("fisa-public").getPublicUrl(path);
-      const publicUrl = pub?.data?.publicUrl;
+      const publicUrl = buildShareableHtmlPublicUrl(sb, path);
       if (!publicUrl || !/^https?:\/\//i.test(String(publicUrl))) {
-        console.error("getPublicUrl neașteptat:", pub);
         throw new Error("URL public invalid după upload.");
       }
       setOfferLinkUrl(publicUrl);
@@ -2601,9 +2613,9 @@ function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv }) {
       const html = encodeHtmlCodePoints(rawHtml);
       const path = `fisa-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
-      const { error } = await sb.storage.from("fisa-public").upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
+      const { error } = await sb.storage.from(FISA_PUBLIC_BUCKET).upload(path, blob, { contentType: "text/html; charset=utf-8", upsert: true });
       if (error) throw error;
-      const { data: { publicUrl } } = sb.storage.from("fisa-public").getPublicUrl(path);
+      const publicUrl = buildShareableHtmlPublicUrl(sb, path);
       setLocalUrl(publicUrl);
       if (updEv) updEv({ fisaUrl: publicUrl });
       setShow(true);
