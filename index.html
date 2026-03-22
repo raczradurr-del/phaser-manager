@@ -4782,11 +4782,13 @@ function App() {
   }, [setBandNotifications]);
 
   // ─── SUPABASE CLOUD SYNC ───
+  // Supabase e sursa de adevăr. localStorage e doar cache pentru încărcare rapidă.
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [syncErrorMsg, setSyncErrorMsg] = useState("");
   const syncTimerRef = useRef(null);
+  const initialSyncDoneRef = useRef(false);
 
-  // La pornire: încarcă din Supabase dacă datele de acolo sunt mai noi
+  // La pornire: ÎNTOTDEAUNA încarcă din Supabase (sursa de adevăr)
   useEffect(()=>{
     const client = getSbClient();
     if(!client) return;
@@ -4798,52 +4800,52 @@ function App() {
           console.error("[Supabase] Eroare la citire:", error.message, error.code, error.details);
           setSyncErrorMsg(error.message||String(error.code||""));
           setSyncStatus("error");
+          initialSyncDoneRef.current = true;
           return;
         }
-        if(!row?.data){ setSyncStatus("idle"); return; }
+        if(!row?.data){ setSyncStatus("idle"); initialSyncDoneRef.current = true; return; }
         const remote=row.data;
-        const localTs=parseInt(localStorage.getItem("phaser_sync_ts")||"0");
-        if((remote._ts||0)>localTs){
-          if(Array.isArray(remote.evs)) setEvs(remote.evs);
-          if(Array.isArray(remote.tasks)) setTasks(remote.tasks);
-          if(Array.isArray(remote.genExp)) setGE(remote.genExp);
-          if(Array.isArray(remote.annualCosts)) setAC(remote.annualCosts);
-          if(typeof remote.gigsPerYear==="number") setGigsPerYear(remote.gigsPerYear);
-          if(remote.templates){ setTemplates(remote.templates); try{localStorage.setItem(LS_KEYS.templates,JSON.stringify(remote.templates));}catch(e){} }
-          if(Array.isArray(remote.riderVersions)){ setRiderVersions(remote.riderVersions); try{localStorage.setItem(LS_KEYS.riderVersions,JSON.stringify(remote.riderVersions));}catch(e){} }
-          if(Array.isArray(remote.pressKitVersions)){ setPressKitVersions(remote.pressKitVersions); try{localStorage.setItem(LS_KEYS.pressKitVersions,JSON.stringify(remote.pressKitVersions));}catch(e){} }
-          if(Array.isArray(remote.playlistVersions)){ setPlaylistVersions(remote.playlistVersions); try{localStorage.setItem(LS_KEYS.playlistVersions,JSON.stringify(remote.playlistVersions));}catch(e){} }
-          if(remote.creative){ try{localStorage.setItem(LS_KEYS.creative,JSON.stringify(remote.creative));}catch(e){} }
-          if(remote.memberProfiles){ setMemberProfiles(remote.memberProfiles); try{localStorage.setItem(LS_KEYS.memberProfiles,JSON.stringify(remote.memberProfiles));}catch(e){} }
-          if(Array.isArray(remote.bandNotifications)){ setBandNotifications(remote.bandNotifications); try{localStorage.setItem(LS_KEYS.bandNotifications,JSON.stringify(remote.bandNotifications));}catch(e){} }
-          if(Array.isArray(remote.calBlocks)){ setCalBlocks(remote.calBlocks); try{localStorage.setItem(LS_KEYS.calBlocks,JSON.stringify(remote.calBlocks));}catch(e){} }
-          localStorage.setItem("phaser_sync_ts",String(remote._ts));
-          showToast("☁️ Date sincronizate din cloud");
-        }
+        // Supabase e mereu sursa de adevăr — aplicăm datele indiferent de timestamp
+        if(Array.isArray(remote.evs)) setEvs(remote.evs);
+        if(Array.isArray(remote.tasks)) setTasks(remote.tasks);
+        if(Array.isArray(remote.songs)) setSongs(remote.songs);
+        if(Array.isArray(remote.genExp)) setGE(remote.genExp);
+        if(Array.isArray(remote.annualCosts)) setAC(remote.annualCosts);
+        if(typeof remote.gigsPerYear==="number") setGigsPerYear(remote.gigsPerYear);
+        if(remote.templates) setTemplates(remote.templates);
+        if(Array.isArray(remote.riderVersions)) setRiderVersions(remote.riderVersions);
+        if(Array.isArray(remote.pressKitVersions)) setPressKitVersions(remote.pressKitVersions);
+        if(Array.isArray(remote.playlistVersions)) setPlaylistVersions(remote.playlistVersions);
+        if(remote.memberProfiles) setMemberProfiles(remote.memberProfiles);
+        if(Array.isArray(remote.bandNotifications)) setBandNotifications(remote.bandNotifications);
+        if(Array.isArray(remote.calBlocks)) setCalBlocks(remote.calBlocks);
         setSyncStatus("synced");
+        initialSyncDoneRef.current = true;
       })
       .catch((err)=>{
         console.error("[Supabase] Eroare la citire (catch):", err);
         setSyncErrorMsg(err?.message||String(err));
         setSyncStatus("error");
+        initialSyncDoneRef.current = true;
       });
   },[]);
 
   // La orice modificare: salvează în Supabase (debounced 2s)
+  // Nu salva înainte ca sync-ul inițial să fi terminat (evită suprascrierea datelor remote)
   useEffect(()=>{
+    if(!initialSyncDoneRef.current) return;
     if(syncTimerRef.current) clearTimeout(syncTimerRef.current);
     syncTimerRef.current=setTimeout(()=>{
       const client=getSbClient();
       if(!client) return;
       const ts=Date.now();
       const syncData={
-        evs,tasks,calBlocks,genExp,annualCosts,gigsPerYear,templates,
+        evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,
         riderVersions,pressKitVersions,playlistVersions,memberProfiles,
         bandNotifications,
         creative:loadCreative(),
         _ts:ts
       };
-      localStorage.setItem("phaser_sync_ts",String(ts));
       setSyncStatus("syncing");
       client.from("app_data").upsert({id:"phaser_main",data:syncData,updated_at:new Date().toISOString()},{onConflict:"id"})
         .then(({error})=>{
@@ -4851,7 +4853,10 @@ function App() {
             console.error("[Supabase] Eroare la salvare:", error.message, error.code, error.details);
             setSyncErrorMsg(error.message||String(error.code||""));
             setSyncStatus("error");
-          } else setSyncStatus("synced");
+          } else {
+            setSyncStatus("synced");
+            setSyncErrorMsg("");
+          }
         })
         .catch((err)=>{
           console.error("[Supabase] Eroare la salvare (catch):", err);
@@ -4859,7 +4864,7 @@ function App() {
           setSyncStatus("error");
         });
     },2000);
-  },[evs,tasks,calBlocks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications]);
+  },[evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications]);
 
   // ─── GOOGLE CALENDAR STATE ───
   const [gcalToken, setGcalToken] = useState(() => {
