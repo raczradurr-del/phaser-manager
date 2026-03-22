@@ -3,9 +3,54 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet, noimageindex"/>
+  <meta name="googlebot" content="noindex, nofollow"/>
+  <meta name="bingbot" content="noindex, nofollow"/>
   <title>Phaser Manager</title>
   <link rel="icon" type="image/png" href="assets/logo.png"/>
   <script>
+    // ─── PIN GATE ───────────────────────────────────────────────────────────────
+    (function(){
+      var PIN = "2407";
+      var KEY = "phaser_pin_ok";
+      if(sessionStorage.getItem(KEY) === "1") return;
+      document.addEventListener("DOMContentLoaded", function(){
+        var overlay = document.createElement("div");
+        overlay.id = "pin-gate";
+        overlay.style.cssText = "position:fixed;inset:0;z-index:99999;background:#09090b;display:flex;align-items:center;justify-content:center;flex-direction:column;font-family:system-ui,sans-serif";
+        overlay.innerHTML = [
+          '<img src="assets/logo.png" style="width:56px;height:56px;margin-bottom:20px;border-radius:14px" onerror="this.style.display=\'none\'"/>',
+          '<div style="font-size:20px;font-weight:800;color:#fff;margin-bottom:6px">Phaser Manager</div>',
+          '<div style="font-size:13px;color:#71717a;margin-bottom:28px">Introdu PIN-ul pentru acces</div>',
+          '<div style="display:flex;gap:10px;margin-bottom:16px">',
+            '<input id="pin-inp" type="password" inputmode="numeric" maxlength="6" placeholder="••••" style="padding:12px 18px;font-size:20px;letter-spacing:8px;border-radius:12px;border:2px solid #27272a;background:#18181b;color:#fff;outline:none;width:140px;text-align:center;transition:border .2s"/>',
+            '<button id="pin-btn" style="padding:12px 20px;border-radius:12px;border:none;background:linear-gradient(135deg,#f59e0b,#d97706);color:#000;font-weight:800;font-size:15px;cursor:pointer">→</button>',
+          '</div>',
+          '<div id="pin-err" style="font-size:12px;color:#ef4444;min-height:18px"></div>'
+        ].join("");
+        document.body.appendChild(overlay);
+        var inp = document.getElementById("pin-inp");
+        var btn = document.getElementById("pin-btn");
+        var err = document.getElementById("pin-err");
+        function tryPin(){
+          if(inp.value === PIN){
+            sessionStorage.setItem(KEY,"1");
+            overlay.style.opacity="0";
+            overlay.style.transition="opacity .3s";
+            setTimeout(function(){overlay.remove();},300);
+          } else {
+            err.textContent = "PIN greșit. Încearcă din nou.";
+            inp.value="";
+            inp.style.borderColor="#ef4444";
+            setTimeout(function(){inp.style.borderColor="#27272a";err.textContent="";},1500);
+          }
+        }
+        btn.addEventListener("click", tryPin);
+        inp.addEventListener("keydown", function(e){ if(e.key==="Enter") tryPin(); });
+        inp.focus();
+      });
+    })();
+    // ────────────────────────────────────────────────────────────────────────────
     window.onerror = function(msg, url, line, col, err) {
       var r = document.getElementById('root');
       if (r) {
