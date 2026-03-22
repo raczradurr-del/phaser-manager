@@ -4784,7 +4784,7 @@ function AIChatWidget(props) {
       var sys=buildAIContext(evs,tasks);
       var reply;
       if(model==="llama"){
-        var workerUrl=apiKeys.llamaWorker;
+        var workerUrl=apiKeys.llamaWorker||"https://phaser-ai-worker.raczradurr.workers.dev";
         if(!workerUrl){setMsgs(function(m){return m.concat([{role:"assistant",content:"⚠️ Configurează URL-ul Worker Cloudflare în ⚙️ Setări AI."}]);});setLoading(false);return;}
         var rl=await fetch(workerUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({messages:history,system:sys})});
         var dl=await rl.json();
@@ -4807,7 +4807,7 @@ function AIChatWidget(props) {
     setLoading(false);
   }
 
-  var hasKey=!!apiKeys.llamaWorker;
+  var hasKey=true;
 
   return React.createElement("div",null,
     React.createElement("button",{onClick:function(){setOpen(function(o){return !o;});},title:"AI Assistant",style:{position:"fixed",bottom:mob?72:24,right:20,zIndex:9999,width:50,height:50,borderRadius:25,background:open?"#6d28d9":"linear-gradient(135deg,#7c3aed,#4f46e5)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(79,70,229,0.5)",fontSize:22,color:"#fff"}},open?"✕":"🤖"),
@@ -4992,7 +4992,7 @@ function App() {
         if(remote.memberProfiles) setMemberProfiles(remote.memberProfiles);
         if(Array.isArray(remote.bandNotifications)) setBandNotifications(remote.bandNotifications);
         if(Array.isArray(remote.calBlocks)) setCalBlocks(remote.calBlocks);
-        if(remote.aiSettings&&typeof remote.aiSettings==="object") setAiSettings(remote.aiSettings);
+        if(remote.aiSettings&&typeof remote.aiSettings==="object") setAiSettings(function(prev){return Object.assign({},prev,remote.aiSettings,{llamaWorker:remote.aiSettings.llamaWorker||prev.llamaWorker});});
         setSyncStatus("synced");
         initialSyncDoneRef.current = true;
       })
