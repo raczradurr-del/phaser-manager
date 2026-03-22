@@ -34,6 +34,7 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html { -webkit-text-size-adjust: 100%; height: 100%; overflow: hidden; }
+    @keyframes tourPulse { 0%,100%{outline-color:rgba(245,158,11,.35);} 50%{outline-color:rgba(245,158,11,.8);} }
     body { height: 100%; overflow: hidden; margin: 0; font-family: 'Inter', system-ui, sans-serif; background: #0a0a0c; color: #fff; }
     #root { height: 100%; min-height: 100vh; min-height: -webkit-fill-available; overflow: hidden; }
     .tasks-cal-scroll::-webkit-scrollbar { display: none; }
@@ -4626,6 +4627,105 @@ function processLocalCmd(input, evs, tasks) {
   return null; // nu e comandă locală → merge la AI
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── TOUR APLICAȚIE — spotlight interactiv ───
+// ═══════════════════════════════════════════════════════════════════════════════
+const TOUR_STEPS = [
+  { id:"welcome",  target:null,             tab:null,        title:"Bun venit în Phaser Manager! 🎉", desc:"Hai să îți arătăm rapid tot ce poți face cu aplicația. Poți ieși oricând apăsând Skip." },
+  { id:"calendar", target:"[data-tour='nav-calendar']", tab:"calendar", title:"📅 Calendarul trupei", desc:"Vizualizezi toate evenimentele pe lună. Dublu-click pe o zi goală = adaugi rapid ofertă, event, task sau ocupat." },
+  { id:"cal-grid", target:"[data-tour='cal-grid']",     tab:"calendar", title:"📅 Gridul calendarului", desc:"Chip-urile colorate arată statusul fiecărui event. Click pe chip = preview rapid (ca Google Calendar). Trage chip-ul pe altă zi pentru a-l muta." },
+  { id:"events",   target:"[data-tour='nav-events']",   tab:"events",   title:"🎪 Evenimente", desc:"Boardul Kanban cu toate evenimentele trupei. De la Ofertă → Așteptare → Avans → Confirmat. Trage cardul pentru a schimba statusul." },
+  { id:"offers",   target:"[data-tour='nav-offers']",   tab:"offers",   title:"📄 Oferte active", desc:"Toate ofertele care nu au primit răspuns. Generezi un link public pentru client direct din ofertă — clientul vede o pagină dedicată." },
+  { id:"tasks",    target:"[data-tour='nav-tasks']",    tab:"tasks",    title:"✅ Task-uri", desc:"Asignează task-uri membrilor cu deadline, prioritate și subtask-uri. La atribuire, membrul primește notificare automată în aplicație." },
+  { id:"music",    target:"[data-tour='nav-music']",    tab:"music",    title:"🎵 Muzică", desc:"Biblioteca de melodii a trupei: tonalitate, BPM, status (repertoriu / idee). Poți adăuga linkuri audio și YouTube." },
+  { id:"docs",     target:"[data-tour='nav-docs']",     tab:"docs",     title:"📁 Docs", desc:"Rider tehnic, Press Kit și Playlist — template-uri editabile incluse în ofertă. Poți genera un link public sau descărca PDF." },
+  { id:"finances", target:"[data-tour='nav-finances']", tab:"finances", title:"💰 Finanțe", desc:"Urmărești cheltuielile generale ale trupei, costurile anuale fixe și proiecția de profit net în funcție de câte events ai pe an." },
+  { id:"contul",   target:"[data-tour='nav-contul']",   tab:"contul",   title:"👤 Contul meu", desc:"Profil personal cu poză, date de contact și IBAN. Acestea apar în footer-ul ofertelor când ești delegat." },
+  { id:"gcal",     target:"[data-tour='gcal-btn']",     tab:"contul",   title:"📅 Google Calendar", desc:"Conectează Google Calendar pentru a sincroniza automat evenimentele. Apar ca events All Day cu link direct la ofertă sau fișa evenimentului în descriere." },
+  { id:"done",     target:null,             tab:null,        title:"Ești gata! 🚀", desc:"Asta e tot! Poți relua turul oricând din Contul meu → Tur aplicație. Succes cu Phaser!" },
+];
+
+function TourOverlay({ steps, step, setStep, setTab }) {
+  const [rect, setRect] = React.useState(null);
+  const [tooltipPos, setTooltipPos] = React.useState({});
+  const current = steps[step];
+
+  React.useEffect(() => {
+    if (current?.tab && setTab) setTab(current.tab);
+  }, [step]);
+
+  React.useEffect(() => {
+    if (!current?.target) { setRect(null); return; }
+    const tryFind = (attempts) => {
+      const el = document.querySelector(current.target);
+      if (el) {
+        el.scrollIntoView({ behavior:"smooth", block:"center", inline:"center" });
+        setTimeout(() => {
+          const r = el.getBoundingClientRect();
+          setRect({ top:r.top, left:r.left, width:r.width, height:r.height });
+          // calc tooltip position
+          const PAD = 16, TW = 300, TH_EST = 180;
+          let t = r.bottom + 12, l = Math.max(PAD, Math.min(r.left, window.innerWidth - TW - PAD));
+          if (t + TH_EST > window.innerHeight - PAD) t = r.top - TH_EST - 12;
+          if (t < PAD) t = PAD;
+          setTooltipPos({ top:t, left:l });
+        }, 120);
+      } else if (attempts > 0) {
+        setTimeout(() => tryFind(attempts - 1), 200);
+      } else { setRect(null); }
+    };
+    tryFind(5);
+  }, [step, current?.target]);
+
+  if (step === null || step === undefined) return null;
+  const isFirst = step === 0;
+  const isLast  = step === steps.length - 1;
+
+  return <div style={{position:"fixed",inset:0,zIndex:99990,pointerEvents:"none"}}>
+    {/* Dark veil — nu blochează click-uri (pointer-events none la nivel de container) */}
+    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.65)",pointerEvents:"auto"}} onClick={()=>setStep(null)}/>
+    {/* Spotlight ring în jurul elementului țintă */}
+    {rect&&<div style={{
+      position:"fixed", top:rect.top-8, left:rect.left-8,
+      width:rect.width+16, height:rect.height+16,
+      borderRadius:12, border:"2px solid #f59e0b",
+      boxShadow:"0 0 0 9999px rgba(0,0,0,0)",
+      outline:"3px solid rgba(245,158,11,.35)",
+      pointerEvents:"none", zIndex:99991,
+      animation:"tourPulse 1.5s ease-in-out infinite"
+    }}/>}
+    {/* Tooltip */}
+    <div style={{
+      position:"fixed",
+      top: current.target ? tooltipPos.top : "50%",
+      left: current.target ? tooltipPos.left : "50%",
+      transform: current.target ? "none" : "translate(-50%,-50%)",
+      width:300, maxWidth:"calc(100vw - 32px)",
+      background:"#111", border:"1px solid #2a2a2a",
+      borderRadius:16, padding:"20px 20px 16px",
+      boxShadow:"0 24px 60px rgba(0,0,0,.7)",
+      zIndex:99999, pointerEvents:"auto"
+    }}>
+      {/* Progress dots */}
+      <div style={{display:"flex",gap:4,marginBottom:14}}>
+        {steps.map((_,i)=><div key={i} style={{height:3,flex:i===step?3:1,borderRadius:2,background:i===step?"#f59e0b":i<step?"#555":"#2a2a2a",transition:"all .3s"}}/>)}
+      </div>
+      <div style={{fontSize:11,color:"#f59e0b",fontWeight:700,marginBottom:6,letterSpacing:.5}}>
+        {step+1} / {steps.length}
+      </div>
+      <div style={{fontSize:16,fontWeight:700,color:"#fff",marginBottom:8,lineHeight:1.3}}>{current.title}</div>
+      <div style={{fontSize:13,color:"#999",lineHeight:1.65,marginBottom:18}}>{current.desc}</div>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        {!isFirst&&<button onClick={()=>setStep(s=>s-1)} style={{padding:"9px 14px",borderRadius:9,border:"1px solid #333",background:"transparent",color:"#ccc",cursor:"pointer",fontSize:13,fontWeight:600}}>← Înapoi</button>}
+        <button onClick={()=>isLast?setStep(null):setStep(s=>s+1)} style={{flex:1,padding:"9px 16px",borderRadius:9,border:"none",background:"#f59e0b",color:"#000",cursor:"pointer",fontSize:13,fontWeight:800}}>
+          {isLast?"Gata! 🎉":"Următor →"}
+        </button>
+        {!isLast&&<button onClick={()=>setStep(null)} style={{padding:"9px 12px",borderRadius:9,border:"none",background:"transparent",color:"#555",cursor:"pointer",fontSize:12}}>Skip</button>}
+      </div>
+    </div>
+  </div>;
+}
+
 function AIChatWidget(props) {
   var th=props.th,evs=props.evs,tasks=props.tasks,mob=props.mob;
   var _o=useState(false); var open=_o[0],setOpen=_o[1];
@@ -4830,6 +4930,7 @@ function App() {
 
   // ─── SUPABASE CLOUD SYNC ───
   // Supabase e sursa de adevăr. localStorage e doar cache pentru încărcare rapidă.
+  const [tourStep, setTourStep] = useState(null);
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [syncErrorMsg, setSyncErrorMsg] = useState("");
   const syncTimerRef = useRef(null);
@@ -5359,7 +5460,7 @@ function App() {
 
 
         <nav style={{flex:1,padding:mob?"8px 6px":"10px 12px",display:"flex",flexDirection:"column",gap:2}}>
-          {navItems.map(it=><button key={it.id} onClick={()=>{ setTab(it.id); if(mob) setSbMode("mini"); }} title={sbMode==="mini"?it.l:undefined}
+          {navItems.map(it=><button key={it.id} data-tour={"nav-"+it.id} onClick={()=>{ setTab(it.id); if(mob) setSbMode("mini"); }} title={sbMode==="mini"?it.l:undefined}
             style={{display:"flex",alignItems:"center",gap:12,padding:sbMode==="full"?(mob?"12px 10px":"10px 14px"):(mob?"12px 0":"10px 0"),justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",cursor:"pointer",fontSize:mob?13:12,fontWeight:tab===it.id?700:400,background:tab===it.id?(effectiveTheme==="light"?"rgba(0,0,0,.1)":"rgba(255,255,255,.1)"):"transparent",color:tab===it.id?th.sba:th.sbt,transition:"all .15s",whiteSpace:"nowrap",position:"relative",minHeight:mob?44:undefined,minWidth:sbMode==="mini"&&mob?44:undefined}}>
             <it.Ic s={16}/>
             {sbMode==="full"&&<><span style={{flex:1,textAlign:"left"}}>{it.l}</span>{it.badge>0&&<span style={{background:"#f59e0b",color:"#000",borderRadius:10,fontSize:9,fontWeight:700,padding:"1px 6px"}}>{it.badge}</span>}</>}
@@ -5384,7 +5485,7 @@ function App() {
 
         {/* Google Calendar connect */}
         <div style={{padding:"10px 12px 0",borderTop:`1px solid ${th.sbb}`}}>
-          <button onClick={gcalToken ? disconnectGCal : connectGCal}
+          <button data-tour="gcal-btn" onClick={gcalToken ? disconnectGCal : connectGCal}
             title={sbMode==="mini"?(gcalToken?"Calendar conectat ✓":"Conectează Calendar Google"):undefined}
             style={{display:"flex",alignItems:"center",gap:8,padding:sbMode==="full"?"8px 14px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",background:gcalToken?"rgba(34,197,94,.12)":"transparent",color:gcalToken?"#22c55e":th.sbt,fontSize:11,cursor:"pointer",width:"100%",transition:"all .2s"}}>
             <span style={{fontSize:13}}>📅</span>
@@ -5406,7 +5507,7 @@ function App() {
       {/* MOBILE BOTTOM NAV — vizibil doar pe mobil prin CSS */}
       <nav className="mob-bottom-nav" style={{background:th.sb,borderTopColor:th.sbb}}>
         {navItems.map(it=>(
-          <button key={it.id} className={"mob-bottom-nav-btn"+(tab===it.id?" nav-active":"")} onClick={()=>setTab(it.id)}
+          <button key={it.id} data-tour={"nav-"+it.id} className={"mob-bottom-nav-btn"+(tab===it.id?" nav-active":"")} onClick={()=>setTab(it.id)}
             style={{color:tab===it.id?th.a:th.sbt}}>
             {it.badge>0&&<span className="mob-bottom-nav-badge"/>}
             <it.Ic s={tab===it.id?22:20}/>
@@ -6152,7 +6253,7 @@ function App() {
                   <button onClick={()=>{const n=new Date();setCalM(new Date(n.getFullYear(),n.getMonth()));setCalDateSearch("");setCalSidebarDate(null);}} style={{...sty.bg,padding:"5px 10px",fontSize:12}}>Azi</button>
                 </div>
                 <div style={mob?{width:"100%",overflow:"visible"}:{flex:1,minHeight:0,overflowY:"auto",overflowX:"auto",WebkitOverflowScrolling:"touch",overscrollBehavior:"contain"}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(7, minmax(0, 1fr))",gap:mob?2:3,width:"100%",minWidth:mob?0:400}}>
+                <div data-tour="cal-grid" style={{display:"grid",gridTemplateColumns:"repeat(7, minmax(0, 1fr))",gap:mob?2:3,width:"100%",minWidth:mob?0:400}}>
                   {["Lu","Ma","Mi","Jo","Vi","Sâ","Du"].map(d=><div key={d} style={{padding:mob?"5px 1px":"6px 4px",textAlign:"center",fontSize:mob?9:11,color:th.tm,fontWeight:600,borderBottom:`1px solid ${th.b}`,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d}</div>)}
                   {Array.from({length:off}).map((_,i)=><div key={`e${i}`} style={{minHeight:mob?52:70}}/>)}
                   {Array.from({length:dn}).map((_,i)=>{
@@ -6246,7 +6347,12 @@ function App() {
 
           {/* CONTUL MEU — doar pentru membri */}
           {tab==="contul"&&user?.memberId&&<div style={{animation:"su .3s ease",maxWidth:420}}>
-            <h1 style={{fontSize:22,fontWeight:700,marginBottom:16}}>Contul meu</h1>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
+              <h1 style={{fontSize:22,fontWeight:700}}>Contul meu</h1>
+              <button onClick={()=>setTourStep(0)} style={{display:"flex",alignItems:"center",gap:8,padding:"9px 16px",borderRadius:10,border:"1px solid #f59e0b",background:"rgba(245,158,11,.08)",color:"#f59e0b",fontWeight:700,fontSize:13,cursor:"pointer"}}>
+                🎓 Tur aplicație
+              </button>
+            </div>
             <p style={{fontSize:13,color:th.tm,marginBottom:20}}>Datele tale apar în footer-ul ofertelor când ești persoana delegată.</p>
             {(()=>{
               const m=MEMBERS.find(x=>x.id===user.memberId);
@@ -7695,6 +7801,7 @@ function App() {
         showToast={showToast}
       />})()}
 
+      {tourStep!==null&&<TourOverlay steps={TOUR_STEPS} step={tourStep} setStep={setTourStep} setTab={setTab}/>}
       <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
       <Toast message={toast.message} visible={toast.visible} variant={toast.variant}/>
     </div>
