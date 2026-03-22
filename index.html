@@ -4274,51 +4274,16 @@ function buildAIContext(evs, tasks) {
 
 function SettingsAI(props) {
   var th=props.th,apiKeys=props.apiKeys,onSave=props.onSave,onClose=props.onClose;
-  var initModel=props.model;
-  var _k=useState({claude:apiKeys.claude||"",openai:apiKeys.openai||"",llamaWorker:apiKeys.llamaWorker||""}); var keys=_k[0],setKeys=_k[1];
-  var _m=useState(initModel); var mdl=_m[0],setMdl=_m[1];
-  var _sc=useState(false); var showC=_sc[0],setShowC=_sc[1];
-  var _so=useState(false); var showO=_so[0],setShowO=_so[1];
-  var MODELS=[{v:"llama",l:"Llama 3",sub:"Cloudflare · Gratuit",color:"#f59e0b"},{v:"claude",l:"Claude",sub:"Anthropic",color:"#7c3aed"},{v:"openai",l:"GPT-4o Mini",sub:"OpenAI",color:"#10b981"}];
+  var _k=useState({llamaWorker:apiKeys.llamaWorker||""}); var keys=_k[0],setKeys=_k[1];
   return React.createElement("div",{style:{background:th.c,border:"1px solid "+th.b,borderRadius:14,width:340,padding:24,maxWidth:"90vw"},onClick:function(e){e.stopPropagation();}},
-    React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:16}},"⚙️ Setări AI"),
-    React.createElement("div",{style:{marginBottom:16}},
-      React.createElement("div",{style:{fontSize:11,color:th.tm,fontWeight:600,marginBottom:8}},"Model"),
-      React.createElement("div",{style:{display:"flex",gap:6}},
-        MODELS.map(function(opt){
-          return React.createElement("button",{key:opt.v,onClick:function(){setMdl(opt.v);},style:{flex:1,padding:"9px 6px",borderRadius:10,cursor:"pointer",textAlign:"center",border:"2px solid "+(mdl===opt.v?opt.color:th.b),background:mdl===opt.v?"rgba(245,158,11,0.08)":th.h,color:th.t,transition:"all .15s"}},
-            React.createElement("div",{style:{fontSize:11,fontWeight:700}}),
-            React.createElement("div",{style:{fontSize:12,fontWeight:700}}),
-            React.createElement("div",{style:{fontSize:12,fontWeight:mdl===opt.v?800:500,color:mdl===opt.v?opt.color:th.t}},opt.l),
-            React.createElement("div",{style:{fontSize:9,color:opt.color,marginTop:1}},opt.sub)
-          );
-        })
-      )
-    ),
-    mdl==="llama"&&React.createElement("div",{style:{marginBottom:18,padding:"14px 16px",borderRadius:10,background:"rgba(245,158,11,.06)",border:"1px solid rgba(245,158,11,.2)"}},
-      React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#f59e0b",marginBottom:8}},"🦙 Llama 3.1 8B — Cloudflare AI Workers"),
-      React.createElement("div",{style:{fontSize:11,color:th.tm,marginBottom:10,lineHeight:1.5}},"Gratuit, fără API key. Trebuie deploiat un Worker Cloudflare. URL-ul workerului tău:"),
-      React.createElement("input",{type:"text",value:keys.llamaWorker,onChange:function(e){setKeys(function(k){return Object.assign({},k,{llamaWorker:e.target.value});});},placeholder:"https://phaser-ai-worker.raczradurr.workers.dev",style:{width:"100%",padding:"8px 10px",borderRadius:8,border:"1px solid rgba(245,158,11,.3)",background:th.h,color:th.t,fontSize:11,outline:"none",boxSizing:"border-box"}}),
-      React.createElement("div",{style:{fontSize:9,color:th.tm,marginTop:6}},"Fișierele Worker sunt în folderul phaser-ai-worker/ — rulează: npx wrangler deploy")
-    ),
-    mdl==="claude"&&React.createElement("div",{style:{marginBottom:18}},
-      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}},"Claude API Key"),
-      React.createElement("div",{style:{display:"flex",gap:6}},
-        React.createElement("input",{type:showC?"text":"password",value:keys.claude,onChange:function(e){setKeys(function(k){return Object.assign({},k,{claude:e.target.value});});},placeholder:"sk-ant-...",style:{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,outline:"none"}}),
-        React.createElement("button",{onClick:function(){setShowC(function(v){return !v;});},style:{padding:"6px 8px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:12}},showC?"🙈":"👁️")
-      ),
-      React.createElement("div",{style:{fontSize:9,color:th.tm,marginTop:3}},"console.anthropic.com → API Keys")
-    ),
-    mdl==="openai"&&React.createElement("div",{style:{marginBottom:18}},
-      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:4}},"OpenAI API Key"),
-      React.createElement("div",{style:{display:"flex",gap:6}},
-        React.createElement("input",{type:showO?"text":"password",value:keys.openai,onChange:function(e){setKeys(function(k){return Object.assign({},k,{openai:e.target.value});});},placeholder:"sk-...",style:{flex:1,padding:"8px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,outline:"none"}}),
-        React.createElement("button",{onClick:function(){setShowO(function(v){return !v;});},style:{padding:"6px 8px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:12}},showO?"🙈":"👁️")
-      ),
-      React.createElement("div",{style:{fontSize:9,color:th.tm,marginTop:3}},"platform.openai.com → API Keys")
+    React.createElement("h3",{style:{fontSize:15,fontWeight:700,marginBottom:4}},"⚙️ Setări AI"),
+    React.createElement("div",{style:{fontSize:11,color:"#f59e0b",fontWeight:600,marginBottom:18}},"🦙 Llama 3.1 8B · Cloudflare AI Workers · Gratuit"),
+    React.createElement("div",{style:{marginBottom:18}},
+      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:6}},"Worker URL"),
+      React.createElement("input",{type:"text",value:keys.llamaWorker,onChange:function(e){setKeys(function(k){return Object.assign({},k,{llamaWorker:e.target.value});});},placeholder:"https://phaser-ai-worker.raczradurr.workers.dev",style:{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid rgba(245,158,11,.4)",background:th.h,color:th.t,fontSize:11,outline:"none",boxSizing:"border-box"}})
     ),
     React.createElement("div",{style:{display:"flex",gap:8}},
-      React.createElement("button",{onClick:function(){onSave(keys,mdl);},style:{flex:1,padding:10,borderRadius:10,border:"none",background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#000",fontWeight:800,cursor:"pointer",fontSize:13}},"Salvează"),
+      React.createElement("button",{onClick:function(){onSave(keys);},style:{flex:1,padding:10,borderRadius:10,border:"none",background:"linear-gradient(135deg,#f59e0b,#d97706)",color:"#000",fontWeight:800,cursor:"pointer",fontSize:13}},"Salvează"),
       React.createElement("button",{onClick:onClose,style:{padding:"10px 16px",borderRadius:10,border:"1px solid "+th.b,background:th.h,color:th.t,cursor:"pointer",fontSize:13}},"Anulează")
     )
   );
@@ -4737,22 +4702,21 @@ function TourOverlay({ steps, step, setStep, setTab }) {
 
 function AIChatWidget(props) {
   var th=props.th,evs=props.evs,tasks=props.tasks,mob=props.mob;
+  var aiSettings=props.aiSettings||{};
+  var setAiSettings=props.setAiSettings||function(){};
+  var apiKeys=aiSettings;
+  var model="llama";
   var _o=useState(false); var open=_o[0],setOpen=_o[1];
   var _ms=useState([]); var msgs=_ms[0],setMsgs=_ms[1];
   var _in=useState(""); var input=_in[0],setInput=_in[1];
   var _ld=useState(false); var loading=_ld[0],setLoading=_ld[1];
   var _ss=useState(false); var showS=_ss[0],setShowS=_ss[1];
-  var _ak=useState(function(){try{return JSON.parse(localStorage.getItem("pm_ai_keys")||"{}");}catch(e){return {};}});
-  var apiKeys=_ak[0],setApiKeys=_ak[1];
-  var _md=useState(localStorage.getItem("pm_ai_model")||"claude"); var model=_md[0],setModel=_md[1];
   var bottomRef=useRef(null);
 
   useEffect(function(){if(bottomRef.current)bottomRef.current.scrollIntoView({behavior:"smooth"});},[msgs,loading]);
 
-  function saveSettings(keys,m){
-    localStorage.setItem("pm_ai_keys",JSON.stringify(keys));
-    localStorage.setItem("pm_ai_model",m);
-    setApiKeys(keys);setModel(m);setShowS(false);
+  function saveSettings(keys){
+    setAiSettings(keys);setShowS(false);
   }
 
   async function sendMsg(){
@@ -4808,7 +4772,7 @@ function AIChatWidget(props) {
         React.createElement("span",{style:{fontSize:20}},"🤖"),
         React.createElement("div",{style:{flex:1}},
           React.createElement("div",{style:{fontSize:13,fontWeight:700}},"AI Assistant"),
-          React.createElement("div",{style:{fontSize:10,color:th.tm}},(model==="llama"?"🦙 Llama 3.1 (Cloudflare)":model==="claude"?"Claude 3.5 Haiku":"GPT-4o Mini")+" "+(hasKey?"✓":"— neconfigurat"))
+          React.createElement("div",{style:{fontSize:10,color:th.tm}},"🦙 Llama 3.1 · Cloudflare "+(hasKey?"✓":"— configurează Worker URL"))
         ),
         React.createElement("button",{onClick:function(){setShowS(true);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"⚙️"),
         React.createElement("button",{onClick:function(){setMsgs([]);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"🗑")
@@ -4829,7 +4793,7 @@ function AIChatWidget(props) {
       )
     ),
     showS&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10000},onClick:function(){setShowS(false);}},
-      React.createElement(SettingsAI,{th:th,apiKeys:apiKeys,model:model,onSave:saveSettings,onClose:function(){setShowS(false);}})
+      React.createElement(SettingsAI,{th:th,apiKeys:apiKeys,onSave:saveSettings,onClose:function(){setShowS(false);}})
     )
   );
 }
@@ -4851,6 +4815,7 @@ function App() {
   const [songs, setSongs] = useLocalStorageState(LS_KEYS.songs, loadSongs);
   const [calBlocks, setCalBlocks] = useLocalStorageState(LS_KEYS.calBlocks, loadCalBlocks);
   const [bandNotifications, setBandNotifications] = useLocalStorageState(LS_KEYS.bandNotifications, loadBandNotifications);
+  const [aiSettings, setAiSettings] = useState({llamaWorker:""});
   const [finMember, setFinMember] = useState(null);
   const [templates, setTemplates] = useState(loadTemplates);
   const { modal, payload, openModal, closeModal } = useModal();
@@ -4984,6 +4949,7 @@ function App() {
         if(remote.memberProfiles) setMemberProfiles(remote.memberProfiles);
         if(Array.isArray(remote.bandNotifications)) setBandNotifications(remote.bandNotifications);
         if(Array.isArray(remote.calBlocks)) setCalBlocks(remote.calBlocks);
+        if(remote.aiSettings&&typeof remote.aiSettings==="object") setAiSettings(remote.aiSettings);
         setSyncStatus("synced");
         initialSyncDoneRef.current = true;
       })
@@ -5007,7 +4973,7 @@ function App() {
       const syncData={
         evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,
         riderVersions,pressKitVersions,playlistVersions,memberProfiles,
-        bandNotifications,
+        bandNotifications,aiSettings,
         creative:loadCreative(),
         _ts:ts
       };
@@ -5029,7 +4995,7 @@ function App() {
           setSyncStatus("error");
         });
     },2000);
-  },[evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications]);
+  },[evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications,aiSettings]);
 
   // ─── GOOGLE CALENDAR STATE ───
   const [gcalToken, setGcalToken] = useState(() => {
@@ -7819,7 +7785,7 @@ function App() {
       />})()}
 
       {tourStep!==null&&<TourOverlay steps={TOUR_STEPS} step={tourStep} setStep={setTourStep} setTab={setTab}/>}
-      <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob}/>
+      <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob} aiSettings={aiSettings} setAiSettings={setAiSettings}/>
       <Toast message={toast.message} visible={toast.visible} variant={toast.variant}/>
     </div>
   );
