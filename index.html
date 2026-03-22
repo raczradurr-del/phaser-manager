@@ -48,36 +48,47 @@
         position: fixed;
         bottom: 0; left: 0; right: 0;
         z-index: 300;
-        height: 60px;
+        height: 72px;
         padding-bottom: env(safe-area-inset-bottom);
-        border-top: 1px solid rgba(255,255,255,.08);
+        border-top: 1px solid rgba(255,255,255,.1);
         background: var(--nav-bg, #111);
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
         scrollbar-width: none;
         align-items: stretch;
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
       }
       .mob-bottom-nav::-webkit-scrollbar { display: none; }
       .mob-bottom-nav-btn {
         flex: 1;
-        min-width: 56px;
+        min-width: 60px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 3px;
+        gap: 4px;
         border: none;
         background: transparent;
         cursor: pointer;
         font-family: inherit;
-        padding: 6px 4px 4px;
+        padding: 8px 4px 6px;
         position: relative;
         transition: opacity .15s;
       }
-      .mob-bottom-nav-btn span.nav-lbl { font-size: 9px; font-weight: 600; letter-spacing: .2px; }
+      .mob-bottom-nav-btn.nav-active::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 50%; transform: translateX(-50%);
+        width: 32px; height: 3px;
+        border-radius: 0 0 3px 3px;
+        background: currentColor;
+        opacity: 0.9;
+      }
+      .mob-bottom-nav-btn span.nav-lbl { font-size: 11px; font-weight: 600; letter-spacing: .1px; }
       .mob-bottom-nav-badge {
-        position: absolute; top: 6px; right: calc(50% - 14px);
-        width: 7px; height: 7px; border-radius: 50%;
+        position: absolute; top: 7px; right: calc(50% - 16px);
+        width: 8px; height: 8px; border-radius: 50%;
         background: #f59e0b;
       }
     }
@@ -3139,7 +3150,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             {ev.cat==="private"&&<div style={{marginBottom:16}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Ospitalitate</div><div style={{fontSize:12,color:"#666"}}>{(()=>{const h=ev.hosp&&!Array.isArray(ev.hosp)?ev.hosp:{};const c=h.camere??0,m=h.meniuri??0;const s=(c>0?`${c} camere`:"")+(c>0&&m>0?" · ":"")+(m>0?`${m} meniuri`:"");return s||"—";})()}</div></div>}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing — Load in · Soundcheck · Show start · Load out</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
                 {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=><div key={i} style={{padding:10,borderRadius:8,background:"#f8f8f8",textAlign:"center",border:"1px solid #e5e5e5"}}><div style={{fontSize:14,marginBottom:3}}>{x.i}</div><div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div><div style={{fontSize:15,fontWeight:800,color:x.v?"#111":"#999"}}>{formatDisplayDateTime(x.v,ev.date)}</div></div>)}
               </div>
             </div>
@@ -3582,7 +3593,7 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
       <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:12,color:"#22c55e",display:"flex",alignItems:"center",gap:6}}>📋 Timing</div>
       <div style={{marginBottom:12}}>
         <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Load in · Soundcheck · Show start · Load out</div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+        <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:6}}>
           {[{l:"Load In",v:ev.li,i:"📦",k:"li"},{l:"Soundcheck",v:ev.sc,i:"🎛",k:"sc"},{l:"Show Start",v:ev.ss,i:"🎤",k:"ss"},{l:"Load Out",v:ev.lo,i:"🚐",k:"lo"}].map((x,i)=>(
             <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
               <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
@@ -5347,24 +5358,24 @@ function App() {
       {/* MOBILE BOTTOM NAV — vizibil doar pe mobil prin CSS */}
       <nav className="mob-bottom-nav" style={{background:th.sb,borderTopColor:th.sbb}}>
         {navItems.map(it=>(
-          <button key={it.id} className="mob-bottom-nav-btn" onClick={()=>setTab(it.id)}
+          <button key={it.id} className={"mob-bottom-nav-btn"+(tab===it.id?" nav-active":"")} onClick={()=>setTab(it.id)}
             style={{color:tab===it.id?th.a:th.sbt}}>
             {it.badge>0&&<span className="mob-bottom-nav-badge"/>}
-            <it.Ic s={tab===it.id?20:18}/>
-            <span className="nav-lbl" style={{opacity:tab===it.id?1:.65}}>{it.l}</span>
+            <it.Ic s={tab===it.id?22:20}/>
+            <span className="nav-lbl" style={{opacity:tab===it.id?1:.55,fontWeight:tab===it.id?700:500}}>{it.l}</span>
           </button>
         ))}
         {/* Logout compact */}
         <button className="mob-bottom-nav-btn" onClick={()=>{ try{localStorage.removeItem(LS_SESSION_MEMBER);}catch(e){} setUser(null); }}
-          style={{color:th.sbt,minWidth:48}}>
-          <IcOut s={18}/>
-          <span className="nav-lbl" style={{opacity:.55}}>Schimbă</span>
+          style={{color:th.sbt,minWidth:52}}>
+          <IcOut s={20}/>
+          <span className="nav-lbl" style={{opacity:.5}}>Schimbă</span>
         </button>
       </nav>
 
       {/* MAIN — un singur strat scroll pe mobil (.app-main-scroll); părintele rămâne overflow:hidden */}
       <div style={{flex:1,minHeight:0,overflow:"hidden",display:"flex",flexDirection:"column",position:"relative"}}>
-        <div className={mob?"app-main-scroll":""} style={{flex:1,minHeight:0,...(mob?{}:{overflow:"auto"}),padding:mob?"14px 16px 80px":"22px 36px 22px 44px",paddingLeft:mob?16:(sbMode==="mini"?52:44),paddingBottom:mob?"max(80px, calc(60px + env(safe-area-inset-bottom)))":"22px"}}>
+        <div className={mob?"app-main-scroll":""} style={{flex:1,minHeight:0,...(mob?{}:{overflow:"auto"}),padding:mob?"14px 16px 80px":"22px 36px 22px 44px",paddingLeft:mob?16:(sbMode==="mini"?52:44),paddingBottom:mob?"max(90px, calc(72px + env(safe-area-inset-bottom)))":"22px"}}>
 
           {/* GLOBAL SEARCH — mereu vizibil */}
           <div style={{position:"relative",marginBottom:16,maxWidth:mob?"100%":400}}>
@@ -6826,8 +6837,9 @@ function App() {
         const updEv = (patch)=>setEvs(p=>p.map(e=>e.id===ev.id?{...e,...patch}:e));
         const canToggleAvans = ["plata_avans","confirmat"].includes(ev.st);
         const SVC_LABELS = {sunet:"Sistem sunet",lumini:"Sistem lumini",ecran:"Ecran LED",scena:"Scenă/Podium",dj:"DJ"};
-        return <div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={closeModal}>
-          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:mob?0:14,width:mob?"100%":600,maxHeight:mob?"100vh":"88vh",height:mob?"100vh":"auto",overflow:"auto"}} onClick={e=>e.stopPropagation()}>
+        return <div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",zIndex:1000}} onClick={closeModal}>
+          <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:mob?"18px 18px 0 0":14,width:mob?"100%":600,maxHeight:mob?"92vh":"88vh",height:"auto",overflow:"auto",paddingBottom:mob?"env(safe-area-inset-bottom)":0}} onClick={e=>e.stopPropagation()}>
+            {mob&&<div style={{width:36,height:4,borderRadius:2,background:th.b,margin:"10px auto 0",flexShrink:0}}/>}
             <div style={{padding:"18px 22px",borderBottom:`1px solid ${th.b}`}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
                 <div>
@@ -6972,7 +6984,7 @@ function App() {
                   </div>
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing tehnic</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                    <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:6}}>
                       {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=>
                         <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
                           <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
@@ -7038,7 +7050,7 @@ function App() {
                   {/* Timing tehnic */}
                   <div style={{marginBottom:12}}>
                     <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing tehnic</div>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                    <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(4,1fr)",gap:6}}>
                       {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=>
                         <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
                           <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
