@@ -834,7 +834,7 @@ function Toast({message, visible, variant}) {
 
 // ─── Tasks (Notion-style) ───
 const REPEAT_OPTS = [
-  { v: "none", l: "Fără repetare" },
+  { v: "none", l: "O dată" },
   { v: "daily", l: "Zilnic" },
   { v: "weekly", l: "Săptămânal" },
   { v: "monthly", l: "Lunar" },
@@ -1045,92 +1045,130 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
     const subs = t.subtasks||[];
     const doneSubs = subs.filter(s=>s.done).length;
     const isReplying = replyingTo&&replyingTo.tid===t.id;
+    const assignedM = t.assignedTo ? MEMBERS.find(m=>m.id===t.assignedTo) : null;
+    const prioColor = PC[t.priority||"medium"];
+    const fDue = (d) => { if(!d) return null; const dt=new Date(d+"T00:00:00"); return dt.toLocaleDateString("ro-RO",{day:"numeric",month:"short"}); };
+    const isOverdue = t.due && !isDone && new Date(t.due+"T00:00:00") < new Date();
+    const repeatLabel = t.repeat && t.repeat!=="none" ? REPEAT_OPTS.find(o=>o.v===t.repeat)?.l : null;
+
     return (
-      <div key={t.id} id={"task-focus-"+t.id} style={{borderRadius:12,background:th.c,border:`1px solid ${th.b}`,borderLeft:`5px solid ${PC[t.priority||"medium"]}`,overflow:"hidden",marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.06)",marginLeft:depth*16,borderWidth:showSelect&&selectedIds.includes(t.id)?2:1}}>
-        <div onClick={()=>toggleExpanded(t.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"16px 20px",cursor:"pointer",flexWrap:"wrap"}}>
-          {showSelect&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16}}/></div>}
-          <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:20,height:20,borderRadius:5,border:`2px solid ${PC[t.priority||"medium"]}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?th.b:"transparent"}}>{isDone&&<IcCheck s={12}/>}</div>
-          <div style={{flex:1,minWidth:120,fontSize:16,fontWeight:500,textDecoration:isDone?"line-through":undefined,color:isDone?th.tm:th.t,lineHeight:1.4}}>
-            {t.text}
-            {!!t.assignedTo&&<span style={{display:"block",fontSize:12,color:th.a,fontWeight:600,marginTop:4}}>{assignLabel(t.assignedTo)}</span>}
+      <div key={t.id} id={"task-focus-"+t.id} style={{borderRadius:10,background:th.c,border:`1px solid ${th.b}`,borderLeft:`3px solid ${prioColor}`,overflow:"hidden",marginBottom:8,marginLeft:depth*14,opacity:isDone?.6:1,transition:"opacity .2s"}}>
+        {/* ── ROW COMPACT ── */}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",minHeight:44}}>
+          {showSelect&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:15,height:15,flexShrink:0}}/></div>}
+
+          {/* Checkbox done */}
+          <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:18,height:18,borderRadius:4,border:`2px solid ${isDone?"transparent":prioColor}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?prioColor:"transparent",transition:"all .15s"}}>
+            {isDone&&<IcCheck s={11}/>}
           </div>
-          <select value={t.assignedTo||""} onChange={e=>{
-            e.stopPropagation();
-            const prev = t.assignedTo||"";
-            const next = e.target.value;
-            updTask(t.id,{ assignedTo: next });
-            if(onNotifyAssign && next && next !== currentMemberId && next !== prev)
-              onNotifyAssign({ taskId:t.id, taskText:t.text, toMemberId:next, fromMemberId:currentMemberId });
-          }} onClick={e=>e.stopPropagation()} className="modernSel" style={{...sty.i,padding:"6px 22px 6px 8px",fontSize:11,borderRadius:8,border:`1px solid ${th.b}`,width:"auto",minWidth:96,cursor:"pointer"}} title="Desemnat">
-            <option value="">@ —</option>
-            {MEMBERS.map(m=><option key={m.id} value={m.id}>@{m.short}</option>)}
-          </select>
-          <select value={t.priority||"medium"} onChange={e=>{e.stopPropagation();updTask(t.id,{priority:e.target.value});}} onClick={e=>e.stopPropagation()} className="modernSel" style={{...sty.i,padding:"6px 24px 6px 10px",fontSize:12,borderRadius:8,border:`1px solid ${PC[t.priority||"medium"]}`,background:PC[t.priority||"medium"]+"15",color:PC[t.priority||"medium"],fontWeight:600,width:"auto",minWidth:90,cursor:"pointer"}}>
-            <option value="high">Urgent</option><option value="medium">Normal</option><option value="low">Low</option>
-          </select>
-          <input type="date" value={t.due||""} onChange={e=>{e.stopPropagation();updTask(t.id,{due:e.target.value});}} onClick={e=>e.stopPropagation()} style={{...sty.i,padding:"6px 10px",fontSize:12,borderRadius:8,border:`1px solid ${th.b}`,width:"auto",minWidth:130,cursor:"pointer"}} title="Deadline"/>
-          <select value={t.repeat||"none"} onChange={e=>{e.stopPropagation();updTask(t.id,{repeat:e.target.value});}} onClick={e=>e.stopPropagation()} className="modernSel" style={{...sty.i,padding:"6px 22px 6px 8px",fontSize:11,borderRadius:8,maxWidth:130}} title="Repetare la bifare done">
-            {REPEAT_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-          </select>
-          {(t.tags||[]).length>0&&<span style={{fontSize:11,color:th.tm}}>{(t.tags||[]).slice(0,2).map(tg=><span key={tg}>#{tg} </span>)}</span>}
-          {subs.length>0&&<span style={{fontSize:12,color:th.tm,fontWeight:500}}>{doneSubs}/{subs.length}</span>}
-          <span style={{fontSize:14,color:th.tm,fontWeight:400,transition:"transform .2s",transform:ex?"rotate(90deg)":"rotate(0)"}}>▶</span>
-          <button onClick={e=>{e.stopPropagation();del(t.id);}} style={{padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer",opacity:.7}}><IcTrash s={12}/></button>
-        </div>
-        {ex&&<div style={{padding:"20px 24px 24px 60px",borderTop:`1px solid ${th.bl}`,background:th.bg==="#09090b"?"rgba(255,255,255,.02)":"rgba(0,0,0,.02)"}}>
-            <div style={{display:"flex",gap:10,marginTop:12,marginBottom:12,flexWrap:"wrap"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:12,color:th.tm,fontWeight:600}}>Desemnat</span>
-              <select value={t.assignedTo||""} onChange={e=>{
-                const prev = t.assignedTo||"";
-                const next = e.target.value;
-                updTask(t.id,{ assignedTo: next });
-                if(onNotifyAssign && next && next !== currentMemberId && next !== prev)
-                  onNotifyAssign({ taskId:t.id, taskText:t.text, toMemberId:next, fromMemberId:currentMemberId });
-              }} className="modernSel" style={{...sty.i,padding:"10px 14px",fontSize:13,borderRadius:10,minWidth:120}}>
-                <option value="">— Nimeni</option>
-                {MEMBERS.map(m=><option key={m.id} value={m.id}>@{m.short}</option>)}
-              </select>
+
+          {/* Text */}
+          <div onClick={()=>toggleExpanded(t.id)} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+            <div style={{fontSize:14,fontWeight:500,textDecoration:isDone?"line-through":undefined,color:isDone?th.tm:th.t,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {t.text}
             </div>
-            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-              <input type="date" value={t.due||""} onChange={e=>updTask(t.id,{due:e.target.value})} style={{...sty.i,padding:"12px 14px",fontSize:14,borderRadius:10}}/>
-              <span style={{fontSize:13,color:th.tm}}>📅 Deadline</span>
-              <select value={t.repeat||"none"} onChange={e=>updTask(t.id,{repeat:e.target.value})} className="modernSel" style={{...sty.i,padding:"10px 14px",fontSize:13,borderRadius:10,minWidth:160}} title="La bifare finalizat, se creează copie cu următoarea dată (doar task principal)">
-                {REPEAT_OPTS.map(o=><option key={o.v} value={o.v}>Repetare: {o.l}</option>)}
-              </select>
-            </div>
-            <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-              {(t.tags||[]).map(tag=><span key={tag} style={{fontSize:12,padding:"6px 12px",borderRadius:10,background:th.ab,color:th.t,display:"flex",alignItems:"center",gap:6}}>{tag}<button onClick={()=>remTag(t.id,tag)} style={{padding:0,border:"none",background:"transparent",cursor:"pointer",fontSize:12,color:th.tm}}>×</button></span>)}
-              <input placeholder="+ Tag (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addTag(t.id,e.target.value);e.target.value="";}}} style={{...sty.i,width:140,padding:"12px 14px",fontSize:14,borderRadius:10}}/>
-            </div>
-          </div>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Subtasks</div>
-            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1} showSelect={false}/>)}
-            <input placeholder="+ Adaugă subtask (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addSub(t.id,e.target.value);e.target.value="";}}} style={{...sty.i,width:"100%",padding:"14px 16px",fontSize:15,marginTop:8,borderRadius:10}}/>
-          </div>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Conversații</div>
-            {(t.chats||[]).map(c=><div key={c.id} style={{padding:"14px 16px",background:th.c,borderRadius:10,marginBottom:8,fontSize:14,borderLeft:`4px solid ${th.b}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,color:th.tm}}>{c.author} · {new Date(c.date).toLocaleString("ro")}</span>
-                <button onClick={()=>setReplyingTo({tid:t.id,chatId:c.id})} style={{padding:"6px 12px",border:"none",background:"transparent",color:th.tm,cursor:"pointer",fontSize:12}}>Răspunde</button>
+            {/* Meta chips — only show if set */}
+            {(assignedM||t.due||(t.tags||[]).length>0||subs.length>0||repeatLabel)&&(
+              <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap",alignItems:"center"}}>
+                {assignedM&&<span style={{fontSize:11,color:th.a,fontWeight:600}}>{assignedM.e} {assignedM.short}</span>}
+                {t.due&&<span style={{fontSize:11,fontWeight:600,color:isOverdue?"#ef4444":"#f59e0b",background:isOverdue?"rgba(239,68,68,.1)":"rgba(245,158,11,.1)",padding:"1px 6px",borderRadius:4}}>📅 {fDue(t.due)}</span>}
+                {repeatLabel&&<span style={{fontSize:10,color:th.tm,background:th.h,padding:"1px 6px",borderRadius:4}}>🔁 {repeatLabel}</span>}
+                {subs.length>0&&<span style={{fontSize:11,color:th.tm}}>{doneSubs}/{subs.length} subtasks</span>}
+                {(t.tags||[]).slice(0,2).map(tg=><span key={tg} style={{fontSize:10,color:th.tm,background:th.h,padding:"1px 6px",borderRadius:4}}>#{tg}</span>)}
               </div>
-              <div style={{marginTop:6,marginBottom:4}}>{c.text}</div>
-              {(c.replies||[]).map(r=><div key={r.id} style={{marginTop:6,marginLeft:16,padding:"10px 12px",background:th.h,borderRadius:8,borderLeft:`3px solid ${th.b}`}}><span style={{fontSize:11,color:th.tm}}>↳ {r.author} · {new Date(r.date).toLocaleString("ro")}</span><div style={{marginTop:4,fontSize:13}}>{r.text}</div></div>)}
-              {isReplying&&replyingTo.chatId===c.id&&<div style={{marginTop:8,marginLeft:16}}><input placeholder="Răspunde... (Enter)" autoFocus onKeyDown={e=>{if(e.key==="Enter"){addReply(t.id,c.id,e.target.value);e.target.value="";}if(e.key==="Escape")setReplyingTo(null);}} style={{...sty.i,width:"100%",padding:"12px 14px",fontSize:14,borderRadius:10}}/><button onClick={()=>setReplyingTo(null)} style={{fontSize:12,marginTop:6,color:th.tm,cursor:"pointer",background:"transparent",border:"none"}}>Anulează</button></div>}
+            )}
+          </div>
+
+          {/* Avatar assigned (compact) */}
+          {assignedM&&<div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,"+prioColor+","+prioColor+"99)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}} title={assignedM.n}>{assignedM.e}</div>}
+
+          {/* Expand + delete */}
+          <button onClick={()=>toggleExpanded(t.id)} style={{padding:"4px 6px",border:"none",background:"transparent",color:th.tm,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center"}}>
+            <span style={{fontSize:10,transition:"transform .2s",display:"block",transform:ex?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+          </button>
+          <button onClick={e=>{e.stopPropagation();del(t.id);}} style={{padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer",opacity:.5,flexShrink:0}}><IcTrash s={12}/></button>
+        </div>
+
+        {/* ── EXPANDED PANEL ── */}
+        {ex&&<div style={{borderTop:`1px solid ${th.bl}`,background:th.bg==="#09090b"?"rgba(255,255,255,.02)":"rgba(0,0,0,.02)",padding:"16px 18px 20px"}}>
+
+          {/* Controale editare */}
+          <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
+            <div>
+              <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Desemnat</div>
+              <select value={t.assignedTo||""} onChange={e=>{
+                const prev=t.assignedTo||""; const next=e.target.value;
+                updTask(t.id,{assignedTo:next});
+                if(onNotifyAssign&&next&&next!==currentMemberId&&next!==prev)
+                  onNotifyAssign({taskId:t.id,taskText:t.text,toMemberId:next,fromMemberId:currentMemberId});
+              }} className="modernSel" style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:8}}>
+                <option value="">— Nimeni</option>
+                {MEMBERS.map(m=><option key={m.id} value={m.id}>{m.e} {m.short}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Prioritate</div>
+              <select value={t.priority||"medium"} onChange={e=>updTask(t.id,{priority:e.target.value})} className="modernSel" style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:8,borderColor:prioColor,color:prioColor,fontWeight:600}}>
+                <option value="high">🔴 Urgent</option>
+                <option value="medium">🟡 Normal</option>
+                <option value="low">🟢 Low</option>
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Deadline</div>
+              <input type="date" value={t.due||""} onChange={e=>updTask(t.id,{due:e.target.value})} style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:8}}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>Repetare</div>
+              <select value={t.repeat||"none"} onChange={e=>updTask(t.id,{repeat:e.target.value})} className="modernSel" style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:8}}>
+                {REPEAT_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Tags */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Etichete</div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+              {(t.tags||[]).map(tag=><span key={tag} style={{fontSize:12,padding:"4px 10px",borderRadius:8,background:th.ab,color:th.t,display:"flex",alignItems:"center",gap:5}}>{tag}<button onClick={()=>remTag(t.id,tag)} style={{padding:0,border:"none",background:"transparent",cursor:"pointer",fontSize:13,color:th.tm,lineHeight:1}}>×</button></span>)}
+              <input placeholder="+ Tag (Enter)" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addTag(t.id,e.target.value.trim());e.target.value="";}}} style={{...sty.i,width:120,padding:"6px 10px",fontSize:13,borderRadius:8}}/>
+            </div>
+          </div>
+
+          {/* Note */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Note</div>
+            <textarea value={t.notes||""} onChange={e=>updTask(t.id,{notes:e.target.value})} placeholder="Adaugă note..." style={{...sty.i,minHeight:64,fontSize:13,resize:"vertical",width:"100%",padding:"10px 12px",borderRadius:8}}/>
+          </div>
+
+          {/* Subtasks */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Subtasks {subs.length>0&&<span style={{fontWeight:400,color:th.tm}}>({doneSubs}/{subs.length})</span>}</div>
+            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1} showSelect={false}/>)}
+            <input placeholder="+ Subtask (Enter)" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addSub(t.id,e.target.value.trim());e.target.value="";}}} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,marginTop:6,borderRadius:8}}/>
+          </div>
+
+          {/* Conversații */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Conversație</div>
+            {(t.chats||[]).map(c=><div key={c.id} style={{padding:"10px 12px",background:th.c,borderRadius:8,marginBottom:6,fontSize:13,borderLeft:`3px solid ${th.b}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <span style={{fontSize:11,color:th.tm,fontWeight:600}}>{c.author} · {new Date(c.date).toLocaleString("ro")}</span>
+                <button onClick={()=>setReplyingTo({tid:t.id,chatId:c.id})} style={{padding:"3px 8px",border:`1px solid ${th.b}`,borderRadius:5,background:"transparent",color:th.tm,cursor:"pointer",fontSize:11}}>Răspunde</button>
+              </div>
+              <div>{c.text}</div>
+              {(c.replies||[]).map(r=><div key={r.id} style={{marginTop:5,marginLeft:12,padding:"8px 10px",background:th.h,borderRadius:6,borderLeft:`2px solid ${th.b}`}}><span style={{fontSize:10,color:th.tm}}>↳ {r.author} · {new Date(r.date).toLocaleString("ro")}</span><div style={{marginTop:3,fontSize:12}}>{r.text}</div></div>)}
+              {isReplying&&replyingTo.chatId===c.id&&<div style={{marginTop:6,marginLeft:12}}><input placeholder="Răspunde... (Enter)" autoFocus onKeyDown={e=>{if(e.key==="Enter"){addReply(t.id,c.id,e.target.value);e.target.value="";}if(e.key==="Escape")setReplyingTo(null);}} style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:7}}/></div>}
             </div>)}
-            <input placeholder="+ Mesaj nou (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addChat(t.id,e.target.value);e.target.value="";}}} style={{...sty.i,width:"100%",padding:"14px 16px",fontSize:15,marginTop:8,borderRadius:10}}/>
+            <input placeholder="+ Mesaj (Enter)" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addChat(t.id,e.target.value.trim());e.target.value="";}}} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,borderRadius:8}}/>
           </div>
-          <div style={{marginBottom:16}}>
-            <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Link / Fișier</div>
-            <input placeholder="Link sau nume fișier (Enter)" onKeyDown={e=>{if(e.key==="Enter"){const v=e.target.value.trim();if(v){updTask(t.id,{uploads:[...(t.uploads||[]),{id:uid(),name:v,url:v}]});e.target.value="";}}}} style={{...sty.i,width:"100%",padding:"14px 16px",fontSize:15,borderRadius:10}}/>
-            {(t.uploads||[]).map(u=>u&&<div key={u.id} style={{fontSize:13,padding:"10px 14px",marginTop:8,background:th.h,borderRadius:8}}>📎 {u.name}</div>)}
-          </div>
-          <div>
-            <div style={{fontSize:13,color:th.tm,fontWeight:600,marginBottom:8}}>Note</div>
-            <textarea value={t.notes||""} onChange={e=>updTask(t.id,{notes:e.target.value})} placeholder="Scrie note aici..." style={{...sty.i,minHeight:80,fontSize:15,resize:"vertical",width:"100%",padding:"14px 16px",borderRadius:10}}/>
-          </div>
+
+          {/* Link / Fișier */}
+          {((t.uploads||[]).length>0||true)&&<div>
+            <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Link / Fișier</div>
+            {(t.uploads||[]).map(u=>u&&<div key={u.id} style={{fontSize:12,padding:"7px 10px",marginBottom:4,background:th.h,borderRadius:7,display:"flex",alignItems:"center",gap:6}}>📎 <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{u.url?.startsWith("http")?<a href={u.url} target="_blank" rel="noreferrer" style={{color:th.a}}>{u.name}</a>:u.name}</span></div>)}
+            <input placeholder="Link sau fișier (Enter)" onKeyDown={e=>{if(e.key==="Enter"){const v=e.target.value.trim();if(v){updTask(t.id,{uploads:[...(t.uploads||[]),{id:uid(),name:v,url:v}]});e.target.value="";}}}} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,borderRadius:8}}/>
+          </div>}
         </div>}
       </div>
     );
@@ -1158,20 +1196,17 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
         {memberFilter&&<button type="button" onClick={()=>setMemberFilter("")} style={{...sty.bg,padding:"8px 14px",fontSize:12}}>Arată pe toți</button>}
       </div>}
 
-      <div style={{display:"flex",gap:12,marginBottom:24,flexWrap:"wrap",alignItems:"stretch"}}>
+      <div style={{display:"flex",gap:8,marginBottom:20,alignItems:"center"}}>
         <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}
-          style={{...sty.i,flex:"1 1 200px",padding:"18px 22px",fontSize:17,borderRadius:12,border:`2px solid ${th.bl}`}} placeholder="Ce ai de făcut? Scrie aici și apasă Enter..."/>
-        {!compact && <select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)} className="modernSel" style={{...sty.i,width:140,padding:"18px 32px 18px 16px",fontSize:14,borderRadius:12,border:`2px solid ${th.bl}`}} title="Desemnează pe cineva (notificare)">
+          style={{...sty.i,flex:1,padding:"12px 16px",fontSize:15,borderRadius:10,border:`1.5px solid ${th.bl}`}} placeholder="Task nou — scrie și apasă Enter"/>
+        {!compact&&<select value={newAssignee} onChange={e=>setNewAssignee(e.target.value)} className="modernSel" style={{...sty.i,padding:"12px 28px 12px 12px",fontSize:13,borderRadius:10,border:`1.5px solid ${th.bl}`,minWidth:mob?80:110}} title="Desemnează">
           <option value="">@ —</option>
-          {MEMBERS.map(m=><option key={m.id} value={m.id}>@{m.short}</option>)}
+          {MEMBERS.map(m=><option key={m.id} value={m.id}>{m.e} {m.short}</option>)}
         </select>}
-        {!compact && <select value={newPrio} onChange={e=>setNewPrio(e.target.value)} className="modernSel" style={{...sty.i,width:150,padding:"18px 36px 18px 18px",fontSize:15,borderRadius:12,border:`2px solid ${th.bl}`}}>
-          <option value="high">Urgent</option><option value="medium">Normal</option><option value="low">Low</option>
+        {!compact&&<select value={newPrio} onChange={e=>setNewPrio(e.target.value)} className="modernSel" style={{...sty.i,padding:"12px 28px 12px 12px",fontSize:13,borderRadius:10,border:`1.5px solid ${th.bl}`,minWidth:mob?70:100}}>
+          <option value="high">🔴</option><option value="medium">🟡</option><option value="low">🟢</option>
         </select>}
-        {!compact && <select value={newRepeat} onChange={e=>setNewRepeat(e.target.value)} className="modernSel" style={{...sty.i,minWidth:160,padding:"18px 32px 18px 16px",fontSize:14,borderRadius:12,border:`2px solid ${th.bl}`}} title="După bifare done, apare din nou cu următoarea dată">
-          {REPEAT_OPTS.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-        </select>}
-        <button onClick={add} style={{...sty.b,padding:"18px 24px",flexShrink:0,borderRadius:12,fontWeight:600,fontSize:15}}><IcPlus s={18}/></button>
+        <button onClick={add} style={{...sty.b,padding:"12px 18px",flexShrink:0,borderRadius:10,fontWeight:600,fontSize:14}}><IcPlus s={16}/></button>
       </div>
 
       {!compact&&allTaskIds.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
@@ -4929,16 +4964,22 @@ function App() {
     const endTotal = sh*60 + sm + totalMin;
     const endH = String(Math.floor(endTotal/60)%24).padStart(2,"0");
     const endM = String(endTotal%60).padStart(2,"0");
+    const evDate = ev.date;
+    const ndObj = new Date(evDate+"T00:00:00"); ndObj.setDate(ndObj.getDate()+1);
+    const nextDay = ndObj.toISOString().split("T")[0];
+    const appLink = "https://phaser-manager.raczradurr.workers.dev";
+    const evLabel = ev.offerNr ? "Oferta O"+ev.offerNr : (ev.st==="confirmat"?"Fișa eveniment":"Eveniment");
     const body = {
       summary: `PHASER · ${ev.type||"Eveniment"}${ev.venue?" @ "+ev.venue:""}`,
       location: [ev.venue,ev.city].filter(Boolean).join(", "),
       description: [
         ev.cn?"Client: "+ev.cn:"", ev.cp?"Tel: "+ev.cp:"",
         ev.ce?"Email: "+ev.ce:"", "Onorariu: "+f$(ev.fee||0),
-        ev.dep?"Avans: "+f$(ev.dep):"", ev.desc?"\n"+ev.desc:""
+        ev.dep?"Avans: "+f$(ev.dep):"", ev.desc?"\n"+ev.desc:"",
+        "\n"+evLabel+": "+appLink
       ].filter(Boolean).join("\n"),
-      start: { dateTime:`${startDate||ev.date}T${(startTime||"20:00").slice(0,5)}:00`, timeZone:"Europe/Bucharest" },
-      end:   { dateTime:`${startDate||ev.date}T${endH}:${endM}:00`, timeZone:"Europe/Bucharest" }
+      start: { date: evDate },
+      end:   { date: nextDay }
     };
     try {
       const url = ev.gcalId
@@ -6123,7 +6164,7 @@ function App() {
                         <span style={{fontSize:mob?10:12,fontWeight:isSearchedDay||td?800:hasStuff?600:400,color:isSearchedDay?"#3b82f6":td?th.t:hasStuff?th.t:th.tm}}>{d}</span>
                       </div>
                       <div style={{flex:1,minHeight:0,overflow:mob?"hidden":"auto",maxHeight:mob?52:120}}>
-                        {de.map(ev=><div key={ev.id} draggable={!mob} onDragStart={e=>{e.stopPropagation();setCalDragEvId(ev.id);}} onDragEnd={()=>setCalDragEvId(null)} onClick={e=>{e.stopPropagation();if(calSuppressChipClickRef.current)return;if(ev.st==="confirmat")openModal("detail",ev.id);else openModal("oferta",ev.id);}} onDoubleClick={e=>e.stopPropagation()} onTouchStart={mob?(e=>{e.stopPropagation();const t=e.touches[0];if(!t)return;calTouchDragMetaRef.current={evId:ev.id,fromDs:ds,x:t.clientX,y:t.clientY};if(calLongPressTimerRef.current)clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=setTimeout(()=>{calLongPressTimerRef.current=null;setCalTouchDragActive(true);setCalDragEvId(ev.id);calLastDropDsRef.current=null;try{if(navigator.vibrate)navigator.vibrate(20);}catch(_){}},460);}):undefined} onTouchMove={mob?(e=>{if(calLongPressTimerRef.current&&calTouchDragMetaRef.current){const t=e.touches[0];if(!t)return;const m=calTouchDragMetaRef.current;if(Math.hypot(t.clientX-m.x,t.clientY-m.y)>14){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}}):undefined} onTouchEnd={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} onTouchCancel={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} style={{padding:mob?"2px 3px":"3px 5px",borderRadius:4,marginBottom:2,fontSize:mob?8:9,fontWeight:600,cursor:mob?"pointer":"grab",background:dk?ST[ev.st]?.bd:ST[ev.st]?.bg,color:ST[ev.st]?.c,lineHeight:1.2,borderLeft:`2px solid ${ST[ev.st]?.c}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:calTouchDragActive&&calDragEvId===ev.id?0.55:1}} title={`${ev.type} — ${resp(ev)} · ${ST[ev.st]?.l||ev.st}${mob?" — ține apăsat ~0,5s, apoi trage pe altă zi":" (trage pentru a muta)"}`}>{ev.type} ({resp(ev)}) · {ST[ev.st]?.l||ev.st}</div>)}
+                        {de.map(ev=><div key={ev.id} draggable={!mob} onDragStart={e=>{e.stopPropagation();setCalDragEvId(ev.id);}} onDragEnd={()=>setCalDragEvId(null)} onClick={e=>{e.stopPropagation();if(calSuppressChipClickRef.current)return;openModal("calEvPreview",ev.id);}} onDoubleClick={e=>e.stopPropagation()} onTouchStart={mob?(e=>{e.stopPropagation();const t=e.touches[0];if(!t)return;calTouchDragMetaRef.current={evId:ev.id,fromDs:ds,x:t.clientX,y:t.clientY};if(calLongPressTimerRef.current)clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=setTimeout(()=>{calLongPressTimerRef.current=null;setCalTouchDragActive(true);setCalDragEvId(ev.id);calLastDropDsRef.current=null;try{if(navigator.vibrate)navigator.vibrate(20);}catch(_){}},460);}):undefined} onTouchMove={mob?(e=>{if(calLongPressTimerRef.current&&calTouchDragMetaRef.current){const t=e.touches[0];if(!t)return;const m=calTouchDragMetaRef.current;if(Math.hypot(t.clientX-m.x,t.clientY-m.y)>14){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}}):undefined} onTouchEnd={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} onTouchCancel={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} style={{padding:mob?"2px 3px":"3px 5px",borderRadius:4,marginBottom:2,fontSize:mob?8:9,fontWeight:600,cursor:mob?"pointer":"grab",background:dk?ST[ev.st]?.bd:ST[ev.st]?.bg,color:ST[ev.st]?.c,lineHeight:1.2,borderLeft:`2px solid ${ST[ev.st]?.c}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:calTouchDragActive&&calDragEvId===ev.id?0.55:1}} title={`${ev.type} — ${resp(ev)} · ${ST[ev.st]?.l||ev.st}${mob?" — ține apăsat ~0,5s, apoi trage pe altă zi":" (trage pentru a muta)"}`}>{ev.type} ({resp(ev)}) · {ST[ev.st]?.l||ev.st}</div>)}
                         {dayOcc.map(b=>{
                           const mem=MEMBERS.find(x=>x.id===b.memberId);
                           const hue=occHue(b.memberId);
@@ -6153,14 +6194,13 @@ function App() {
                   <button onClick={()=>setCalSidebarDate(null)} style={{padding:mob?12:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:th.tm,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX s={14}/></button>
                 </div>
                 {dayEvs.length===0?<div style={{fontSize:12,color:th.tm,marginBottom:12}}>Niciun eveniment în această zi</div>:dayEvs.map(ev=>(
-                  <div key={ev.id} onClick={()=>{setCalSidebarDate(null);if(ev.st==="confirmat")openModal("detail",ev.id);else openModal("oferta",ev.id);}} style={{padding:14,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,marginBottom:10,cursor:"pointer"}}>
+                  <div key={ev.id} onClick={()=>{setCalSidebarDate(null);openModal("calEvPreview",ev.id);}} style={{padding:14,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,marginBottom:10,cursor:"pointer"}}>
                     <Badge s={ev.st} th={th}/>
                     <div style={{fontSize:14,fontWeight:700,marginTop:8}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
-                    <div style={{fontSize:11,color:th.tm,marginTop:2}}>{ev.cat==="private"?"Privat":"Public"} · {ev.type}</div>
-                    <div style={{fontSize:12,marginTop:6}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
-                    <div style={{fontSize:15,fontWeight:700,marginTop:6}}>{f$(ev.fee)}</div>
-                    {(ev.responsabilPrincipal||(ev.responsabili||[]).length>0)&&<div style={{fontSize:11,color:th.tm,marginTop:6}}>Preluat: {ev.responsabilPrincipal||(ev.responsabili||[])[0]?.nume||"—"}</div>}
-                    <div style={{...sty.b,marginTop:10,width:"100%",fontSize:12,textAlign:"center",pointerEvents:"none"}}>{ev.st==="confirmat"?"Deschide fișa":"Deschide oferta"}</div>
+                    <div style={{fontSize:12,marginTop:4}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
+                    {ev.cn&&<div style={{fontSize:12,color:th.tm,marginTop:2}}>👤 {ev.cn}</div>}
+                    <div style={{fontSize:15,fontWeight:700,marginTop:6,color:th.a}}>{f$(ev.fee)}</div>
+                    {(ev.responsabilPrincipal||(ev.responsabili||[]).length>0)&&<div style={{fontSize:11,color:th.tm,marginTop:4}}>Preluat: {ev.responsabilPrincipal||(ev.responsabili||[])[0]?.nume||"—"}</div>}
                   </div>
                 ))}
                 <div style={{marginTop:18,paddingTop:16,borderTop:`1px solid ${th.b}`}}>
@@ -6755,6 +6795,93 @@ function App() {
               <div style={{display:"flex",flexDirection:mob?"column":"row",gap:10,marginTop:8}}>
                 <button type="button" onClick={()=>{setCalBlocks(prev=>(prev||[]).filter(x=>x.id!==b.id));closeModal();showToast("Ocupare ștearsă");}} style={{flex:1,padding:"12px 16px",borderRadius:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",fontWeight:600,cursor:"pointer",fontSize:13}}>Șterge ocupare</button>
                 <button type="button" onClick={closeModal} style={{...sty.b,flex:1,padding:"12px 16px",fontSize:13}}>Închide</button>
+              </div>
+            </div>
+          </div>
+        </div>;
+      })()}
+
+      {/* CALENDAR EVENT QUICK PREVIEW — popup compact ca Google Calendar */}
+      {modal==="calEvPreview"&&mData&&(()=>{
+        const ev = mData;
+        const isConfirmed = ev.st==="confirmat";
+        const svc = getSvcTotal(ev);
+        const resp = ev.responsabilPrincipal || (ev.responsabili||[])[0]?.nume || "";
+        const fTs = (ts) => { if(!ts) return null; const d=new Date(ts+"T00:00:00"); return d.toLocaleDateString("ro-RO",{weekday:"long",day:"numeric",month:"long",year:"numeric"}); };
+        const hasTimer = ev.li||ev.sc||ev.ss||ev.lo;
+        return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.35)",display:"flex",alignItems:mob?"flex-end":"center",justifyContent:"center",zIndex:1000}} onClick={closeModal}>
+          <div style={{background:th.c,borderRadius:mob?"18px 18px 0 0":14,width:mob?"100%":440,maxWidth:"100%",overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,.3)",border:`1px solid ${th.b}`}} onClick={e=>e.stopPropagation()}>
+            {/* Header colorat cu status */}
+            <div style={{background:ST[ev.st]?.c+"22",borderBottom:`3px solid ${ST[ev.st]?.c||th.a}`,padding:"16px 18px 14px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
+                    <Badge s={ev.st} th={th}/>
+                    <span style={{fontSize:11,color:th.tm,background:th.ab,padding:"2px 8px",borderRadius:10}}>{ev.cat==="private"?"Privat":"Public"}</span>
+                  </div>
+                  <div style={{fontSize:18,fontWeight:700,lineHeight:1.2}}>{ev.offerNr?"O"+ev.offerNr+" · ":""}{ev.type||"Eveniment"}</div>
+                  <div style={{fontSize:13,color:th.tm,marginTop:4}}>{fTs(ev.date)}</div>
+                </div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  {mob&&p.e&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}} style={{padding:"8px 10px",border:`1px solid ${th.b}`,borderRadius:8,background:"transparent",color:th.tm,cursor:"pointer",fontSize:12}}>✏️</button>}
+                  <button onClick={closeModal} style={{padding:mob?10:6,border:"none",background:"transparent",color:th.tm,cursor:"pointer",borderRadius:8}}><IcX s={14}/></button>
+                </div>
+              </div>
+            </div>
+
+            {/* Detalii */}
+            <div style={{padding:"14px 18px 18px"}}>
+              {/* Locație */}
+              {(ev.venue||ev.city)&&<div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:12}}>
+                <span style={{fontSize:16,flexShrink:0,marginTop:1}}>📍</span>
+                <div>
+                  <div style={{fontSize:14,fontWeight:600}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div>
+                  {ev.locAddress&&<div style={{fontSize:11,color:th.tm,marginTop:1}}>{ev.locAddress}</div>}
+                </div>
+              </div>}
+
+              {/* Client + Onorariu */}
+              <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:12}}>
+                <span style={{fontSize:16,flexShrink:0,marginTop:1}}>📋</span>
+                <div style={{flex:1}}>
+                  {ev.cn&&<div style={{fontSize:14,fontWeight:600}}>{ev.cn}</div>}
+                  {ev.cp&&<div style={{fontSize:12,color:th.tm}}>{ev.cp}</div>}
+                  <div style={{display:"flex",gap:12,marginTop:ev.cn?6:0,flexWrap:"wrap"}}>
+                    <div>
+                      <span style={{fontSize:11,color:th.tm}}>Onorariu </span>
+                      <span style={{fontSize:15,fontWeight:700,color:th.a}}>{f$((ev.fee||0)+svc)}</span>
+                    </div>
+                    {(ev.dep||0)>0&&<div>
+                      <span style={{fontSize:11,color:th.tm}}>Avans </span>
+                      <span style={{fontSize:13,fontWeight:600,color:ev.dp?"#22c55e":"#f59e0b"}}>{f$(ev.dep)} {ev.dp?"✓":""}</span>
+                    </div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Timing tehnic — dacă există */}
+              {hasTimer&&<div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:12}}>
+                <span style={{fontSize:16,flexShrink:0,marginTop:1}}>🕐</span>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  {[{l:"Load In",v:ev.li,i:"📦"},{l:"SC",v:ev.sc,i:"🎛"},{l:"Show",v:ev.ss,i:"🎤"},{l:"Out",v:ev.lo,i:"🚐"}].filter(x=>x.v).map((x,i)=>(
+                    <div key={i} style={{fontSize:12,fontWeight:700}}>{x.i} {x.v?.slice(-5)||"—"} <span style={{fontWeight:400,color:th.tm,fontSize:10}}>{x.l}</span></div>
+                  ))}
+                </div>
+              </div>}
+
+              {/* Preluat de */}
+              {resp&&<div style={{display:"flex",gap:10,alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:16,flexShrink:0}}>👤</span>
+                <span style={{fontSize:13}}>Preluat: <strong>{resp}</strong></span>
+              </div>}
+
+              {/* Butoane acțiuni */}
+              <div style={{display:"flex",gap:8,marginTop:16,flexWrap:"wrap"}}>
+                <button onClick={()=>{closeModal();setTimeout(()=>isConfirmed?openModal("detail",ev.id):openModal("oferta",ev.id),80);}} style={{...sty.b,flex:1,padding:"10px 16px",fontSize:13,fontWeight:600}}>
+                  {isConfirmed?"📋 Deschide fișa":"📄 Deschide oferta"}
+                </button>
+                {p.e&&!mob&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}} style={{...sty.bg,padding:"10px 14px",fontSize:13}}>✏️ Editează</button>}
+                {p.d&&<button onClick={()=>{if(window.confirm("Ștergi evenimentul?"))delEv(ev.id);}} style={{padding:"10px 14px",borderRadius:9,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",fontSize:13,cursor:"pointer"}}>🗑</button>}
               </div>
             </div>
           </div>
