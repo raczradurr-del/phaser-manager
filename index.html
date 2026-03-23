@@ -4961,6 +4961,88 @@ function App() {
   const syncTimerRef = useRef(null);
   const initialSyncDoneRef = useRef(false);
 
+  // ─── BACKUP STATE ───
+  const [backups, setBackups] = useState([]);
+  const [backupStatus, setBackupStatus] = useState(""); // "" | "saving" | "saved" | "error"
+  const [restoreStatus, setRestoreStatus] = useState(""); // "" | "restoring" | "done" | "error"
+
+  // Filtrare date pentru backup: oferte (±3 luni trecut, +6 luni viitor), calendar, financiar
+  const buildBackupData = () => {
+    const now = new Date(); now.setHours(0,0,0,0);
+    const past3 = new Date(now); past3.setMonth(past3.getMonth()-3);
+    const future6 = new Date(now); future6.setMonth(future6.getMonth()+6);
+    const filteredEvs = evs.filter(e => {
+      if(!e.date) return true; // fără dată — include oricum
+      const d = new Date(e.date+"T00:00:00");
+      return d >= past3 && d <= future6;
+    });
+    const filteredBlocks = (calBlocks||[]).filter(b => {
+      if(!b.date) return true;
+      const d = new Date(b.date+"T00:00:00");
+      return d >= past3 && d <= future6;
+    });
+    return { evs: filteredEvs, calBlocks: filteredBlocks, genExp, annualCosts, gigsPerYear, tasks, _backedAt: new Date().toISOString() };
+  };
+
+  // Creează backup dacă nu există deja unul pentru ziua de azi
+  const runDailyBackup = async () => {
+    const client = getSbClient(); if(!client) return;
+    const today = new Date().toISOString().split("T")[0];
+    const { data: existing } = await client.from("backups").select("id").eq("backup_date", today).maybeSingle();
+    if(existing) return; // backup-ul de azi există deja
+    setBackupStatus("saving");
+    const label = new Date().toLocaleDateString("ro-RO",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+    const bdata = buildBackupData();
+    const { error } = await client.from("backups").insert({ backup_date: today, label, data: bdata });
+    if(error){ setBackupStatus("error"); return; }
+    // Rotație: șterge backup-uri mai vechi de 3 zile
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-3);
+    await client.from("backups").delete().lt("backup_date", cutoff.toISOString().split("T")[0]);
+    setBackupStatus("saved");
+    setTimeout(()=>setBackupStatus(""),3000);
+    loadBackupsList();
+  };
+
+  // Încarcă lista backup-urilor disponibile
+  const loadBackupsList = async () => {
+    const client = getSbClient(); if(!client) return;
+    const { data } = await client.from("backups").select("id,backup_date,label,created_at").order("backup_date",{ascending:false}).limit(5);
+    if(data) setBackups(data);
+  };
+
+  // Restaurează un backup
+  const restoreBackup = async (backup) => {
+    const client = getSbClient(); if(!client) return;
+    setRestoreStatus("restoring");
+    const { data: row } = await client.from("backups").select("data").eq("id",backup.id).maybeSingle();
+    if(!row?.data){ setRestoreStatus("error"); return; }
+    const d = row.data;
+    if(Array.isArray(d.evs)) setEvs(d.evs);
+    if(Array.isArray(d.calBlocks)) setCalBlocks(d.calBlocks);
+    if(Array.isArray(d.genExp)) setGE(d.genExp);
+    if(Array.isArray(d.annualCosts)) setAC(d.annualCosts);
+    if(typeof d.gigsPerYear==="number") setGigsPerYear(d.gigsPerYear);
+    if(Array.isArray(d.tasks)) setTasks(d.tasks);
+    setRestoreStatus("done");
+    setTimeout(()=>setRestoreStatus(""),4000);
+  };
+
+  // Manual backup (on demand)
+  const createManualBackup = async () => {
+    const client = getSbClient(); if(!client) return;
+    setBackupStatus("saving");
+    const today = new Date().toISOString().split("T")[0];
+    const label = "Manual · "+new Date().toLocaleDateString("ro-RO",{weekday:"short",day:"numeric",month:"short",year:"numeric"})+" "+new Date().toLocaleTimeString("ro-RO",{hour:"2-digit",minute:"2-digit"});
+    const bdata = buildBackupData();
+    // Upsert pe data de azi (înlocuiește cel automat dacă există)
+    await client.from("backups").upsert({backup_date: today, label, data: bdata},{onConflict:"backup_date"});
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate()-3);
+    await client.from("backups").delete().lt("backup_date", cutoff.toISOString().split("T")[0]);
+    setBackupStatus("saved");
+    setTimeout(()=>setBackupStatus(""),3000);
+    loadBackupsList();
+  };
+
   // La pornire: ÎNTOTDEAUNA încarcă din Supabase (sursa de adevăr)
   useEffect(()=>{
     const client = getSbClient();
@@ -4995,6 +5077,8 @@ function App() {
         if(remote.aiSettings&&typeof remote.aiSettings==="object") setAiSettings(function(prev){return Object.assign({},prev,remote.aiSettings,{llamaWorker:remote.aiSettings.llamaWorker||prev.llamaWorker});});
         setSyncStatus("synced");
         initialSyncDoneRef.current = true;
+        // Backup automat zilnic — după ce datele sunt încărcate
+        setTimeout(()=>{ runDailyBackup(); loadBackupsList(); }, 3000);
       })
       .catch((err)=>{
         console.error("[Supabase] Eroare la citire (catch):", err);
@@ -6471,6 +6555,39 @@ function App() {
                 </div>
               </div>;
             })()}
+          </div>}
+
+          {/* BACKUP & ROLLBACK */}
+          {tab==="contul"&&user?.memberId&&<div style={{maxWidth:420,marginTop:28,borderTop:`1px solid ${th.b}`,paddingTop:24}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
+              <div>
+                <h2 style={{fontSize:16,fontWeight:700}}>💾 Backup & Rollback</h2>
+                <div style={{fontSize:11,color:th.tm,marginTop:2}}>Backup automat zilnic · rotație 3 zile · oferte + calendar + finanțe</div>
+              </div>
+              <button onClick={createManualBackup} disabled={backupStatus==="saving"} style={{padding:"8px 14px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h,color:th.t,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                {backupStatus==="saving"?"⏳ Se salvează...":backupStatus==="saved"?"✅ Salvat!":backupStatus==="error"?"❌ Eroare":"📦 Backup acum"}
+              </button>
+            </div>
+            {restoreStatus&&<div style={{marginBottom:12,padding:"10px 14px",borderRadius:8,background:restoreStatus==="done"?"rgba(34,197,94,.1)":restoreStatus==="error"?"rgba(239,68,68,.1)":"rgba(245,158,11,.1)",border:`1px solid ${restoreStatus==="done"?"#22c55e":restoreStatus==="error"?"#ef4444":"#f59e0b"}`,fontSize:12,fontWeight:600,color:restoreStatus==="done"?"#22c55e":restoreStatus==="error"?"#ef4444":"#f59e0b"}}>
+              {restoreStatus==="restoring"?"⏳ Se restaurează...":restoreStatus==="done"?"✅ Restaurat cu succes! Datele au fost înlocuite.":"❌ Eroare la restaurare."}
+            </div>}
+            {backups.length===0
+              ? <div style={{padding:"20px",textAlign:"center",color:th.tm,fontSize:12,border:`1px dashed ${th.b}`,borderRadius:10}}>Niciun backup disponibil. Primul backup se creează automat la următoarea deschidere a aplicației.</div>
+              : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  {backups.map(b=>(
+                    <div key={b.id} style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h}}>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600}}>{b.label}</div>
+                        <div style={{fontSize:10,color:th.tm,marginTop:2}}>{new Date(b.created_at).toLocaleString("ro-RO",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>
+                      </div>
+                      <button onClick={()=>{ if(window.confirm("Restaurezi backup-ul din "+b.label+"?\n\nOfertele, calendarul, task-urile și datele financiare vor fi înlocuite cu versiunea din backup. Acțiunea nu poate fi anulată.")) restoreBackup(b); }}
+                        style={{padding:"6px 12px",borderRadius:8,border:"1px solid #f59e0b",background:"rgba(245,158,11,.08)",color:"#f59e0b",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                        ↩ Restaurează
+                      </button>
+                    </div>
+                  ))}
+                </div>
+            }
           </div>}
 
           {/* PANEL ADMIN — cereri de acces */}
