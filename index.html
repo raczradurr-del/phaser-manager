@@ -263,6 +263,7 @@ const TH = {
 };
 
 const ST = {
+  cerere:      { l:"Cerere",        c:"#64748b", bg:"#f1f5f9", bd:"#0f172a" },
   oferta:      { l:"Ofertă",        c:"#f59e0b", bg:"#fef9c3", bd:"#422006" },
   asteptare:   { l:"Așt. contract", c:"#a78bfa", bg:"#ede9fe", bd:"#2e1065" },
   plata_avans: { l:"De platit avans", c:"#3b82f6", bg:"#dbeafe", bd:"#1e3a8a" },
@@ -1376,7 +1377,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
   const now = new Date();
   const confConfirmate = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
   const respinseOffers = evs.filter(e=>e.st==="respins"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.cr||0)-new Date(a.cr||0));
-  const activeOffers = evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)&&(!filterCat||e.cat===filterCat));
+  const activeOffers = evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)&&(!filterCat||e.cat===filterCat));
   const activeSorted = [...activeOffers].sort((a,b)=>{
     if(sortBy==="date") return new Date(a.date||0)-new Date(b.date||0);
     if(sortBy==="dateDesc") return new Date(b.date||0)-new Date(a.date||0);
@@ -1482,7 +1483,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                     onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";}}>
                     {(showSelection||onDeleteSelected)&&<div style={{position:"absolute",top:8,right:8}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:14,height:14}}/></div>}
                     <div style={{fontSize:10,color:th.tm,marginBottom:2}}>{ev.type} {ev.cat==="private"?"· ZGV":"· PHASER"}</div>
-                    <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
+                    <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
                     <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fD(ev.date)}</div>
                     <div style={{fontSize:10,color:th.tm,marginBottom:6}}>{fFmt(ev.fee,ev.valuta)}</div>
                     <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
@@ -1511,7 +1512,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                     {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{(ev.offerNr?"O"+ev.offerNr:"—")}</td>
-                    <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
+                    <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
@@ -1559,7 +1560,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:th.c,opacity:.88,borderRadius:10,boxShadow:"0 2px 14px rgba(239, 68, 68, 0.2)",border:"1px solid rgba(239, 68, 68, 0.12)"}} onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{e.currentTarget.style.opacity=".88";if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.c}}>
                     {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{(ev.offerNr?"O"+ev.offerNr:"—")}</td>
-                    <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
+                    <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
@@ -4300,10 +4301,16 @@ Vom furniza 3 mix-uri separate din Stage Box-ul poziționat pe scenă:
 
           <div style={{padding:"12px 20px",borderTop:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap"}}>
             <button onClick={onClose} style={sty.bg}>Anulează</button>
-            <button onClick={()=>{
-              const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
-              onSave({...fm, title, date: fm.date||"2026-06-15"});
-            }} style={sty.b}>{isE?"Salvează":fm.directEvent?"Creează eveniment":"Creează ofertă"}</button>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {!isE&&!fm.directEvent&&<button onClick={()=>{
+                const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
+                onSave({...fm, title, date: fm.date||"2026-06-15", asCerere:true});
+              }} style={{...sty.bg,color:"#64748b",borderColor:"#94a3b8",fontSize:12}} title="Salvează ca cerere — fără ofertă trimisă">📞 Cerere</button>}
+              <button onClick={()=>{
+                const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
+                onSave({...fm, title, date: fm.date||"2026-06-15"});
+              }} style={sty.b}>{isE?"Salvează":fm.directEvent?"Creează eveniment":"Creează ofertă"}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -5280,15 +5287,15 @@ function App() {
     const ndObj = new Date(evDate+"T00:00:00"); ndObj.setDate(ndObj.getDate()+1);
     const nextDay = ndObj.toISOString().split("T")[0];
     const isConfirmedEv = ev.st==="confirmat";
+    const isCerere = ev.st==="cerere";
     const gcalRespFull = ev.responsabilPrincipal||(ev.responsabili||[])[0]?.nume||"";
     // Doar prenumele (primul cuvânt)
     const gcalResp = gcalRespFull ? gcalRespFull.trim().split(" ")[0] : "";
-    // Prefix status: ??? = ofertă, ? = așt. contract / plată avans, nimic = confirmat
-    const gcalPrefix = ev.st==="oferta" ? "??? " : (ev.st==="asteptare"||ev.st==="plata_avans") ? "? " : "";
-    // Titlu: "??? Nuntă Ofertă (Radu)" / "? Nuntă Ofertă (Radu)" / "Nuntă (Radu)"
+    // Prefix: ??? cerere/ofertă, ? contract/avans, nimic confirmat
+    const gcalPrefix = (isCerere||ev.st==="oferta") ? "??? " : (ev.st==="asteptare"||ev.st==="plata_avans") ? "? " : "";
+    // Titlu simplu: prefix + tip + (prenume) — fără cuvântul "Ofertă"
     const gcalSummary = gcalPrefix + [
       ev.type||"Eveniment",
-      !isConfirmedEv?"Ofertă":null,
       gcalResp?"("+gcalResp+")":null
     ].filter(Boolean).join(" ");
     // Link direct la oferta/fisa — construieste URL din proxy + ID daca nu e salvat inca
@@ -5388,7 +5395,7 @@ function App() {
     // Fond 7% din noul sistem de calcul
     const fondTotal = sg.reduce((s,e)=>s+calcFond7(e),0);
     const ge  = genExp.reduce((s,e)=>s+e.a,0);
-    const pipe= evs.filter(e=>["oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.fee||0),0);
+    const pipe= evs.filter(e=>["cerere","oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.fee||0),0);
     const pd  = sg.filter(e=>!e.dp).reduce((s,e)=>s+(e.dep||0),0);
     return {rev,exp,ge,fondTotal,net:rev-exp-ge-fondTotal,pipe,pd,sc:sg.length,tc:evs.length};
   },[evs,genExp]);
@@ -5403,7 +5410,8 @@ function App() {
   const saveEv = data => {
     const isEdit = !!(mData&&mData.id);
     const directEvent = !isEdit && !!data.directEvent;
-    const { directEvent: _omitDirect, ...dataBody } = data;
+    const asCerere = !isEdit && !!data.asCerere;
+    const { directEvent: _omitDirect, asCerere: _omitCerere, ...dataBody } = data;
     const tplPlaylist = (templates.playlist&&templates.playlist.length>0) ? templates.playlist : DEFAULT_COVERS;
     const tplVideosNew = (templates.videos&&templates.videos.length>0) ? templates.videos : DEFAULT_VIDEOS;
     const merged = {...(isEdit?mData:{}),...dataBody};
@@ -5421,6 +5429,14 @@ function App() {
           if(gcalId) { setEvs(p=>p.map(e=>e.id===mData.id?{...e,gcalId}:e)); showToast("📅 Actualizat în Google Calendar!"); }
         });
       }
+    } else if (asCerere) {
+      // Cerere verbală — fără ofertă trimisă, fără număr ofertă, deschide direct detalii
+      const nev = {...merged, id:uid(), cr:new Date().toISOString().split("T")[0], videos:dataBody.videos||tplVideosNew, covers:dataBody.covers||tplPlaylist, st:"cerere", offerNr:null};
+      setEvs(p=>[...p,nev]); closeModal(); openModal("detail",nev.id);
+      showToast("Cerere adăugată!");
+      if(gcalToken) syncToGCal(nev).then(gcalId=>{
+        if(gcalId) { setEvs(p=>p.map(e=>e.id===nev.id?{...e,gcalId}:e)); showToast("📅 Adăugat în Google Calendar!"); }
+      });
     } else if (directEvent) {
       const nev = {...merged, id:uid(), cr:new Date().toISOString().split("T")[0], videos:dataBody.videos||tplVideosNew, covers:dataBody.covers||tplPlaylist, st: merged.st||"confirmat", offerNr: null};
       setEvs(p=>[...p,nev]); closeModal(); openModal("detail",nev.id);
@@ -7415,7 +7431,7 @@ function App() {
                     <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:th.ab,color:th.tm,fontWeight:600}}>{isP?"Privat (ZGV)":"Public (PHASER)"}</span>
                     {ev.type&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:th.ab,color:th.tm}}>{ev.type}</span>}
                   </div>
-                  <div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{isConfirmed?ev.type:((ev.offerNr?"O"+ev.offerNr:"???")+" · "+(ev.type||""))}</div>
+                  <div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{isConfirmed?ev.type:ev.st==="cerere"?("📞 "+(ev.type||"Cerere")):((ev.offerNr?"O"+ev.offerNr:"???")+" · "+(ev.type||""))}</div>
                   <div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.venue}{ev.city?", "+ev.city:""}</div>
                   {(ev.responsabilPrincipal||(ev.responsabili||[]).length>0)&&<div style={{fontSize:10,color:th.tm,marginTop:4}}>Preluat: {ev.responsabilPrincipal||"—"} {(ev.responsabili||[]).length>0&&` · ${(ev.responsabili||[]).filter(r=>r.nume||r.rol).map(r=>r.nume+(r.rol?" ("+r.rol+")":"")).join(", ")}`}</div>}
                 </div>
@@ -7423,6 +7439,35 @@ function App() {
               </div>
             </div>
             <div style={{padding:"16px 22px"}} onClick={e=>e.stopPropagation()}>
+
+              {/* CERERE VERBALĂ — fără ofertă trimisă */}
+              {ev.st==="cerere"&&<>
+                <div style={{padding:16,borderRadius:10,border:`1px solid #cbd5e1`,background:"#f8fafc",marginBottom:16}}>
+                  <div style={{fontSize:13,color:"#475569",marginBottom:4,fontWeight:600}}>📞 Cerere verbală</div>
+                  <div style={{fontSize:12,color:"#64748b",lineHeight:1.5}}>Cineva a cerut informații / preț. Nu a fost trimisă ofertă formală.</div>
+                </div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>
+                  <button onClick={()=>{
+                    // Generează ofertă → schimbă status la "oferta" și deschide preview ofertă
+                    const nextNr = Math.max(0, ...evs.map(e=>(typeof e.offerNr==="number"?e.offerNr:0))) + 1;
+                    const updated = {...ev, st:"oferta", offerNr:nextNr};
+                    setEvs(p=>p.map(e=>e.id===ev.id?updated:e));
+                    closeModal();
+                    setTimeout(()=>openModal("oferta",{evId:ev.id,initialTab:"oferta",from:"detail"}),80);
+                    showToast("Ofertă generată!");
+                    if(gcalToken&&ev.gcalId) syncToGCal({...updated});
+                  }} style={{...sty.b,fontSize:13}}>📄 Generează ofertă</button>
+                  <button onClick={()=>{updSt(ev.id,"asteptare");closeModal();}} style={{...sty.bg,fontSize:13}}>⏭ Salt direct la Așt. contract</button>
+                  {p.e&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("form",ev.id),80);}} style={{...sty.bg,fontSize:13}}>✏️ Editează date</button>}
+                  {p.d&&<button onClick={()=>{if(window.confirm("Ștergi?"))delEv(ev.id)}} style={{...sty.bg,color:"#ef4444",borderColor:"#ef4444",fontSize:13}}><IcTrash s={13}/> Șterge</button>}
+                </div>
+                <div style={{fontSize:11,color:th.tm,marginBottom:4,fontWeight:600}}>Sau schimbă statusul direct:</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {["oferta","asteptare","plata_avans","confirmat","respins"].map(s=>(
+                    <button key={s} onClick={()=>{updSt(ev.id,s);closeModal();}} style={{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${ST[s].c}`,background:"transparent",color:ST[s].c}}>{ST[s].l}</button>
+                  ))}
+                </div>
+              </>}
 
               {/* DE PLATIT AVANS — doar plăți + butoane (fără Fișa) */}
               {ev.st==="plata_avans"&&<>
