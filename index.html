@@ -1425,8 +1425,8 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
     <div style={{animation:"su .3s ease"}}>
       <div style={{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12}}>
         <div>
-          <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Oferte</h1>
-          <p style={{color:th.tm,fontSize:12,marginTop:2}}>{filterSt===""?activeOffers.length+confConfirmate.length+respinseOffers.length:active.length} oferte</p>
+          <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Cereri</h1>
+          <p style={{color:th.tm,fontSize:12,marginTop:2}}>{filterSt===""?activeOffers.length+confConfirmate.length+respinseOffers.length:active.length} intrări</p>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           <div style={{display:"flex",gap:2,padding:4,background:th.h,borderRadius:8,border:`1px solid ${th.b}`}}>
@@ -1434,7 +1434,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
             <button onClick={()=>setViewMode("grid")} style={{padding:"6px 12px",borderRadius:6,border:"none",fontSize:12,fontWeight:600,cursor:"pointer",background:viewMode==="grid"?th.ab:"transparent",color:viewMode==="grid"?th.t:(th.bg==="#09090b"?"#e5e5e5":th.tm),fontFamily:"inherit"}}>Grid</button>
             <button onClick={()=>setViewMode("kanban")} style={{padding:"6px 12px",borderRadius:6,border:"none",fontSize:12,fontWeight:600,cursor:"pointer",background:viewMode==="kanban"?th.ab:"transparent",color:viewMode==="kanban"?th.t:(th.bg==="#09090b"?"#e5e5e5":th.tm),fontFamily:"inherit"}}>Kanban</button>
           </div>
-          {onAddOffer&&<button onClick={onAddOffer} style={sty.b}><IcPlus s={14}/> Ofertă nouă</button>}
+          {onAddOffer&&<button onClick={onAddOffer} style={sty.b}><IcPlus s={14}/> Cerere nouă</button>}
         </div>
       </div>
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
@@ -1468,8 +1468,8 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
         </div>}
       </div>
       {viewMode==="kanban" ? (
-        <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(4,1fr)",gap:12,minHeight:400}}>
-          {["oferta","asteptare","plata_avans","confirmat","respins"].map(col=>{
+        <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(6,1fr)",gap:12,minHeight:400}}>
+          {["cerere","oferta","asteptare","plata_avans","confirmat","respins"].map(col=>{
             const colEvs = evs.filter(e=>e.st===col&&(!filterCat||e.cat===filterCat));
             return <div key={col} onDragOver={e=>{e.preventDefault();setDragOverCol(col);}} onDragLeave={()=>setDragOverCol(null)} onDrop={e=>{e.preventDefault();setDragOverCol(null);const id=e.dataTransfer.getData("evId");if(id&&onStatusChange){const ev=evs.find(x=>x.id===id);if(ev)onStatusChange(ev.id,col);}}}
               style={{background:th.h,borderRadius:12,padding:12,border:`2px dashed ${dragOverCol===col?ST[col]?.c:th.b}`,minHeight:200,transition:"border-color .2s"}}>
@@ -1499,14 +1499,14 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
       ) : viewMode==="list" ? (
         filterSt==="" ? (
           <>
-            {/* Oferte active */}
-            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte active ({activeSorted.length})</div>
+            {/* Cereri active */}
+            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Cereri active ({activeSorted.length})</div>
             <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden",marginBottom:20}} className={mob?"table-scroll-mob":""}>
-              {activeSorted.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă activă</div>}
+              {activeSorted.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio cerere activă</div>}
               {activeSorted.length>0&&<table style={{width:"100%",borderCollapse:"collapse",minWidth:mob?520:undefined}}>
                 <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
                   {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={activeSorted.length>0&&activeSorted.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=activeSorted.map(e=>e.id);const all=activeSorted.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
-                  {["Nr","Ofertă","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                  {["Nr","Ref","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                 </tr></thead>
                 <tbody>{activeSorted.map((ev,i)=>(
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:"transparent"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
@@ -1528,10 +1528,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                 ))}</tbody>
               </table>}
             </div>
-            {/* Oferte confirmate — o singură listă (fără împărțire viitor/trecut) */}
-            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte confirmate ({confConfirmate.length})</div>
+            {/* Evenimente confirmate — o singură listă */}
+            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Evenimente confirmate ({confConfirmate.length})</div>
             <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden",marginBottom:20}} className={mob?"table-scroll-mob":""}>
-              {confConfirmate.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă confirmată</div>}
+              {confConfirmate.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment confirmat</div>}
               {confConfirmate.length>0&&<table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 8px",minWidth:mob?480:undefined}}>
                 <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
                   {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={confConfirmate.length>0&&confConfirmate.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=confConfirmate.map(e=>e.id);const all=confConfirmate.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
@@ -1547,14 +1547,14 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                 ))}</tbody>
               </table>}
             </div>
-            {/* Oferte respinse */}
-            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Oferte respinse ({respinseOffers.length})</div>
+            {/* Evenimente respinse */}
+            <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Evenimente respinse ({respinseOffers.length})</div>
             <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden"}} className={mob?"table-scroll-mob":""}>
-              {respinseOffers.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă respinsă</div>}
+              {respinseOffers.length===0&&<div style={{padding:30,textAlign:"center",color:th.tm,fontSize:12}}>Niciun eveniment respins</div>}
               {respinseOffers.length>0&&<table style={{width:"100%",borderCollapse:"separate",borderSpacing:"0 8px",minWidth:mob?520:undefined}}>
                 <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
                   {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={respinseOffers.length>0&&respinseOffers.every(e=>selectedIds.includes(e.id))} onChange={()=>{const ids=respinseOffers.map(e=>e.id);const all=respinseOffers.every(e=>selectedIds.includes(e.id));setSelectedIds(all?selectedIds.filter(id=>!ids.includes(id)):[...new Set([...selectedIds,...ids])]);}} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
-                  {["Nr","Ofertă","Tip","Locație","Data eveniment","Adăugată","Onorariu"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                  {["Nr","Ref","Tip","Locație","Data eveniment","Adăugată","Onorariu"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                 </tr></thead>
                 <tbody>{respinseOffers.map((ev,i)=>(
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:th.c,opacity:.88,borderRadius:10,boxShadow:"0 2px 14px rgba(239, 68, 68, 0.2)",border:"1px solid rgba(239, 68, 68, 0.12)"}} onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{e.currentTarget.style.opacity=".88";if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.c}}>
@@ -1573,12 +1573,12 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
           </>
         ) : (
         <>
-      {active.length===0 && <div style={{...sty.cd,padding:40,textAlign:"center",color:th.tm}}><div style={{fontSize:32,marginBottom:8}}>📭</div><div style={{fontSize:13}}>Nicio ofertă</div></div>}
+      {active.length===0 && <div style={{...sty.cd,padding:40,textAlign:"center",color:th.tm}}><div style={{fontSize:32,marginBottom:8}}>📭</div><div style={{fontSize:13}}>Nicio cerere</div></div>}
       <div style={{...sty.cd,padding:0,overflow:mob?"auto":"hidden"}} className={mob?"table-scroll-mob":""}>
         <table style={{width:"100%",borderCollapse:(filterSt==="confirmat"||filterSt==="respins")?"separate":"collapse",borderSpacing:(filterSt==="confirmat"||filterSt==="respins")?"0 8px":0,minWidth:mob?520:undefined}}>
           <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
             {(showSelection||onDeleteSelected)&&<th style={{padding:"10px 12px",width:36}}><input type="checkbox" checked={allSelected} onChange={selectAll} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></th>}
-            {["Nr","Ofertă","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+            {["Nr","Ref","Tip","Locație","Data eveniment","Adăugată","Onorariu","Status"].map(h=><th key={h} style={{padding:"10px 12px",textAlign:"left",fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
           </tr></thead>
           <tbody>{active.map((ev,i)=>(
             <tr key={ev.id} onClick={()=>onSelect(ev)} style={{
@@ -3764,12 +3764,13 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
 // FEATURES — Event form, offer preview, contract, location search
 // ═══════════════════════════════════════════════════════════════════════════════
 function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templates }) {
+  const cerereStart = !!mData?.cerereStart;
   const tplCovers = (templates?.playlist&&templates.playlist.length>0) ? templates.playlist : DEFAULT_COVERS;
   const tplVideos = (templates?.videos&&templates.videos.length>0) ? templates.videos : DEFAULT_VIDEOS;
   const [fm, setFm] = useState({
     cat: mData?.cat||"private",
     type: mData?.type||(isP?"Nuntă":"Festival"),
-    st: mData?.st ?? (mData?.directEvent ? "confirmat" : "oferta"),
+    st: mData?.st ?? (mData?.directEvent ? "confirmat" : (cerereStart ? "cerere" : "oferta")),
     directEvent: !mData?.id && !!mData?.directEvent,
     date: mData?.date||"",
     li: mData?.li||"", sc: mData?.sc||"", ss: mData?.ss||"", lo: mData?.lo||"",
@@ -3832,7 +3833,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
           {/* Header */}
           <div style={{padding:"14px 20px",borderBottom:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:th.sb}}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
-              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,.9)"}}>{isE?"Editează":fm.directEvent?"Eveniment nou":"Ofertă nouă"} {isP?"(Privat / ZGV)":"(Public / PHASER)"}</span>
+              <span style={{fontSize:14,fontWeight:600,color:"rgba(255,255,255,.9)"}}>{isE?"Editează":cerereStart?"Cerere nouă":fm.directEvent?"Eveniment nou":"Ofertă nouă"} {isP?"(Privat / ZGV)":"(Public / PHASER)"}</span>
             </div>
             <button onClick={onClose} style={{padding:mob?12:3,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:"rgba(255,255,255,.5)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX s={16}/></button>
           </div>
@@ -4302,14 +4303,16 @@ Vom furniza 3 mix-uri separate din Stage Box-ul poziționat pe scenă:
           <div style={{padding:"12px 20px",borderTop:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap"}}>
             <button onClick={onClose} style={sty.bg}>Anulează</button>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {!isE&&!fm.directEvent&&<button onClick={()=>{
+              {!isE&&!fm.directEvent&&!cerereStart&&<button onClick={()=>{
                 const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
                 onSave({...fm, title, date: fm.date||"2026-06-15", asCerere:true});
               }} style={{...sty.bg,color:"#64748b",borderColor:"#94a3b8",fontSize:12}} title="Salvează ca cerere — fără ofertă trimisă">📞 Cerere</button>}
               <button onClick={()=>{
                 const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
-                onSave({...fm, title, date: fm.date||"2026-06-15"});
-              }} style={sty.b}>{isE?"Salvează":fm.directEvent?"Creează eveniment":"Creează ofertă"}</button>
+                onSave(cerereStart?{...fm, title, date: fm.date||"2026-06-15", asCerere:true}:{...fm, title, date: fm.date||"2026-06-15"});
+              }} style={sty.b}>
+                {isE?"Salvează":fm.directEvent?"Creează eveniment":cerereStart?"Creează cerere":"Creează ofertă"}
+              </button>
             </div>
           </div>
         </div>
@@ -4668,7 +4671,7 @@ const TOUR_STEPS = [
   { id:"calendar", target:"[data-tour='nav-calendar']", tab:"calendar", title:"📅 Calendarul trupei", desc:"Vizualizezi toate evenimentele pe lună. Dublu-click pe o zi goală = adaugi rapid ofertă, event, task sau ocupat." },
   { id:"cal-grid", target:"[data-tour='cal-grid']",     tab:"calendar", title:"📅 Gridul calendarului", desc:"Chip-urile colorate arată statusul fiecărui event. Click pe chip = preview rapid (ca Google Calendar). Trage chip-ul pe altă zi pentru a-l muta." },
   { id:"events",   target:"[data-tour='nav-events']",   tab:"events",   title:"🎪 Evenimente", desc:"Boardul Kanban cu toate evenimentele trupei. De la Ofertă → Așteptare → Avans → Confirmat. Trage cardul pentru a schimba statusul." },
-  { id:"offers",   target:"[data-tour='nav-offers']",   tab:"offers",   title:"📄 Oferte active", desc:"Toate ofertele care nu au primit răspuns. Generezi un link public pentru client direct din ofertă — clientul vede o pagină dedicată." },
+  { id:"offers",   target:"[data-tour='nav-offers']",   tab:"offers",   title:"📄 Cereri active", desc:"Toate cererile (și intrările în negociere). Când e cazul, generezi oferta după ce ai cererea." },
   { id:"tasks",    target:"[data-tour='nav-tasks']",    tab:"tasks",    title:"✅ Task-uri", desc:"Asignează task-uri membrilor cu deadline, prioritate și subtask-uri. La atribuire, membrul primește notificare automată în aplicație." },
   { id:"music",    target:"[data-tour='nav-music']",    tab:"music",    title:"🎵 Muzică", desc:"Biblioteca de melodii a trupei: tonalitate, BPM, status (repertoriu / idee). Poți adăuga linkuri audio și YouTube." },
   { id:"docs",     target:"[data-tour='nav-docs']",     tab:"docs",     title:"📁 Docs", desc:"Rider tehnic, Press Kit și Playlist — template-uri editabile incluse în ofertă. Poți genera un link public sau descărca PDF." },
@@ -5646,7 +5649,7 @@ function App() {
 
   const getSvcTotal = ev => Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
   const getExpTotal = ev => (ev.ex||[]).reduce((s,x)=>s+x.a,0);
-  const pendingCount = evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)).length;
+  const pendingCount = evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)).length;
   const activeTaskCount = tasks.filter(t=>!t.done).length;
 
   const MONTHS_RO = {ianuarie:1,februarie:2,martie:3,aprilie:4,mai:5,iunie:6,iulie:7,august:8,septembrie:9,octombrie:10,noiembrie:11,decembrie:12};
@@ -5698,7 +5701,7 @@ function App() {
   const navItems = [
     {id:"acasa",    Ic:IcDash,  l:"Acasă"},
     {id:"events",   Ic:IcMusic, l:"Evenimente"},
-    {id:"offers",   Ic:IcSend,  l:"Oferte",  badge:pendingCount},
+    {id:"offers",   Ic:IcSend,  l:"Cereri",  badge:pendingCount},
     {id:"docs", Ic:IcFile, l:"Docs"},
     {id:"tasks",    Ic:IcTask,  l:"Tasks",    badge:activeTaskCount},
     {id:"music",    Ic:IcMicro, l:"Muzică",   badge:songs.filter(s=>s.status==="idee").length||undefined},
@@ -5853,14 +5856,14 @@ function App() {
                   <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     <button onClick={()=>{setGlobalSearch("");setTab("calendar");const d=new Date(pd+"T00:00:00");setCalM(new Date(d.getFullYear(),d.getMonth()));setCalDateSearch(pd);setCalSidebarDate(pd);}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #3b82f6",background:"transparent",color:"#3b82f6",fontSize:12,fontWeight:600,cursor:"pointer"}}>📅 Calendar</button>
                     {p.c&&<>
-                      <button onClick={()=>{setGlobalSearch("");openModal("pick",{date:pd});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #3b82f6",background:"transparent",color:"#3b82f6",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Ofertă</button>
+                      <button onClick={()=>{setGlobalSearch("");openModal("pickCerere",{date:pd});}} style={{padding:"6px 12px",borderRadius:8,border:"1px solid #3b82f6",background:"transparent",color:"#3b82f6",fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Cerere</button>
                       <button onClick={()=>{setGlobalSearch("");openModal("form",{cat:"private",date:pd});}} style={{padding:"6px 12px",borderRadius:8,border:"none",background:"#3b82f6",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Eveniment</button>
                       <button onClick={()=>{const t={...fullTask(""),due:pd,text:"Task "+fD(pd)};setTasks(prev=>[...prev,t]);setGlobalSearch("");showToast("Task adăugat ✓");setTab("tasks");}} style={{padding:"6px 12px",borderRadius:8,border:`1px solid ${th.b}`,background:"transparent",color:th.tm,fontSize:12,fontWeight:600,cursor:"pointer"}}>+ Task</button>
                     </>}
                   </div>
                 </div>;
               })()}
-              {globalSearchResults.evs.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Oferte / Evenimente</div>}
+              {globalSearchResults.evs.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Cereri / Evenimente</div>}
               {globalSearchResults.evs.map(ev=><div key={ev.id} onClick={()=>{setGlobalSearch("");openModal("detail",ev.id);}} style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${th.bl}`,display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
                 <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.venue}</div></div>
                 <div onClick={e=>e.stopPropagation()}><BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={updSt}/></div>
@@ -5886,7 +5889,7 @@ function App() {
                   <IcCal s={15} style={{color:th.tm,flexShrink:0}}/>
                   <input type="date" value={dashboardDateSearch} onChange={e=>setDashboardDateSearch(e.target.value)} style={{...sty.i,padding:"6px 8px",fontSize:12,maxWidth:mob?"100%":150,flex:mob?1:undefined}} placeholder="Caută după dată"/>
                 </div>
-                {p.c&&<button onClick={()=>openModal("pick",null)} style={{...sty.b,fontSize:12,padding:"7px 12px"}}><IcPlus s={13}/> Ofertă nouă</button>}
+                {p.c&&<button onClick={()=>openModal("pickCerere",null)} style={{...sty.b,fontSize:12,padding:"7px 12px"}}><IcPlus s={13}/> Cerere nouă</button>}
               </div>
             </div>
 
@@ -5921,13 +5924,13 @@ function App() {
                 {viitoare.length===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Niciun eveniment confirmat viitor</div>}
               </div>
 
-              {/* Oferte active */}
+              {/* Cereri active */}
               <div style={sty.cd}>
                 <div style={{fontSize:13,fontWeight:700,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span>📤 Oferte active</span>
+                  <span>📤 Cereri active</span>
                   <button onClick={()=>setTab("offers")} style={{fontSize:10,color:th.tm,background:"transparent",border:"none",cursor:"pointer"}}>toate ({pendingCount}) →</button>
                 </div>
-                {evs.filter(e=>["oferta","asteptare","plata_avans"].includes(e.st)).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,5).map(ev=>
+                {evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,5).map(ev=>
                   <div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderRadius:7,marginBottom:3,cursor:"pointer"}}
                     onMouseOver={e=>e.currentTarget.style.background=th.h}
                     onMouseOut={e=>e.currentTarget.style.background="transparent"}>
@@ -5935,7 +5938,7 @@ function App() {
                     <div onClick={e=>e.stopPropagation()}><BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={(id,st)=>{updSt(id,st);}}/></div>
                   </div>
                 )}
-                {pendingCount===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Nicio ofertă activă</div>}
+                {pendingCount===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Nicio cerere activă</div>}
               </div>
             </div>
 
@@ -5950,7 +5953,7 @@ function App() {
               <h1 style={{fontSize:mob?18:22,fontWeight:700,letterSpacing:"-0.5px"}}>Evenimente</h1>
               {p.c&&<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                 <button onClick={()=>openModal("pickEvent",null)} style={{...sty.b,background:"transparent",border:`1px solid ${th.a}`,color:th.a,fontSize:12,padding:"7px 12px"}}><IcPlus s={13}/> Eveniment nou</button>
-                <button onClick={()=>openModal("pick",null)} style={{...sty.b,fontSize:12,padding:"7px 12px"}}><IcPlus s={13}/> Ofertă nouă</button>
+                <button onClick={()=>openModal("pickCerere",null)} style={{...sty.b,fontSize:12,padding:"7px 12px"}}><IcPlus s={13}/> Cerere nouă</button>
               </div>}
             </div>
             {/* Search */}
@@ -6036,8 +6039,8 @@ function App() {
             </>}
           </div>}
 
-          {/* OFERTE */}
-          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pick",null):undefined} onStatusChange={updSt} onBulkStatusChange={p.e?bulkUpdSt:undefined} onAvansToggle={(id)=>{const ev=evs.find(e=>e.id===id);if(!ev)return;const newDp=!ev.dp;const becomesConfirmed=newDp&&ev.st==="plata_avans";const updatedEv={...ev,dp:newDp,...(becomesConfirmed?{st:"confirmat"}:{})};setEvs(p=>p.map(e=>e.id===id?updatedEv:e));showToast(newDp?(ev.st==="plata_avans"?"Avans încasat ✓ — eveniment confirmat":"Avans: încasat ✓"):"Avans: neîncasat");if(becomesConfirmed&&gcalToken&&updatedEv.gcalId){syncToGCal(updatedEv).then(newId=>{if(newId)showToast("📅 Calendar actualizat: Confirmat");});}}} onDeleteSelected={p.d?async(ids)=>{const storageErr=await deleteStoredHtmlPagesForEventIds(ids);setEvs(prev=>prev.filter(e=>!ids.includes(e.id)));showToast(`Șterse ${ids.length} ofertă/oferte`);if(storageErr)showToast("Storage Supabase: "+storageErr+" — vezi supabase-fix-fisa-rls.sql (DELETE)","error");}:undefined} showSelection={p.d||p.e}/>}
+          {/* CERERI */}
+          {tab==="offers"&&<OffersBoard evs={evs} th={th} sty={sty} mob={mob} onSelect={ev=>openModal("detail",ev.id)} onAddOffer={p.c?()=>openModal("pickCerere",null):undefined} onStatusChange={updSt} onBulkStatusChange={p.e?bulkUpdSt:undefined} onAvansToggle={(id)=>{const ev=evs.find(e=>e.id===id);if(!ev)return;const newDp=!ev.dp;const becomesConfirmed=newDp&&ev.st==="plata_avans";const updatedEv={...ev,dp:newDp,...(becomesConfirmed?{st:"confirmat"}:{})};setEvs(p=>p.map(e=>e.id===id?updatedEv:e));showToast(newDp?(ev.st==="plata_avans"?"Avans încasat ✓ — eveniment confirmat":"Avans: încasat ✓"):"Avans: neîncasat");if(becomesConfirmed&&gcalToken&&updatedEv.gcalId){syncToGCal(updatedEv).then(newId=>{if(newId)showToast("📅 Calendar actualizat: Confirmat");});}}} onDeleteSelected={p.d?async(ids)=>{const storageErr=await deleteStoredHtmlPagesForEventIds(ids);setEvs(prev=>prev.filter(e=>!ids.includes(e.id)));showToast(`Șterse ${ids.length} ofertă/oferte`);if(storageErr)showToast("Storage Supabase: "+storageErr+" — vezi supabase-fix-fisa-rls.sql (DELETE)","error");}:undefined} showSelection={p.d||p.e}/>}
 
           {/* DOCS — Documente, rider, playlist, press kit — template pentru oferte */}
           {tab==="docs"&&<div style={{animation:"su .3s ease"}}>
@@ -6514,7 +6517,7 @@ function App() {
           {tab==="calendar"&&<div style={{animation:"su .3s ease",display:"flex",flexDirection:"column",gap:0,position:"relative",...(mob?{flex:"none",minHeight:"auto",overflow:"visible"}:{flex:1,minHeight:0,overflow:"hidden"})}}>
             <div style={{...(mob?{flex:"none",minHeight:"auto",overflow:"visible"}:{flex:1,minWidth:0,minHeight:0,overflow:"hidden"}),display:"flex",flexDirection:"column"}}>
             {!mob&&<h1 style={{fontSize:22,fontWeight:700,marginBottom:16,flexShrink:0}}>Calendar</h1>}
-            {!mob&&<div style={{fontSize:11,color:th.tm,marginBottom:8,flexShrink:0,lineHeight:1.45}}>Oferte și evenimente; <strong style={{color:th.t}}>ocupări</strong> = cine e indisponibil. Linie continuă = sigur · <span style={{borderBottom:"1px dashed "+th.tm}}>întreruptă</span> = neconfirmat (?). <strong style={{color:th.t}}>Click</strong> pe o zi cu intrări: rezumat în popup. <strong style={{color:th.t}}>Dublu-click</strong> pe o zi{p.c?"":" (cu permisiune creare)"}: adaugă ceva.</div>}
+            {!mob&&<div style={{fontSize:11,color:th.tm,marginBottom:8,flexShrink:0,lineHeight:1.45}}>Cereri și evenimente; <strong style={{color:th.t}}>ocupări</strong> = cine e indisponibil. Linie continuă = sigur · <span style={{borderBottom:"1px dashed "+th.tm}}>întreruptă</span> = neconfirmat (?). <strong style={{color:th.t}}>Click</strong> pe o zi cu intrări: rezumat în popup. <strong style={{color:th.t}}>Dublu-click</strong> pe o zi{p.c?"":" (cu permisiune creare)"}: adaugă ceva.</div>}
             {(()=>{
               const y=calM.getFullYear(),m=calM.getMonth();
               const f=new Date(y,m,1).getDay(); const dn=new Date(y,m+1,0).getDate();
@@ -7121,6 +7124,25 @@ function App() {
         </div>
       </div>}
 
+      {/* PICK CERERE MODAL */}
+      {modal==="pickCerere"&&<div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={closeModal}>
+        <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"90%":360,padding:28}} onClick={e=>e.stopPropagation()}>
+          <div style={{textAlign:"center",marginBottom:20}}>
+            <h2 style={{fontSize:17,fontWeight:700,color:th.t}}>Cerere nouă</h2>
+            <p style={{color:th.tm,fontSize:12,marginTop:3}}>Ce tip de client?</p>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <button onClick={()=>{closeModal();setTimeout(()=>openModal("form",{cat:"private",cerereStart:true,st:"cerere",...(mData?.date&&{date:mData.date})}),80);}} style={{background:"#fff",border:"2px solid #333",cursor:"pointer",textAlign:"center",padding:mob?24:22,borderRadius:10,color:"#111",boxShadow:"0 2px 8px rgba(0,0,0,.2)",minHeight:mob?100:undefined}}>
+              <div style={{fontSize:28,marginBottom:8}}>🎉</div><div style={{fontWeight:700,fontSize:14}}>Privat</div><div style={{fontSize:10,color:"#666",marginTop:4}}>ZăGoodVibes</div>
+            </button>
+            <button onClick={()=>{closeModal();setTimeout(()=>openModal("form",{cat:"public",cerereStart:true,st:"cerere",...(mData?.date&&{date:mData.date})}),80);}} style={{background:"#fff",border:"2px solid #333",cursor:"pointer",textAlign:"center",padding:mob?24:22,borderRadius:10,color:"#111",boxShadow:"0 2px 8px rgba(0,0,0,.2)",minHeight:mob?100:undefined}}>
+              <div style={{fontSize:28,marginBottom:8}}>🎸</div><div style={{fontWeight:700,fontSize:14}}>Public</div><div style={{fontSize:10,color:"#666",marginTop:4}}>PHASER</div>
+            </button>
+          </div>
+          <button onClick={closeModal} style={{...sty.bg,width:"100%",justifyContent:"center",marginTop:12}}>Anulează</button>
+        </div>
+      </div>}
+
       {modal==="pickEvent"&&<div style={{position:"fixed",inset:0,background:th.ov,display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000}} onClick={closeModal}>
         <div style={{background:th.c,border:`1px solid ${th.b}`,borderRadius:14,width:mob?"90%":360,padding:28}} onClick={e=>e.stopPropagation()}>
           <div style={{textAlign:"center",marginBottom:20}}>
@@ -7146,8 +7168,8 @@ function App() {
             <p style={{color:th.tm,fontSize:12,marginTop:4,lineHeight:1.45}}>Alege ce vrei să creezi pentru această zi</p>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <button type="button" onClick={()=>{const d=mData.date;closeModal();setTimeout(()=>openModal("pick",{date:d}),80);}} style={{background:"#fff",border:"2px solid #333",cursor:"pointer",textAlign:"center",padding:mob?18:16,borderRadius:10,color:"#111",boxShadow:"0 2px 8px rgba(0,0,0,.2)",minHeight:mob?88:80}}>
-              <div style={{fontSize:22,marginBottom:6}}>📋</div><div style={{fontWeight:700,fontSize:13}}>Ofertă</div><div style={{fontSize:9,color:"#666",marginTop:3}}>Flux ofertă + număr</div>
+            <button type="button" onClick={()=>{const d=mData.date;closeModal();setTimeout(()=>openModal("pickCerere",{date:d}),80);}} style={{background:"#fff",border:"2px solid #333",cursor:"pointer",textAlign:"center",padding:mob?18:16,borderRadius:10,color:"#111",boxShadow:"0 2px 8px rgba(0,0,0,.2)",minHeight:mob?88:80}}>
+              <div style={{fontSize:22,marginBottom:6}}>📞</div><div style={{fontWeight:700,fontSize:13}}>Cerere</div><div style={{fontSize:9,color:"#666",marginTop:3}}>Cerere verbală (fără număr ofertă)</div>
             </button>
             <button type="button" onClick={()=>{const d=mData.date;closeModal();setTimeout(()=>openModal("pickEvent",{date:d}),80);}} style={{background:"#fff",border:"2px solid #333",cursor:"pointer",textAlign:"center",padding:mob?18:16,borderRadius:10,color:"#111",boxShadow:"0 2px 8px rgba(0,0,0,.2)",minHeight:mob?88:80}}>
               <div style={{fontSize:22,marginBottom:6}}>🎉</div><div style={{fontWeight:700,fontSize:13}}>Eveniment</div><div style={{fontSize:9,color:"#666",marginTop:3}}>Fără ofertă, confirmat</div>
@@ -7183,7 +7205,7 @@ function App() {
             </div>
             <div style={{padding:16,display:"flex",flexDirection:"column",gap:14}}>
               {dayEvs.length>0&&<>
-                <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:0.5}}>Oferte / evenimente</div>
+                <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:0.5}}>Cereri / evenimente</div>
                 {dayEvs.map(ev=><button key={ev.id} type="button" onClick={()=>go(()=>(ev.st==="confirmat"?openModal("detail",ev.id):openModal("oferta",ev.id)))} style={{textAlign:"left",padding:12,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,cursor:"pointer",width:"100%"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}><Badge s={ev.st} th={th}/><span style={{fontSize:13,fontWeight:700,color:th.t}}>{ev.offerNr!=null&&ev.offerNr!==""?"O"+ev.offerNr:"—"} · {ev.type}</span></div>
                   <div style={{fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
