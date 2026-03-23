@@ -5139,6 +5139,7 @@ function App() {
   });
   const tokenClientRef = useRef(null);
   const gcalSilentRef = useRef(false); // previne multiple silent refresh simultane
+  const gcalPendingSyncsRef = useRef([]); // syncuri în așteptare după refresh token
 
   // Salvează token GCal în Supabase (cloud) — oricine reconectează, toți beneficiază
   const saveGCalToCloud = async (token, exp) => {
@@ -5172,8 +5173,18 @@ function App() {
             localStorage.setItem(GCAL_LS_EXPIRY, String(exp));
             setGcalToken(resp.access_token);
             saveGCalToCloud(resp.access_token, exp);
+            // Procesează syncurile în așteptare după refresh
+            const pending = gcalPendingSyncsRef.current.splice(0);
+            if(pending.length > 0) {
+              setTimeout(async () => {
+                for(const pendingEv of pending) {
+                  const newId = await syncToGCal(pendingEv);
+                  if(newId) setEvs(p=>p.map(e=>e.id===pendingEv.id?{...e,gcalId:newId}:e));
+                }
+              }, 500);
+            }
             if(resp.error) return; // silent refresh eșuat silențios
-            showToast("📅 Google Calendar conectat!");
+            if(!pending.length) showToast("📅 Google Calendar conectat!");
           }
         },
         error_callback: () => { gcalSilentRef.current = false; }
@@ -5275,11 +5286,57 @@ function App() {
         headers: { "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
         body: JSON.stringify(body)
       });
-      if (res.status === 401) { disconnectGCal(); showToast("Sesiune Calendar expirată. Reconectează!"); return null; }
+      if (res.status === 401) {
+        // Token expirat — pune evenimentul în coada de retry și încearcă silent refresh
+        gcalPendingSyncsRef.current.push(ev);
+        trySilentRefresh();
+        return null;
+      }
       const r = await res.json();
       return r.id || null;
     } catch(e) { return null; }
   };
+
+  // Șterge un eveniment din Google Calendar după gcalId
+  const deleteFromGCal = async (gcalId) => {
+    if(!gcalId) return;
+    const token = localStorage.getItem(GCAL_LS_TOKEN);
+    const exp   = parseInt(localStorage.getItem(GCAL_LS_EXPIRY)||"0");
+    if(!token || exp < Date.now()) { trySilentRefresh(); return; }
+    try {
+      await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${gcalId}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+    } catch(e) {}
+  };
+
+  // Sincronizează un bloc "Ocupat" în Google Calendar (creare/actualizare)
+  const syncBlockToGCal = async (b) => {
+    const token = localStorage.getItem(GCAL_LS_TOKEN);
+    const exp   = parseInt(localStorage.getItem(GCAL_LS_EXPIRY)||"0");
+    if(!token || exp < Date.now() || !b.date) return null;
+    const mem = MEMBERS.find(x => x.id === b.memberId);
+    const name = mem?.short || mem?.n || "?";
+    const ndObj = new Date(b.date+"T00:00:00"); ndObj.setDate(ndObj.getDate()+1);
+    const nextDay = ndObj.toISOString().split("T")[0];
+    const summary = (b.tentative ? "? " : "") + "Ocupat: " + name;
+    const body = { summary, description: b.note||"", start:{date:b.date}, end:{date:nextDay} };
+    try {
+      const url = b.gcalId
+        ? `https://www.googleapis.com/calendar/v3/calendars/primary/events/${b.gcalId}`
+        : "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+      const res = await fetch(url, {
+        method: b.gcalId ? "PUT" : "POST",
+        headers: { "Authorization":`Bearer ${token}`, "Content-Type":"application/json" },
+        body: JSON.stringify(body)
+      });
+      if(res.status === 401) { trySilentRefresh(); return null; }
+      const r = await res.json();
+      return r.id || null;
+    } catch(e) { return null; }
+  };
+
   const mob = useIsMobile();
   const effectiveTheme = themeMode==="auto" ? systemTheme : themeMode;
   const th  = TH[effectiveTheme];
@@ -5353,6 +5410,14 @@ function App() {
   };
 
   const delEv = async (id) => {
+    // Șterge din Google Calendar dacă există gcalId
+    if(gcalToken) {
+      const ev = evs.find(e => e.id===id);
+      if(ev?.gcalId) {
+        deleteFromGCal(ev.gcalId);
+        showToast("📅 Șters din Google Calendar");
+      }
+    }
     const storageErr = await deleteStoredHtmlPagesForEventIds([id]);
     setEvs(p=>p.filter(e=>e.id!==id));
     closeModal();
@@ -5419,20 +5484,21 @@ function App() {
   }, [tab]);
 
   const updSt = (id, st) => {
-    setEvs(p => {
-      const updated = p.map(e => e.id===id ? {...e, st} : e);
-      // Sync GCal dacă există gcalId — titlul și link-ul se schimbă odată cu statusul
-      if(gcalToken) {
-        const ev = updated.find(e => e.id===id);
-        if(ev?.gcalId) {
-          syncToGCal(ev).then(newId => {
-            if(newId) showToast("📅 Calendar actualizat: "+ST[st]?.l);
-          });
-        }
-      }
-      return updated;
-    });
+    setEvs(p => p.map(e => e.id===id ? {...e, st} : e));
     showToast(`Status: ${ST[st]?.l}`);
+    // Sync GCal în afara updater-ului (side effects nu se pun în setEvs)
+    if(gcalToken) {
+      const ev = evs.find(e => e.id===id);
+      if(ev?.gcalId) {
+        const updatedEv = {...ev, st};
+        syncToGCal(updatedEv).then(newId => {
+          if(newId) {
+            setEvs(p => p.map(e => e.id===id ? {...e, gcalId:newId} : e));
+            showToast("📅 Calendar actualizat: "+ST[st]?.l);
+          }
+        });
+      }
+    }
   };
   const bulkUpdSt = (ids, st) => {
     if (!ids || !ids.length || !st) return;
@@ -6528,10 +6594,15 @@ function App() {
                   </label>
                   <button type="button" onClick={()=>{
                     if(!calNewOccMember){ showToast("Alege cine e ocupat", "error"); return; }
-                    setCalBlocks(prev=>[...(prev||[]),{id:uid(),date:calSidebarDate,memberId:calNewOccMember,note:(calNewOccNote||"").trim(),tentative:!!calNewOccTent}]);
+                    const nb={id:uid(),date:calSidebarDate,memberId:calNewOccMember,note:(calNewOccNote||"").trim(),tentative:!!calNewOccTent};
+                    setCalBlocks(prev=>[...(prev||[]),nb]);
                     setCalNewOccNote("");
                     setCalNewOccTent(false);
                     showToast("Ocupare adăugată ✓");
+                    // Sync în Google Calendar
+                    if(gcalToken) syncBlockToGCal(nb).then(gcalId=>{
+                      if(gcalId) setCalBlocks(prev=>(prev||[]).map(x=>x.id===nb.id?{...x,gcalId}:x));
+                    });
                   }} style={{...sty.b,width:"100%",fontSize:12,padding:"10px 14px"}}>+ Adaugă ocupare</button>
                   {dayOcc.length>0&&<div style={{fontSize:11,fontWeight:600,color:th.tm,marginTop:14,marginBottom:6}}>Înregistrate</div>}
                   {dayOcc.map(b=>{
@@ -6540,7 +6611,7 @@ function App() {
                       <div style={{fontSize:13,fontWeight:700}}>{b.tentative?<span style={{color:"#f59e0b"}}>? </span>:null}Ocupat: {mem?.short||mem?.n||"?"}</div>
                       {b.note?<div style={{fontSize:11,color:th.tm,marginTop:4,whiteSpace:"pre-wrap"}}>{b.note}</div>:null}
                       <div style={{fontSize:10,color:th.tm,marginTop:6}}>Apasă pentru detalii / ștergere</div>
-                      <button type="button" onClick={(e)=>{e.stopPropagation();setCalBlocks(prev=>(prev||[]).filter(x=>x.id!==b.id));}} style={{marginTop:8,padding:"4px 10px",fontSize:11,borderRadius:6,border:`1px solid ${th.b}`,background:"transparent",color:"#ef4444",cursor:"pointer"}}>Șterge rapid</button>
+                      <button type="button" onClick={(e)=>{e.stopPropagation();if(gcalToken&&b.gcalId)deleteFromGCal(b.gcalId);setCalBlocks(prev=>(prev||[]).filter(x=>x.id!==b.id));}} style={{marginTop:8,padding:"4px 10px",fontSize:11,borderRadius:6,border:`1px solid ${th.b}`,background:"transparent",color:"#ef4444",cursor:"pointer"}}>Șterge rapid</button>
                     </div>;
                   })}
                 </div>
@@ -7133,7 +7204,7 @@ function App() {
                 Încă neconfirmat (?) — linie întreruptă în calendar
               </label>
               <div style={{display:"flex",flexDirection:mob?"column":"row",gap:10,marginTop:8}}>
-                <button type="button" onClick={()=>{setCalBlocks(prev=>(prev||[]).filter(x=>x.id!==b.id));closeModal();showToast("Ocupare ștearsă");}} style={{flex:1,padding:"12px 16px",borderRadius:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",fontWeight:600,cursor:"pointer",fontSize:13}}>Șterge ocupare</button>
+                <button type="button" onClick={()=>{if(gcalToken&&b.gcalId)deleteFromGCal(b.gcalId);setCalBlocks(prev=>(prev||[]).filter(x=>x.id!==b.id));closeModal();showToast("Ocupare ștearsă");}} style={{flex:1,padding:"12px 16px",borderRadius:10,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",fontWeight:600,cursor:"pointer",fontSize:13}}>Șterge ocupare</button>
                 <button type="button" onClick={closeModal} style={{...sty.b,flex:1,padding:"12px 16px",fontSize:13}}>Închide</button>
               </div>
             </div>
@@ -8017,7 +8088,20 @@ function App() {
         onBackToDetail={fromDetail?()=>{closeModal();setTimeout(()=>openModal("detail",ev.id),80);}:undefined}
         evStatus={ev.st}
         onStatusChange={updSt}
-        onOfferUpdate={(id,up)=>{setEvs(p=>p.map(e=>e.id===id?{...e,...up}:e));}}
+        onOfferUpdate={(id,up)=>{
+          setEvs(p=>p.map(e=>e.id===id?{...e,...up}:e));
+          // Sync GCal în afara updater-ului (side effects nu se pun în setEvs)
+          const gcalFields=["responsabilPrincipal","type","date","venue","city","st"];
+          if(gcalToken && Object.keys(up).some(k=>gcalFields.includes(k))){
+            const ev=evs.find(e=>e.id===id);
+            if(ev?.gcalId){
+              const updatedEv={...ev,...up};
+              syncToGCal(updatedEv).then(newId=>{
+                if(newId) setEvs(p=>p.map(e=>e.id===id?{...e,gcalId:newId}:e));
+              });
+            }
+          }
+        }}
         th={th}
         mob={mob}
         onClose={closeModal}
