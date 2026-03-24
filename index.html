@@ -95,23 +95,21 @@
         bottom: 0; left: 0; right: 0;
         z-index: 300;
         height: 58px;
-        padding: 0 2px;
+        padding: 0 6px;
         padding-bottom: env(safe-area-inset-bottom);
         border-top: 1px solid rgba(128,128,128,.15);
         background: var(--nav-bg, #111);
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none;
+        overflow: hidden;
         align-items: center;
+        justify-content: space-between;
         backdrop-filter: blur(20px) saturate(1.8);
         -webkit-backdrop-filter: blur(20px) saturate(1.8);
         gap: 0px;
       }
-      .mob-bottom-nav::-webkit-scrollbar { display: none; }
       .mob-bottom-nav-btn {
-        flex: 0 0 56px;
-        min-width: 56px;
-        max-width: 56px;
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: none;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -124,30 +122,18 @@
         padding: 6px 2px;
         position: relative;
         border-radius: 14px;
-        transition: background .18s, transform .12s;
+        transition: background .18s;
         -webkit-tap-highlight-color: transparent;
         min-height: 50px;
       }
-      .mob-bottom-nav-btn:active { transform: scale(.91); }
       .mob-bottom-nav-btn.nav-active {
         background: rgba(128,128,128,.14);
       }
       .mob-bottom-nav-btn span.nav-lbl {
         display: none;
       }
-      .mob-bottom-nav-btn.nav-active span.nav-lbl {
-        display: block;
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: .1px;
-        line-height: 1;
-        max-width: 46px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
       .mob-bottom-nav-badge {
-        position: absolute; top: 6px; right: 10px;
+        position: absolute; top: 8px; right: calc(50% - 12px);
         width: 8px; height: 8px; border-radius: 50%;
         background: #f59e0b;
         box-shadow: 0 0 0 2px var(--nav-bg, #111);
