@@ -94,8 +94,8 @@
         position: fixed;
         bottom: 0; left: 0; right: 0;
         z-index: 300;
-        height: 58px;
-        padding: 0 6px;
+        height: 72px;
+        padding: 0 4px;
         padding-bottom: env(safe-area-inset-bottom);
         border-top: 1px solid rgba(128,128,128,.15);
         background: var(--nav-bg, #111);
@@ -114,23 +114,31 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 2px;
+        gap: 3px;
         border: none;
         background: transparent;
         cursor: pointer;
         font-family: inherit;
-        padding: 6px 2px;
+        padding: 6px 2px 5px;
         position: relative;
         border-radius: 14px;
         transition: background .18s;
         -webkit-tap-highlight-color: transparent;
-        min-height: 50px;
+        min-height: 64px;
       }
       .mob-bottom-nav-btn.nav-active {
         background: rgba(128,128,128,.14);
       }
       .mob-bottom-nav-btn span.nav-lbl {
-        display: none;
+        display: block;
+        font-size: 9.5px;
+        font-weight: 500;
+        letter-spacing: .01em;
+        line-height: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
       }
       .mob-bottom-nav-badge {
         position: absolute; top: 8px; right: calc(50% - 12px);
@@ -5970,7 +5978,7 @@ function App() {
 
       {/* MAIN — un singur strat scroll pe mobil (.app-main-scroll); părintele rămâne overflow:hidden */}
       <div style={{flex:1,minHeight:0,overflow:"hidden",display:"flex",flexDirection:"column",position:"relative"}}>
-        <div className={mob?"app-main-scroll":""} style={{flex:1,minHeight:0,...(mob?{}:{overflow:"auto"}),padding:mob?"14px 16px 80px":"22px 36px 22px 44px",paddingLeft:mob?16:(sbMode==="mini"?52:44),paddingBottom:mob?"max(90px, calc(72px + env(safe-area-inset-bottom)))":"22px"}}>
+        <div className={mob?"app-main-scroll":""} style={{flex:1,minHeight:0,...(mob?{}:{overflow:"auto"}),padding:mob?"14px 16px 80px":"22px 36px 22px 44px",paddingLeft:mob?16:(sbMode==="mini"?52:44),paddingBottom:mob?"max(96px, calc(78px + env(safe-area-inset-bottom)))":"22px"}}>
 
           {/* GLOBAL SEARCH — mereu vizibil */}
           <div style={{position:"relative",marginBottom:16,maxWidth:mob?"100%":400}}>
