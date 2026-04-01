@@ -5402,6 +5402,39 @@ function App() {
     return () => clearTimeout(timer);
   }, [gcalToken]);
 
+  // Revenire în tab / focus: tokenul expiră la ~1h — reîncarcă din Supabase sau silent refresh (fără popup dacă ești logat în Google în același browser)
+  useEffect(() => {
+    const restoreGCalIfNeeded = () => {
+      if (document.visibilityState && document.visibilityState !== "visible") return;
+      const exp = parseInt(localStorage.getItem(GCAL_LS_EXPIRY) || "0", 10);
+      const t = localStorage.getItem(GCAL_LS_TOKEN);
+      if (t && exp > Date.now() + 90 * 1000) return;
+      const client = getSbClient();
+      const applyCloud = (row) => {
+        if (row?.data?.token && row.data.exp > Date.now()) {
+          localStorage.setItem(GCAL_LS_TOKEN, row.data.token);
+          localStorage.setItem(GCAL_LS_EXPIRY, String(row.data.exp));
+          setGcalToken(row.data.token);
+          return true;
+        }
+        return false;
+      };
+      if (client) {
+        client.from("app_data").select("data").eq("id", "phaser_gcal").maybeSingle().then(({ data: row }) => {
+          if (!applyCloud(row) && tokenClientRef.current) trySilentRefresh();
+        });
+      } else if (tokenClientRef.current) {
+        trySilentRefresh();
+      }
+    };
+    document.addEventListener("visibilitychange", restoreGCalIfNeeded);
+    window.addEventListener("focus", restoreGCalIfNeeded);
+    return () => {
+      document.removeEventListener("visibilitychange", restoreGCalIfNeeded);
+      window.removeEventListener("focus", restoreGCalIfNeeded);
+    };
+  }, []);
+
   const connectGCal = () => {
     if (tokenClientRef.current) {
       // Cerem acces offline ca să avem refresh token / reînnoire fără a cere din nou consimțământ la fiecare refresh.

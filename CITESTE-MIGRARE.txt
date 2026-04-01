@@ -1,0 +1,58 @@
+══════════════════════════════════════════════════════════════
+  MUTARE DATE — 4 pași (fără să intri în Supabase vechi)
+══════════════════════════════════════════════════════════════
+
+Ai nevoie DOAR de textul lung pe care mi l-ai trimis în chat
+(cel care începe cu [{"idx":0 ...).
+
+──────────────────────────────────────────────────────────────
+PASUL 1 — Salvează textul din chat
+──────────────────────────────────────────────────────────────
+
+  • În Cursor: click dreapta pe mesajul tău cu acel text → Copy
+    (sau selectezi tot de la [ până la ultimul ] inclusiv).
+
+  • În folderul "Phaser Manager" salvezi textul ca:
+        phaser-export.json   SAU   phaser-export.txt
+    (ambele merg la fel)
+
+  • Lipești tot textul acolo. Salvezi fișierul.
+
+──────────────────────────────────────────────────────────────
+PASUL 2 — Rulezi scriptul
+──────────────────────────────────────────────────────────────
+
+  Varianta A: dublu-click pe  pregateste-datele.command
+  (dacă macOS întreabă, Allow / Deschide în Terminal)
+
+  Varianta B: Terminal:
+        cd "/Users/raczradu/Downloads/Phaser Manager"
+        ./pregateste-datele.sh
+
+  Apare phaser_main-data.json și phaser_gcal-data.json
+
+──────────────────────────────────────────────────────────────
+PASUL 3 — Supabase NOU (doar proiectul nou)
+──────────────────────────────────────────────────────────────
+
+  Table Editor → app_data → Insert row:
+
+    id = phaser_main
+    data = deschizi phaser_main-data.json, Cmd+A, Cmd+C,
+           lipești în câmpul data → Save
+
+  Insert row:
+
+    id = phaser_gcal
+    data = la fel din phaser_gcal-data.json → Save
+
+  (Dacă nu vrei Calendar vechi: sari peste phaser_gcal și
+   reconectezi Google din app.)
+
+──────────────────────────────────────────────────────────────
+PASUL 4 — Deschizi Phaser Manager în browser
+──────────────────────────────────────────────────────────────
+
+  Ar trebui să vezi playlist-ul din templates, costuri anuale, etc.
+
+══════════════════════════════════════════════════════════════

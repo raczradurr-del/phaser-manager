@@ -1,3 +1,9 @@
 .DS_Store
 *.log
 node_modules/
+
+# Migrare Supabase — conțin token OAuth / date personale (nu commit!)
+phaser-export.txt
+phaser-export.json
+phaser_main-data.json
+phaser_gcal-data.json
