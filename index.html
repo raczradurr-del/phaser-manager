@@ -1010,6 +1010,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
   const [newText, setNewText] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
   const [newPrio, setNewPrio] = useState("medium");
+  const [newDue, setNewDue] = useState("");
   const [newRepeat, setNewRepeat] = useState("none");
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [taskModalId, setTaskModalId] = useState(null);
@@ -1031,6 +1032,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
     if(!newText.trim()) return;
     const t = fullTask(newText.trim(),newPrio);
     t.repeat = newRepeat || "none";
+    if (newDue) t.due = newDue;
     if(newAssignee){
       t.assignedTo = newAssignee;
       if(onNotifyAssign && newAssignee !== currentMemberId)
@@ -1039,6 +1041,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
     setTasks(p=>[...p,t]);
     setNewText("");
     setNewAssignee("");
+    setNewDue("");
   };
   const toggle = id => setTasks(p => {
     const t = findTaskInTree(p, id);
@@ -1137,17 +1140,20 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
 
     return (
       <div key={t.id} id={"task-focus-"+t.id} style={{borderRadius:10,background:th.c,border:`1px solid ${th.b}`,borderLeft:`3px solid ${prioColor}`,overflow:"hidden",marginBottom:8,marginLeft:depth*14,opacity:isDone?.6:1,transition:"opacity .2s"}}>
-        {/* ── ROW COMPACT ── */}
-        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",minHeight:44}}>
-          {showSelect&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:15,height:15,flexShrink:0}}/></div>}
+        {/* ── ROW COMPACT — click pe rând deschide/închide detaliile; creion = popup edit ── */}
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",minHeight:44,cursor:"pointer"}} onClick={()=>toggleExpanded(t.id)} title="Click pentru detalii">
+          {showSelect&&<div onClick={e=>e.stopPropagation()} style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 4px 0",borderRadius:8,border:`1px dashed ${th.bg==="#09090b"?"rgba(99,102,241,.55)":"rgba(99,102,241,.4)"}`,background:th.bg==="#09090b"?"rgba(99,102,241,.08)":"rgba(99,102,241,.06)"}} title="Bifează pentru acțiuni în masă (status, ștergere)">
+            <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16,accentColor:"#6366f1"}}/>
+            <span style={{fontSize:7,color:th.tm,fontWeight:700,letterSpacing:0.4,textTransform:"uppercase"}}>grup</span>
+          </div>}
 
-          {/* Checkbox done */}
-          <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:18,height:18,borderRadius:4,border:`2px solid ${isDone?"transparent":prioColor}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?prioColor:"transparent",transition:"all .15s"}}>
-            {isDone&&<IcCheck s={11}/>}
+          {/* Finalizat — cerc, nu pătrat (se diferențiază de selecția în masă) */}
+          <div onClick={e=>{e.stopPropagation();toggle(t.id);}} title={isDone?"Marchează activ din nou":"Marchează finalizat"} style={{width:22,height:22,borderRadius:"50%",border:`2px solid ${prioColor}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?prioColor:"transparent",transition:"all .15s",boxShadow:isDone?`0 0 0 1px ${prioColor}40`:"none"}}>
+            {isDone&&<span style={{color:"#fff",display:"flex",lineHeight:0}}><IcCheck s={12}/></span>}
           </div>
 
           {/* Text */}
-          <div onClick={(e)=>{e.stopPropagation(); setTaskModalId(t.id);}} style={{flex:1,minWidth:0,cursor:"pointer"}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={{fontSize:14,fontWeight:500,textDecoration:isDone?"line-through":undefined,color:isDone?th.tm:th.t,lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
               {t.text}
             </div>
@@ -1166,16 +1172,8 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
           {/* Avatar assigned (compact) */}
           {assignedM&&<div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,"+prioColor+","+prioColor+"99)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}} title={assignedM.n}>{assignedM.e}</div>}
 
-          {/* Expand + delete */}
-          <button onClick={()=>toggleExpanded(t.id)} style={{padding:"4px 6px",border:"none",background:"transparent",color:th.tm,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center"}}>
-            <span style={{fontSize:10,transition:"transform .2s",display:"block",transform:ex?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
-          </button>
-        <button
-          onClick={e=>{e.stopPropagation(); setTaskModalId(t.id);}}
-          style={{padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer",opacity:.75,flexShrink:0}}
-          title="Deschide în popup"
-        ><IcEdit s={12}/></button>
-          <button onClick={e=>{e.stopPropagation();del(t.id);}} style={{padding:4,border:"none",background:"transparent",color:th.tm,cursor:"pointer",opacity:.5,flexShrink:0}}><IcTrash s={12}/></button>
+          <button type="button" onClick={e=>{e.stopPropagation(); setTaskModalId(t.id);}} style={{padding:6,border:"none",background:th.h,borderRadius:8,color:th.tm,cursor:"pointer",flexShrink:0}} title="Editare detaliată (fereastră)"><IcEdit s={14}/></button>
+          <button type="button" onClick={e=>{e.stopPropagation();del(t.id);}} style={{padding:6,border:"none",background:"transparent",color:th.tm,cursor:"pointer",opacity:.55,flexShrink:0}} title="Șterge"><IcTrash s={12}/></button>
         </div>
 
         {/* ── EXPANDED PANEL ── */}
@@ -1422,6 +1420,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
         <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:18}}>
           <input value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()}
             style={{...sty.i,width:"100%",padding:"12px 14px",fontSize:15,borderRadius:12,border:`1px solid ${th.bl}`}} placeholder="Task nou — Enter pentru a adăuga"/>
+          <input type="date" value={newDue} onChange={e=>setNewDue(e.target.value)} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,borderRadius:10}} title="Deadline (opțional)"/>
           <button type="button" onClick={add} style={{...sty.b,padding:"10px 16px",borderRadius:10,fontWeight:600,fontSize:13,alignSelf:"flex-start"}}><IcPlus s={15}/> Adaugă</button>
         </div>
       ) : (
@@ -1485,6 +1484,10 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
               </div>
             </div>
           </div>
+          <div style={{marginBottom:14}}>
+            <label style={{display:"block",fontSize:10,color:th.tm,fontWeight:700,marginBottom:6,letterSpacing:0.3}}>Deadline (opțional)</label>
+            <input type="date" value={newDue} onChange={e=>setNewDue(e.target.value)} style={{...sty.i,maxWidth:320,padding:"11px 14px",fontSize:14,borderRadius:10}} />
+          </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:12,alignItems:"center",paddingTop:4,borderTop:`1px solid ${th.bl}`}}>
             <button type="button" onClick={add} style={{...sty.b,padding:"12px 22px",borderRadius:12,fontWeight:700,fontSize:14,display:"inline-flex",alignItems:"center",gap:8}}>
               <IcPlus s={18}/>
@@ -1523,8 +1526,11 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
                       onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,.08)";}}
                       onMouseOut={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,.05)";}}>
                       <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-                        {!compact&&<div onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16}}/></div>}
-                        <div onClick={e=>{e.stopPropagation();toggle(t.id);}} style={{width:20,height:20,borderRadius:5,border:`2px solid ${TSC[taskStatus(t)]}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:taskStatus(t)==="done"?th.b:"transparent",marginTop:2}}>{taskStatus(t)==="done"&&<IcCheck s={12}/>}</div>
+                        {!compact&&<div onClick={e=>e.stopPropagation()} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2,padding:"2px 4px 0",borderRadius:8,border:`1px dashed rgba(99,102,241,.45)`,background:th.bg==="#09090b"?"rgba(99,102,241,.08)":"rgba(99,102,241,.06)"}} title="Selecție în masă">
+                          <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16,accentColor:"#6366f1"}}/>
+                          <span style={{fontSize:7,color:th.tm,fontWeight:700,textTransform:"uppercase"}}>grup</span>
+                        </div>}
+                        <div onClick={e=>{e.stopPropagation();toggle(t.id);}} title="Finalizat" style={{width:22,height:22,borderRadius:"50%",border:`2px solid ${TSC[taskStatus(t)]}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:taskStatus(t)==="done"?TSC[taskStatus(t)]:"transparent",marginTop:2}}>{taskStatus(t)==="done"&&<span style={{color:"#fff",display:"flex"}}><IcCheck s={12}/></span>}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:16,fontWeight:600,textDecoration:taskStatus(t)==="done"?"line-through":undefined,color:taskStatus(t)==="done"?th.tm:th.t,lineHeight:1.4}}>{t.text}{t.assignedTo&&<span style={{fontSize:12,color:th.a,marginLeft:8}}>{assignLabel(t.assignedTo)}</span>}</div>
                           <div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
