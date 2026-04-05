@@ -7,3 +7,10 @@ phaser-export.txt
 phaser-export.json
 phaser_main-data.json
 phaser_gcal-data.json
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
