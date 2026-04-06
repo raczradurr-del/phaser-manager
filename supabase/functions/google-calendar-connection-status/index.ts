@@ -2,6 +2,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
+import { supabaseOrigin } from "../_shared/supabase_url.ts";
 
 Deno.serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -27,8 +28,8 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const supabaseUrl = supabaseOrigin();
+  const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
   const supa = createClient(supabaseUrl, anon);
   const { data: { user }, error: userErr } = await supa.auth.getUser(jwt);
   if (userErr || !user) {
@@ -38,7 +39,7 @@ Deno.serve(async (req) => {
     });
   }
 
-  const admin = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const admin = createClient(supabaseUrl, (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim());
   const { data } = await admin
     .from("google_calendar_credentials")
     .select("user_id")

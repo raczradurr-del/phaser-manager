@@ -5859,29 +5859,6 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!GCAL_USE_SERVER_OAUTH) return;
-    try {
-      const u = new URL(window.location.href);
-      const st = u.searchParams.get("gcal_oauth");
-      if (st === "ok") {
-        showToast("📅 Google Calendar conectat (persistă cu refresh token)!");
-        setGcalServerConnected(true);
-        gcalEdgeCacheRef.current = { token: "", exp: 0 };
-        u.searchParams.delete("gcal_oauth");
-        u.searchParams.delete("reason");
-        const q1 = u.searchParams.toString();
-        window.history.replaceState({}, "", u.pathname + (q1 ? "?" + q1 : "") + u.hash);
-      } else if (st === "err") {
-        showToast("Calendar: " + (u.searchParams.get("reason") || "eroare"), "error");
-        u.searchParams.delete("gcal_oauth");
-        u.searchParams.delete("reason");
-        const q2 = u.searchParams.toString();
-        window.history.replaceState({}, "", u.pathname + (q2 ? "?" + q2 : "") + u.hash);
-      }
-    } catch (e) {}
-  }, []);
-
-  useEffect(() => {
     if (!GCAL_USE_SERVER_OAUTH || !authReady || !sbSession) return;
     const run = async () => {
       const sb = getSbClient();
@@ -5889,13 +5866,50 @@ function App() {
       const { data: { session } } = await sb.auth.getSession();
       if (!session) return;
       const base = `${String(SUPABASE_CFG.url||"").replace(/\/$/,"")}/functions/v1`;
+      let fromOauth = null;
       try {
-        const r = await fetch(`${base}/google-calendar-connection-status`, {
-          headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_CFG.key },
-        });
-        if (r.ok) {
-          const j = await r.json();
-          setGcalServerConnected(!!j.connected);
+        const u = new URL(window.location.href);
+        fromOauth = u.searchParams.get("gcal_oauth");
+        if (fromOauth === "ok") {
+          gcalEdgeCacheRef.current = { token: "", exp: 0 };
+          u.searchParams.delete("gcal_oauth");
+          u.searchParams.delete("reason");
+          const q1 = u.searchParams.toString();
+          window.history.replaceState({}, "", u.pathname + (q1 ? "?" + q1 : "") + u.hash);
+        } else if (fromOauth === "err") {
+          const raw = u.searchParams.get("reason") || "eroare";
+          const calErrMsg = {
+            redirect_uri_mismatch: "Google: redirect URI nu coincide cu cel din Google Cloud (vezi setup).",
+            access_denied: "Ai anulat sau Google a refuzat accesul la Calendar.",
+            server_config: "Server: lipsește GOOGLE_CLIENT_SECRET sau OAUTH_STATE_SECRET în Supabase.",
+            bad_state: "Sesiune OAuth expirată — încearcă Conectează din nou.",
+            db_save_failed: "Nu s-a putut salva tokenul — rulează migrarea SQL google_calendar_credentials pe Supabase.",
+            no_refresh_token: "Google nu a trimis refresh token — revocă accesul app în contul Google și reconectează.",
+            invalid_grant: "Codul OAuth a expirat — încearcă Conectează din nou.",
+          };
+          showToast("Calendar: " + (calErrMsg[raw] || decodeURIComponent(raw)), "error");
+          u.searchParams.delete("gcal_oauth");
+          u.searchParams.delete("reason");
+          const q2 = u.searchParams.toString();
+          window.history.replaceState({}, "", u.pathname + (q2 ? "?" + q2 : "") + u.hash);
+        }
+      } catch (e) {}
+      try {
+        const headers = { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_CFG.key };
+        let connected = false;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          const r = await fetch(`${base}/google-calendar-connection-status`, { headers });
+          if (r.ok) {
+            const j = await r.json();
+            connected = !!j.connected;
+            if (connected || fromOauth !== "ok") break;
+          }
+          await new Promise((res) => setTimeout(res, 350));
+        }
+        setGcalServerConnected(connected);
+        if (fromOauth === "ok") {
+          if (connected) showToast("📅 Google Calendar conectat (persistă cu refresh token)!");
+          else showToast("Calendar: te-ai întors de la Google dar conexiunea nu apare salvată — verifică migrarea DB și logurile funcției callback.", "error");
         }
       } catch (e) {}
     };
