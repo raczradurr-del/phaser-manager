@@ -1,6 +1,7 @@
 // GET de la Google → schimbă code pe refresh_token → salvează în DB → redirect înapoi în app
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { googleOAuthCallbackUrl, supabaseOrigin } from "../_shared/supabase_url.ts";
 import { decodeOAuthState } from "../_shared/state.ts";
 
 Deno.serve(async (req) => {
@@ -30,10 +31,10 @@ Deno.serve(async (req) => {
     return redirectErr("missing_code_or_state");
   }
 
-  const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GCAL_CLIENT_ID");
-  const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET");
-  const functionUrl = Deno.env.get("SUPABASE_URL")! + "/functions/v1/google-calendar-oauth-callback";
+  const stateSecret = (Deno.env.get("OAUTH_STATE_SECRET") || "").trim();
+  const clientId = (Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GCAL_CLIENT_ID") || "").trim();
+  const clientSecret = (Deno.env.get("GOOGLE_CLIENT_SECRET") || "").trim();
+  const functionUrl = googleOAuthCallbackUrl();
 
   if (!stateSecret || !clientId || !clientSecret) {
     return redirectErr("server_config");
@@ -63,8 +64,8 @@ Deno.serve(async (req) => {
   }
 
   const admin = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+    supabaseOrigin(),
+    (Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "").trim(),
   );
 
   let refresh = tokenJson.refresh_token as string | undefined;

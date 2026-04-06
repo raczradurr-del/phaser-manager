@@ -2,6 +2,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import { corsHeaders } from "../_shared/cors.ts";
+import { googleOAuthCallbackUrl, supabaseOrigin } from "../_shared/supabase_url.ts";
 import { encodeOAuthState } from "../_shared/state.ts";
 
 const GCAL_SCOPE = "https://www.googleapis.com/auth/calendar.events";
@@ -30,11 +31,11 @@ Deno.serve(async (req) => {
     });
   }
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const anon = Deno.env.get("SUPABASE_ANON_KEY")!;
-  const clientId = Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GCAL_CLIENT_ID");
-  const stateSecret = Deno.env.get("OAUTH_STATE_SECRET");
-  const functionUrl = Deno.env.get("SUPABASE_URL")! + "/functions/v1/google-calendar-oauth-callback";
+  const supabaseUrl = supabaseOrigin();
+  const anon = (Deno.env.get("SUPABASE_ANON_KEY") || "").trim();
+  const clientId = (Deno.env.get("GOOGLE_CLIENT_ID") || Deno.env.get("GCAL_CLIENT_ID") || "").trim();
+  const stateSecret = (Deno.env.get("OAUTH_STATE_SECRET") || "").trim();
+  const functionUrl = googleOAuthCallbackUrl();
 
   if (!clientId || !stateSecret) {
     return new Response(JSON.stringify({ error: "Server misconfiguration: GOOGLE_CLIENT_ID or OAUTH_STATE_SECRET" }), {
@@ -59,8 +60,7 @@ Deno.serve(async (req) => {
     response_type: "code",
     scope: GCAL_SCOPE,
     access_type: "offline",
-    // consent = refresh token la prima legare; select_account = evită blocaje când Google nu poate alege contul automat
-    prompt: "consent select_account",
+    prompt: "consent",
     state,
   });
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
