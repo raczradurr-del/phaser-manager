@@ -1326,6 +1326,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
   const toggleExpanded = (id) => setExpandedIds(s=>{const n=new Set(s);if(n.has(id))n.delete(id);else n.add(id);return n;});
 
   const [replyingTo, setReplyingTo] = useState(null); // {tid, chatId}
+  useEffect(()=>{ setReplyingTo(null); }, [viewMode]);
 
   const taskStatus = t => (t.taskStatus==="done"||t.done)?"done":(t.taskStatus||"in_proces");
   const rootList = useMemo(() => filterRootTasksByMember(tasks, memberFilter), [tasks, memberFilter]);
@@ -1337,14 +1338,19 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
   },[calendarDate,viewMode,compact]);
 
   useEffect(()=>{
-    if(!focusTaskId || compact) return;
+    if(!focusTaskId || compact || viewMode!=="list") return;
     const t = findTaskInTree(tasks, focusTaskId);
     if(!t) return;
     setExpandedIds(s=>{const n=new Set(s); n.add(focusTaskId); return n;});
     const id = focusTaskId;
-    requestAnimationFrame(()=>{ const el=document.getElementById("task-focus-"+id); if(el) el.scrollIntoView({block:"nearest",behavior:"smooth"}); });
-    onConsumeFocusTask&&onConsumeFocusTask();
-  },[focusTaskId,tasks,compact,onConsumeFocusTask]);
+    requestAnimationFrame(()=>{
+      try{
+        const el=document.getElementById("task-focus-"+id);
+        if(el) el.scrollIntoView({block:"nearest",behavior:"smooth"});
+      }catch(_){/* Safari poate arunca NotFoundError dacă nodul dispare între timp */}
+      onConsumeFocusTask&&onConsumeFocusTask();
+    });
+  },[focusTaskId,tasks,compact,onConsumeFocusTask,viewMode]);
 
   const handleCalendarScroll = () => {
     if (calendarScrolling.current) return;
@@ -1488,7 +1494,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
               </div>
               <div>{c.text}</div>
               {(c.replies||[]).map(r=><div key={r.id} style={{marginTop:5,marginLeft:12,padding:"8px 10px",background:th.h,borderRadius:6,borderLeft:`2px solid ${th.b}`}}><span style={{fontSize:10,color:th.tm}}>↳ {r.author} · {new Date(r.date).toLocaleString("ro")}</span><div style={{marginTop:3,fontSize:12}}>{r.text}</div></div>)}
-              {isReplying&&replyingTo.chatId===c.id&&<div style={{marginTop:6,marginLeft:12}}><input placeholder="Răspunde... (Enter)" autoFocus onKeyDown={e=>{if(e.key==="Enter"){addReply(t.id,c.id,e.target.value);e.target.value="";}if(e.key==="Escape")setReplyingTo(null);}} style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:7}}/></div>}
+              {isReplying&&replyingTo.chatId===c.id&&<div style={{marginTop:6,marginLeft:12}}><input placeholder="Răspunde... (Enter)" onKeyDown={e=>{if(e.key==="Enter"){addReply(t.id,c.id,e.target.value);e.target.value="";}if(e.key==="Escape")setReplyingTo(null);}} style={{...sty.i,width:"100%",padding:"8px 10px",fontSize:13,borderRadius:7}}/></div>}
             </div>)}
             <input placeholder="+ Mesaj (Enter)" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addChat(t.id,e.target.value.trim());e.target.value="";}}} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,borderRadius:8}}/>
           </div>
