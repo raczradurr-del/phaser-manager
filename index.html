@@ -309,9 +309,10 @@ const getEventDateKind = (ev) => {
   if (!ev) return "none";
   if (ev.dateKind) return ev.dateKind;
   if (ev.dateMonth && /^\d{4}-\d{2}$/.test(ev.dateMonth)) return "month";
-  if (ev.dateYear != null && ev.dateYear !== "") return "year";
+  // Variante de zile și ziua exactă au prioritate față de dateYear rămas din editări vechi (altfel „2027” masca 11.10.2025 peste tot, inclusiv în finanțe personale vs timing).
   if ((ev.dateOptions || []).length) return "multi";
   if (ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return "day";
+  if (ev.dateYear != null && ev.dateYear !== "") return "year";
   return "none";
 };
 const fEvDate = (ev) => {
@@ -869,14 +870,25 @@ const computeFinanceDistribution = (ev, servicePrices) => {
     stageAmt: M.stageAmt,
   };
 };
+/** Bonus la același pas ca pool-ul (10€ sau 10 lei); parte cantat = total rotunjit − bonus. */
+const snapMemberBonusToPoolStep = (total, bonusRaw, roundUnit) => {
+  const step = Math.round((Number(roundUnit) > 0 ? roundUnit : 10) * 100);
+  const tot = Math.round(Number(total) * 100);
+  let b = Math.round(Number(bonusRaw) * 100);
+  b = Math.round(b / step) * step;
+  if (b > tot) b = Math.floor(tot / step) * step;
+  if (b < 0) b = 0;
+  return { base: (tot - b) / 100, bonus: b / 100 };
+};
 /**
  * Finanțe profil pe membru: **aceleași numere ca fișa**, fără calcule paralele.
  * Sursă: `computeFinanceDistribution` (pool + rotunjiri) + aceleași formule ca în modal la «Total per membru» (rt EUR, pcE/prE când hasRol).
  * Dacă în fișă **nu** apar sub-liniile «Parte cantat / Bonus», pentru membru «Parte cantat» afișată = **totalul rotunjit rt** (ex. Carina 790€).
+ * Bonusul rol e rotunjit la același pas ca împărțirea pool-ului (10€ / 10 lei), nu doar la cenți.
  */
 const computeMemberPayoutBreakdown = (ev, mId, servicePrices) => {
   const d = buildFinanceFisaModel(ev, servicePrices);
-  const { CURS, isLei, baseShares, roleBonus, socialAmt, roundedShares } = d;
+  const { CURS, isLei, baseShares, roleBonus, socialAmt, roundedShares, roundedSharesLei, roundingInLei, roundUnit } = d;
   const rt = roundedShares[mId] || 0;
   const baseM = baseShares[mId] || 0;
   const rol = roleBonus[mId] || 0;
@@ -895,19 +907,32 @@ const computeMemberPayoutBreakdown = (ev, mId, servicePrices) => {
   if (canonMemId(ev.stageId) === mId) rl.push("Stage");
   const rolLabel = rl.length ? rl.join(" + ") : null;
 
-  let pcE = 0;
-  let prE = 0;
+  let baseUi = rt;
+  let bonusUi = 0;
   if (hasRol) {
     const sw = rawW;
-    pcE = sw > 0 ? Math.round(rt * (baseDisp / sw) * 100) / 100 : 0;
-    prE = Math.round((rt - pcE) * 100) / 100;
-    const driftE = Math.round((rt - pcE - prE) * 100) / 100;
-    if (Math.abs(driftE) >= 0.005) pcE = Math.round((pcE + driftE) * 100) / 100;
-    prE = Math.round((rt - pcE) * 100) / 100;
+    if (roundingInLei) {
+      const rtLei = roundedSharesLei[mId] || 0;
+      let pcL = sw > 0 ? Math.round(rtLei * (baseDisp / sw) * 100) / 100 : 0;
+      let prL = Math.round((rtLei - pcL) * 100) / 100;
+      const driftL = Math.round((rtLei - pcL - prL) * 100) / 100;
+      if (Math.abs(driftL) >= 0.005) pcL = Math.round((pcL + driftL) * 100) / 100;
+      prL = Math.round((rtLei - pcL) * 100) / 100;
+      const snL = snapMemberBonusToPoolStep(rtLei, prL, roundUnit);
+      prL = snL.bonus;
+      bonusUi = Math.round((prL / CURS) * 100) / 100;
+      baseUi = Math.round((rt - bonusUi) * 100) / 100;
+    } else {
+      let pcE = sw > 0 ? Math.round(rt * (baseDisp / sw) * 100) / 100 : 0;
+      let prE = Math.round((rt - pcE) * 100) / 100;
+      const driftE = Math.round((rt - pcE - prE) * 100) / 100;
+      if (Math.abs(driftE) >= 0.005) pcE = Math.round((pcE + driftE) * 100) / 100;
+      prE = Math.round((rt - pcE) * 100) / 100;
+      const sn = snapMemberBonusToPoolStep(rt, prE, roundUnit);
+      baseUi = sn.base;
+      bonusUi = sn.bonus;
+    }
   }
-
-  const baseUi = hasRol ? pcE : rt;
-  const bonusUi = hasRol ? prE : 0;
 
   return {
     base: baseUi,
@@ -10162,6 +10187,15 @@ function App() {
                       const driftL=Math.round((rtLei-pcL-prL)*100)/100;
                       if(Math.abs(driftL)>=0.005)pcL=Math.round((pcL+driftL)*100)/100;
                       prL=Math.round((rtLei-pcL)*100)/100;
+                      if(roundingInLei){
+                        const snL=snapMemberBonusToPoolStep(rtLei,prL,roundUnit);
+                        pcL=snL.base;prL=snL.bonus;
+                        prE=Math.round((prL/CURS)*100)/100;
+                        pcE=Math.round((rtEur-prE)*100)/100;
+                      }else{
+                        const sn=snapMemberBonusToPoolStep(rtEur,prE,roundUnit);
+                        pcE=sn.base;prE=sn.bonus;
+                      }
                       return <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,marginTop:4,marginLeft:34,fontSize:11,color:th.tm}}>
                         <div style={{display:"flex",justifyContent:"flex-end",gap:12,flexWrap:"wrap"}}>
                           {roundingInLei?<>
