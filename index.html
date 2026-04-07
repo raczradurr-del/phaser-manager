@@ -1230,9 +1230,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
   const [expandedIds, setExpandedIds] = useState(new Set());
   const [taskModalId, setTaskModalId] = useState(null);
   const [viewMode, setViewMode] = useState("list"); // list | calendar | kanban
-  const [selectedIds, setSelectedIds] = useState([]);
   const [kanbanDragCol, setKanbanDragCol] = useState(null);
-  const [taskBulkPick, setTaskBulkPick] = useState("");
   const [calendarDate, setCalendarDate] = useState(()=>{const n=new Date(); return {y:n.getFullYear(),m:n.getMonth()};});
   const calendarScrollRef = useRef(null);
   const calendarScrolling = useRef(false);
@@ -1281,25 +1279,6 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
   const rootList = useMemo(() => filterRootTasksByMember(tasks, memberFilter), [tasks, memberFilter]);
   const active = rootList.filter(t=>taskStatus(t)!=="done").sort((a,b)=>({high:0,medium:1,low:2})[a.priority||"medium"]-({high:0,medium:1,low:2})[b.priority||"medium"]);
   const done = rootList.filter(t=>taskStatus(t)==="done");
-  const allTaskIds = [...active,...done].map(t=>t.id);
-  const allSelected = allTaskIds.length>0&&allTaskIds.every(id=>selectedIds.includes(id));
-  const selectAll = () => setSelectedIds(allSelected?[]:allTaskIds);
-  const delSelected = () => { if(selectedIds.length===0) return; if(!window.confirm(`Ștergi ${selectedIds.length} task/taskuri?`)) return; setTasks(p=>delMultipleInTree(p,selectedIds)); setSelectedIds([]); };
-  const bulkSetTaskStatus = (col) => {
-    if (!selectedIds.length || !col) return;
-    const ids = [...selectedIds];
-    setTasks(prev => {
-      let next = prev;
-      ids.forEach(id => {
-        if (col === "done") next = applyDoneWithRepeat(next, id, true);
-        else next = updInTree(next, id, { taskStatus: col, done: false });
-      });
-      return next;
-    });
-    setSelectedIds([]);
-    setTaskBulkPick("");
-  };
-
   useEffect(()=>{
     const el=calendarScrollRef.current; if(!el||viewMode!=="calendar"||compact) return;
     calendarScrolling.current=true; el.scrollTop=el.clientHeight; setTimeout(()=>{calendarScrolling.current=false;},100);
@@ -1344,7 +1323,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
     });
   };
 
-  const TaskCard = ({ t, isDone, depth=0, showSelect }) => {
+  const TaskCard = ({ t, isDone, depth=0 }) => {
     const ex = expandedIds.has(t.id);
     const subs = t.subtasks||[];
     const doneSubs = subs.filter(s=>s.done).length;
@@ -1359,12 +1338,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
       <div key={t.id} id={"task-focus-"+t.id} style={{borderRadius:10,background:th.c,border:`1px solid ${th.b}`,borderLeft:`3px solid ${prioColor}`,overflow:"hidden",marginBottom:8,marginLeft:depth*14,opacity:isDone?.6:1,transition:"opacity .2s"}}>
         {/* ── ROW COMPACT — click pe rând deschide/închide detaliile; creion = popup edit ── */}
         <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",minHeight:44,cursor:"pointer"}} onClick={()=>toggleExpanded(t.id)} title="Click pentru detalii">
-          {showSelect&&<div onClick={e=>e.stopPropagation()} style={{flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",gap:3,padding:"2px 4px 0",borderRadius:8,border:`1px dashed ${th.bg==="#09090b"?"rgba(99,102,241,.55)":"rgba(99,102,241,.4)"}`,background:th.bg==="#09090b"?"rgba(99,102,241,.08)":"rgba(99,102,241,.06)"}} title="Bifează pentru acțiuni în masă (status, ștergere)">
-            <input type="checkbox" checked={selectedIds.includes(t.id)} onChange={()=>setSelectedIds(s=>s.includes(t.id)?s.filter(x=>x!==t.id):[...s,t.id])} style={{cursor:"pointer",width:16,height:16,accentColor:"#6366f1"}}/>
-            <span style={{fontSize:7,color:th.tm,fontWeight:700,letterSpacing:0.4,textTransform:"uppercase"}}>grup</span>
-          </div>}
-
-          {/* Finalizat — cerc, nu pătrat (se diferențiază de selecția în masă) */}
+          {/* Finalizat — cerc */}
           <div onClick={e=>{e.stopPropagation();toggle(t.id);}} title={isDone?"Marchează activ din nou":"Marchează finalizat"} style={{width:22,height:22,borderRadius:"50%",border:`2px solid ${prioColor}`,cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isDone?prioColor:"transparent",transition:"all .15s",boxShadow:isDone?`0 0 0 1px ${prioColor}40`:"none"}}>
             {isDone&&<span style={{color:"#fff",display:"flex",lineHeight:0}}><IcCheck s={12}/></span>}
           </div>
@@ -1448,7 +1422,7 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
           {/* Subtasks */}
           <div style={{marginBottom:14}}>
             <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginBottom:6}}>Subtasks {subs.length>0&&<span style={{fontWeight:400,color:th.tm}}>({doneSubs}/{subs.length})</span>}</div>
-            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1} showSelect={false}/>)}
+            {subs.map(s=><TaskCard key={s.id} t={{...s,subtasks:s.subtasks||[],tags:s.tags||[],chats:s.chats||[],uploads:s.uploads||[]}} isDone={s.done} depth={depth+1}/>)}
             <input placeholder="+ Subtask (Enter)" onKeyDown={e=>{if(e.key==="Enter"&&e.target.value.trim()){addSub(t.id,e.target.value.trim());e.target.value="";}}} style={{...sty.i,width:"100%",padding:"8px 12px",fontSize:13,marginTop:6,borderRadius:8}}/>
           </div>
 
@@ -1778,18 +1752,6 @@ function TasksView({ tasks, setTasks, th, sty, mob, compact=false, currentMember
           </div>
         </div>
       )}
-
-      {!compact&&allTaskIds.length>0&&<div style={{display:"flex",gap:8,alignItems:"center",marginBottom:16,flexWrap:"wrap"}}>
-        <button onClick={selectAll} style={{...sty.bg,padding:"6px 12px",fontSize:11}}>{allSelected?"Deselectează":"Selectează toate"}</button>
-        {selectedIds.length>0&&<><span style={{fontSize:11,color:th.tm}}>{selectedIds.length} selectate</span>
-        <select value={taskBulkPick} onChange={e=>{const v=e.target.value;setTaskBulkPick("");if(!v)return;bulkSetTaskStatus(v);}} className="modernSel" style={{...sty.i,padding:"6px 28px 6px 10px",fontSize:11,borderRadius:8,minWidth:180,maxWidth:240}} title="Schimbă status (în proces / în lucru / finalizat) pentru task-urile selectate">
-          <option value="">Schimbă status…</option>
-          <option value="in_proces">{TSL.in_proces}</option>
-          <option value="in_lucru">{TSL.in_lucru}</option>
-          <option value="done">{TSL.done}</option>
-        </select>
-        <button onClick={delSelected} style={{padding:"6px 12px",fontSize:11,borderRadius:8,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer"}}><IcTrash s={12}/> Șterge</button></>}
-      </div>}
 
       <div style={{display:"flex",flexDirection:"column",gap:0}}>
         {active.length===0 && <div style={{padding:56,textAlign:"center",color:th.tm,fontSize:16,lineHeight:1.65,background:th.bg==="#09090b"?th.h:"#faf9f7",borderRadius:16,border:`2px dashed ${th.bl}`}}>{memberFilter?`Niciun task activ pentru @${MEMBERS.find(x=>x.id===memberFilter)?.short||"—"} — schimbă filtrul sau desemnează task-uri.`:"Niciun task activ încă. Folosește caseta «Task nou» de mai sus — scrie ce ai de făcut și apasă Enter sau «Adaugă task»."}</div>}
