@@ -709,6 +709,12 @@ function formatSbPasswordLoginError(error) {
 const SPLIT_PRIVATE = {m1:24,m2:19,m3:19,m4:19,m5:19}; // Carina 24%, restul 19% fiecare
 const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei
 const CURS_DEFAULT = 5; // 1€ = 5 lei
+/** Aliniază id membru din eveniment la cheia din MEMBERS (ex. alt tip sau typo). */
+const canonMemId = (id) => {
+  if (id == null || id === "") return null;
+  const m = MEMBERS.find((x) => String(x.id) === String(id));
+  return m ? m.id : null;
+};
 /** Pool + cote + rotunjire 10€/10 lei — aceeași logică ca modalul „Fișa financiară”. */
 const computeFinanceDistribution = (ev, servicePrices) => {
   const CURS = ev.cursLei || CURS_DEFAULT;
@@ -738,10 +744,13 @@ const computeFinanceDistribution = (ev, servicePrices) => {
   const div16 = restFirma ? Math.round(dupaFond * 0.16 * 100) / 100 : 0;
   const dupaDiv = dupaFond - div16;
   const leadPct = isPrivate ? 0.02 : 0.01;
-  const leadAmt = (ev.leadId || ev.leadCustom) ? Math.round(dupaDiv * leadPct * 100) / 100 : 0;
-  const adminAmt = ev.adminId ? Math.round(dupaDiv * 0.02 * 100) / 100 : 0;
+  const leadM = canonMemId(ev.leadId);
+  const adminM = canonMemId(ev.adminId);
+  const stageM = canonMemId(ev.stageId);
+  const leadAmt = (ev.leadCustom || leadM) ? Math.round(dupaDiv * leadPct * 100) / 100 : 0;
+  const adminAmt = adminM ? Math.round(dupaDiv * 0.02 * 100) / 100 : 0;
   const socialAmt = Math.round(dupaDiv * 0.02 * 100) / 100;
-  const stageAmt = ev.stageId ? Math.round(dupaDiv * 0.02 * 100) / 100 : 0;
+  const stageAmt = stageM ? Math.round(dupaDiv * 0.02 * 100) / 100 : 0;
   const totalRoluri = leadAmt + adminAmt + socialAmt + stageAmt;
   const avansInFond = ev.dp ? dep : 0;
   const pool = Math.max(0, dupaDiv - totalRoluri - avansInFond);
@@ -753,10 +762,10 @@ const computeFinanceDistribution = (ev, servicePrices) => {
       : Math.round((pool / 5) * 100) / 100;
     roleBonus[mm.id] = 0;
   });
-  if (ev.leadId && !ev.leadCustom) roleBonus[ev.leadId] = (roleBonus[ev.leadId] || 0) + leadAmt;
-  if (ev.adminId) roleBonus[ev.adminId] = (roleBonus[ev.adminId] || 0) + adminAmt;
+  if (leadM && !ev.leadCustom) roleBonus[leadM] = (roleBonus[leadM] || 0) + leadAmt;
+  if (adminM) roleBonus[adminM] = (roleBonus[adminM] || 0) + adminAmt;
   roleBonus["m1"] = (roleBonus["m1"] || 0) + socialAmt;
-  if (ev.stageId) roleBonus[ev.stageId] = (roleBonus[ev.stageId] || 0) + stageAmt;
+  if (stageM) roleBonus[stageM] = (roleBonus[stageM] || 0) + stageAmt;
   const shares = {};
   MEMBERS.forEach(mm => { shares[mm.id] = (baseShares[mm.id] || 0) + (roleBonus[mm.id] || 0); });
   const shareTotal = MEMBERS.reduce((s, mm) => s + (shares[mm.id] || 0), 0);
@@ -857,9 +866,9 @@ const computeMemberPayoutBreakdown = (ev, mId, servicePrices) => {
   const splitRolBonus = (toEur) => {
     if (rolDisp <= 0.005 || rolTotal <= 0.005) return;
     const rw = [];
-    if (ev.leadId === mId && !ev.leadCustom && leadAmt > 0) rw.push({ k: "lead", w: leadAmt });
-    if (ev.adminId === mId && adminAmt > 0) rw.push({ k: "admin", w: adminAmt });
-    if (ev.stageId === mId && stageAmt > 0) rw.push({ k: "stage", w: stageAmt });
+    if (canonMemId(ev.leadId) === mId && !ev.leadCustom && leadAmt > 0) rw.push({ k: "lead", w: leadAmt });
+    if (canonMemId(ev.adminId) === mId && adminAmt > 0) rw.push({ k: "admin", w: adminAmt });
+    if (canonMemId(ev.stageId) === mId && stageAmt > 0) rw.push({ k: "stage", w: stageAmt });
     const sumRw = rw.reduce((s, x) => s + x.w, 0);
     if (sumRw <= 0) {
       const add = toEur ? rolTotal : Math.round((rolTotal / CURS) * 100) / 100;
@@ -8989,7 +8998,7 @@ function App() {
                   </div>
                 </div>
                 <div style={{fontSize:11,color:th.tm,lineHeight:1.55,marginBottom:14,padding:"10px 12px",borderRadius:10,background:th.h,border:`1px solid ${th.bl}`}}>
-                  Aceleași reguli ca în <strong>Fișa financiară</strong>: la <strong>plată pe firmă</strong> împărțirea se face în <strong>lei</strong> (ca «Parte cantat» / bonus din fișă), apoi Cantat (€) și Social apar ca acolo; altfel, în euro. Totalul rotunjit e 10 € sau 10 lei/persoană ca în fișă.
+                  Sumele se calculează din <strong>același eveniment</strong> ca în Fișa: rolurile (Lead, Admin, Stage) trebuie setate și salvate pe ofertă — apoi apar și aici pe surse. La <strong>plată pe firmă</strong> împărțirea urmează lei rotunjiți ca în fișă; altfel, în euro.
                 </div>
                 {totPaid>0&&<div style={{...sty.cd,marginBottom:16}}>
                   <div style={{fontSize:11,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Sumar sursă câștig (încasat)</div>
@@ -9858,7 +9867,8 @@ function App() {
       {modal==="finance"&&(()=>{
         if(!mData) return null;
         const fromDetail=mData._from==="detail";
-        const ev={adminId:"m4",stageId:"m4",...mData};
+        const ev={...mData};
+        delete ev._from;
         // Auto-calculates shares on every update — no "Aplică" needed
         const calcShares=(e)=>{
           const C=e.cursLei||CURS_DEFAULT;const isP=e.cat==="private";
@@ -9882,10 +9892,11 @@ function App() {
           const pool=Math.max(0,dD-lAmt-aAmt-sAmt-stAmt-avFondDeduct-promoDeduct);
           const sh={};
           MEMBERS.forEach(m=>{sh[m.id]=isP?Math.round(pool*(SPLIT_PRIVATE[m.id]||0)/100*100)/100:Math.round(pool/5*100)/100;});
-          if(e.leadId&&!e.leadCustom)sh[e.leadId]=(sh[e.leadId]||0)+lAmt;
-          if(e.adminId)sh[e.adminId]=(sh[e.adminId]||0)+aAmt;
+          const lC=canonMemId(e.leadId),aC=canonMemId(e.adminId),sC=canonMemId(e.stageId);
+          if(lC&&!e.leadCustom)sh[lC]=(sh[lC]||0)+lAmt;
+          if(aC)sh[aC]=(sh[aC]||0)+aAmt;
           sh["m1"]=(sh["m1"]||0)+sAmt;
-          if(e.stageId)sh[e.stageId]=(sh[e.stageId]||0)+stAmt;
+          if(sC)sh[sC]=(sh[sC]||0)+stAmt;
           const out={};Object.entries(sh).forEach(([k,v])=>{out[k]=Math.round(v*100)/100;});
           return out;
         };
@@ -9939,11 +9950,12 @@ function App() {
 
         // 6. Roluri
         const leadPct=isPrivate?0.02:0.01;
-        const leadName=ev.leadCustom||MEMBERS.find(m=>m.id===ev.leadId)?.short||"";
-        const leadAmt=(ev.leadId||ev.leadCustom)?Math.round(dupaDiv*leadPct*100)/100:0;
-        const adminAmt=ev.adminId?Math.round(dupaDiv*0.02*100)/100:0;
+        const leadMc=canonMemId(ev.leadId),adminMc=canonMemId(ev.adminId),stageMc=canonMemId(ev.stageId);
+        const leadName=ev.leadCustom||MEMBERS.find(m=>m.id===leadMc)?.short||"";
+        const leadAmt=(ev.leadCustom||leadMc)?Math.round(dupaDiv*leadPct*100)/100:0;
+        const adminAmt=adminMc?Math.round(dupaDiv*0.02*100)/100:0;
         const socialAmt=Math.round(dupaDiv*0.02*100)/100; // Carina întotdeauna
-        const stageAmt=ev.stageId?Math.round(dupaDiv*0.02*100)/100:0;
+        const stageAmt=stageMc?Math.round(dupaDiv*0.02*100)/100:0;
         const totalRoluri=leadAmt+adminAmt+socialAmt+stageAmt;
 
         // 7. Pool de împărțit
@@ -9958,10 +9970,10 @@ function App() {
           baseShares[m.id]=base;
           roleBonus[m.id]=0;
         });
-        if(ev.leadId&&!ev.leadCustom){ roleBonus[ev.leadId]=(roleBonus[ev.leadId]||0)+leadAmt; }
-        if(ev.adminId){ roleBonus[ev.adminId]=(roleBonus[ev.adminId]||0)+adminAmt; }
+        if(leadMc&&!ev.leadCustom){ roleBonus[leadMc]=(roleBonus[leadMc]||0)+leadAmt; }
+        if(adminMc){ roleBonus[adminMc]=(roleBonus[adminMc]||0)+adminAmt; }
         roleBonus["m1"]=(roleBonus["m1"]||0)+socialAmt; // Carina Social Media
-        if(ev.stageId){ roleBonus[ev.stageId]=(roleBonus[ev.stageId]||0)+stageAmt; }
+        if(stageMc){ roleBonus[stageMc]=(roleBonus[stageMc]||0)+stageAmt; }
         const shares={};
         MEMBERS.forEach(m=>{ shares[m.id]=(baseShares[m.id]||0)+(roleBonus[m.id]||0); });
         /* Rotunjire la pași de 10 lei / 10 €, dar cotele folosesc ÎNTOTDEAUNA suma(shares) ca numitor — rotunjirile la „cantat” fac ca Σ shares ≠ pool; fără normalizare, quota/pool depășea 100% și „ajustarea fond” exploda. */
@@ -10266,7 +10278,7 @@ function App() {
                   const baseDisp=socialInCantat?base+socialAmt:base;
                   const rolDisp=socialInCantat?rol-socialAmt:rol;
                   const hasRol=rolDisp>0.005;
-                  const rolLabel=(()=>{const L=[];if(ev.leadId===m.id&&!ev.leadCustom)L.push("Lead");if(ev.adminId===m.id)L.push("Admin");if(ev.stageId===m.id)L.push("Stage");return L.length?L.join(" + "):null;})();
+                  const rolLabel=(()=>{const L=[];if(canonMemId(ev.leadId)===m.id&&!ev.leadCustom)L.push("Lead");if(canonMemId(ev.adminId)===m.id)L.push("Admin");if(canonMemId(ev.stageId)===m.id)L.push("Stage");return L.length?L.join(" + "):null;})();
                   const exLei=exactLeiNormalized[m.id]||0;
                   return (
                   <div key={m.id} style={{padding:"8px 0",borderBottom:`1px solid ${th.bl}`}}>
