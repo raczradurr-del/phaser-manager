@@ -6005,27 +6005,30 @@ function App() {
 
   const connectGCal = () => {
     if (GCAL_USE_SERVER_OAUTH) {
+      // Deschidem fereastra IMEDIAT din click (înainte de orice await) — altfel browserul
+      // blochează window.open() ca popup suspect. Navigăm în ea după ce primim URL-ul de la Edge Function.
+      const oauthWin = window.open(“about:blank”, “gcal_oauth_popup”, “width=520,height=660,left=200,top=100”);
       (async () => {
         const sb = getSbClient();
-        if (!sb) { showToast("Nu ești autentificat.", "error"); return; }
+        if (!sb) { showToast(“Nu ești autentificat.”, “error”); if (oauthWin) oauthWin.close(); return; }
         const { data: { session } } = await sb.auth.getSession();
-        if (!session) { showToast("Sesiune expirată — autentifică-te din nou.", "error"); return; }
-        const base = `${String(SUPABASE_CFG.url||"").replace(/\/$/,"")}/functions/v1`;
+        if (!session) { showToast(“Sesiune expirată — autentifică-te din nou.”, “error”); if (oauthWin) oauthWin.close(); return; }
+        const base = `${String(SUPABASE_CFG.url||””).replace(/\/$/,””)}/functions/v1`;
         const r = await fetch(`${base}/google-calendar-oauth-start`, {
-          method: "POST",
+          method: “POST”,
           headers: { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_CFG.key },
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.url) {
-          showToast(j.error || "Nu pornesc OAuth Google. Deploy Edge Functions + secrete (vezi GOOGLE_CALENDAR_EDGE_SETUP.md).", "error");
+          showToast(j.error || “Nu pornesc OAuth Google. Deploy Edge Functions + secrete (vezi GOOGLE_CALENDAR_EDGE_SETUP.md).”, “error”);
+          if (oauthWin) oauthWin.close();
           return;
         }
-        // Deschidem OAuth în popup explicit — evităm că browserul blochează navigarea ca „popup”
-        // și evităm problema cu iframe-uri (accounts.google.com refuză să se încarce în iframe).
-        // Popup-ul notifică fereastra principală via BroadcastChannel când OAuth e gata.
-        const oauthPopup = window.open(j.url, “gcal_oauth_popup”, “width=520,height=660,left=200,top=100”);
-        if (!oauthPopup) {
-          // Dacă popup e blocat de browser, navigăm direct (fallback)
+        // Navigăm fereastra deja deschisă la URL-ul Google OAuth
+        if (oauthWin && !oauthWin.closed) {
+          oauthWin.location.href = j.url;
+        } else {
+          // Fereastra a fost închisă între timp (ex. user a închis-o) — navigăm direct
           window.location.href = j.url;
         }
       })();
