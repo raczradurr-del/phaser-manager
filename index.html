@@ -745,17 +745,34 @@ const computeMemberPayoutBreakdown = (ev, mId, servicePrices) => {
   const totalRoluri = leadAmt + adminAmt + socialAmt + stageAmt;
   const avansInFond = ev.dp ? dep : 0;
   const pool = Math.max(0, dupaDiv - totalRoluri - avansInFond);
-  const base = isPrivate
-    ? Math.round(pool * (SPLIT_PRIVATE[mId] || 0) / 100 * 100) / 100
-    : Math.round((pool / 5) * 100) / 100;
-  const lead = ev.leadId === mId && !ev.leadCustom ? leadAmt : 0;
-  const admin = ev.adminId === mId ? adminAmt : 0;
-  const social = mId === "m1" ? socialAmt : 0;
-  const stage = ev.stageId === mId ? stageAmt : 0;
+  const baseShares = {};
+  const roleBonus = {};
+  MEMBERS.forEach(mm => {
+    baseShares[mm.id] = isPrivate
+      ? Math.round(pool * (SPLIT_PRIVATE[mm.id] || 0) / 100 * 100) / 100
+      : Math.round((pool / 5) * 100) / 100;
+    roleBonus[mm.id] = 0;
+  });
+  if (ev.leadId && !ev.leadCustom) roleBonus[ev.leadId] = (roleBonus[ev.leadId] || 0) + leadAmt;
+  if (ev.adminId) roleBonus[ev.adminId] = (roleBonus[ev.adminId] || 0) + adminAmt;
+  roleBonus["m1"] = (roleBonus["m1"] || 0) + socialAmt;
+  if (ev.stageId) roleBonus[ev.stageId] = (roleBonus[ev.stageId] || 0) + stageAmt;
+  const rawMember = (baseShares[mId] || 0) + (roleBonus[mId] || 0);
+  const shareTotalAll = MEMBERS.reduce((s, mm) => s + (baseShares[mm.id] || 0) + (roleBonus[mm.id] || 0), 0);
+  const exactMemberEur = shareTotalAll > 0 && pool > 0 ? Math.round(pool * (rawMember / shareTotalAll) * 100) / 100 : 0;
+  const q = rawMember > 0 ? exactMemberEur / rawMember : 0;
+  let base = Math.round(baseShares[mId] * q * 100) / 100;
+  let lead = (ev.leadId === mId && !ev.leadCustom) ? Math.round(leadAmt * q * 100) / 100 : 0;
+  let admin = ev.adminId === mId ? Math.round(adminAmt * q * 100) / 100 : 0;
+  let social = mId === "m1" ? Math.round(socialAmt * q * 100) / 100 : 0;
+  let stage = ev.stageId === mId ? Math.round(stageAmt * q * 100) / 100 : 0;
+  const sumP = Math.round((base + lead + admin + social + stage) * 100) / 100;
+  const drift = Math.round((exactMemberEur - sumP) * 100) / 100;
+  if (Math.abs(drift) >= 0.005) base = Math.round((base + drift) * 100) / 100;
   const socialLei = mId === "m1" ? (isLei ? social : Math.round(social * CURS * 100) / 100) : 0;
   return {
     base, lead, admin, social, stage,
-    total: base + lead + admin + social + stage,
+    total: exactMemberEur,
     socialLei,
     curs: CURS,
     isLei
@@ -9884,7 +9901,7 @@ function App() {
                   const baseDisp=socialInCantat?base+socialAmt:base;
                   const rolDisp=socialInCantat?rol-socialAmt:rol;
                   const hasRol=rolDisp>0.005;
-                  const rolLabel=ev.leadId===m.id&&!ev.leadCustom?"Lead":ev.adminId===m.id?"Administrator":ev.stageId===m.id?"Stage Manager":null;
+                  const rolLabel=(()=>{const L=[];if(ev.leadId===m.id&&!ev.leadCustom)L.push("Lead");if(ev.adminId===m.id)L.push("Admin");if(ev.stageId===m.id)L.push("Stage");return L.length?L.join(" + "):null;})();
                   const exLei=exactLeiNormalized[m.id]||0;
                   return (
                   <div key={m.id} style={{padding:"8px 0",borderBottom:`1px solid ${th.bl}`}}>
@@ -9902,10 +9919,18 @@ function App() {
                       </>}
                     </div>
                     </div>
-                    {hasRol&&<div style={{display:"flex",justifyContent:"flex-end",gap:12,marginTop:4,marginLeft:34,fontSize:11,color:th.tm}}>
-                      <span>Parte cantat: {fv(baseDisp)}</span>
-                      <span style={{color:"#f59e0b",fontWeight:600}}>{rolLabel||"Bonus rol"}: {fv(rolDisp)}</span>
-                    </div>}
+                    {hasRol&&(()=>{
+                      const rawW=total;
+                      const pc=rawW>0?Math.round(exactEurNorm*(baseDisp/rawW)*100)/100:0;
+                      const pr=Math.round((exactEurNorm-pc)*100)/100;
+                      return <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,marginTop:4,marginLeft:34,fontSize:11,color:th.tm}}>
+                        <div style={{display:"flex",justifyContent:"flex-end",gap:12}}>
+                          <span>Parte cantat (închis la pool): {fv(pc)}</span>
+                          <span style={{color:"#f59e0b",fontWeight:600}}>{rolLabel||"Bonus rol"} (închis): {fv(pr)}</span>
+                        </div>
+                        <span style={{fontSize:9,opacity:.85}}>Σ cote brute: {fv(baseDisp)} + {fv(rolDisp)} — „De împărțit” se împarte proporțional → {fv(exactEurNorm)}</span>
+                      </div>;
+                    })()}
                   </div>
                 );})}
                 {hasRounding&&<div style={{marginTop:8,padding:"8px 10px",borderRadius:8,background:(roundingInLei?roundingAdjLei:roundingAdjFond)>0?"rgba(34,197,94,.08)":"rgba(245,158,11,.08)",border:`1px solid ${(roundingInLei?roundingAdjLei:roundingAdjFond)>0?"rgba(34,197,94,.3)":"rgba(245,158,11,.3)"}`,fontSize:11,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:6}}>
