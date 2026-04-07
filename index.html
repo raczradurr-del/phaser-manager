@@ -291,6 +291,111 @@ const f$  = n => new Intl.NumberFormat("ro",{maximumFractionDigits:0}).format(n|
 const fFmt = (n,currency)=>new Intl.NumberFormat("ro",{maximumFractionDigits:0}).format(n||0)+(currency==="lei"?" lei":" €");
 const fD  = d => { if(!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("ro",{day:"numeric",month:"short",year:"numeric"}); };
 const fDFisa = d => { if(!d) return "—"; return new Date(d+"T00:00:00").toLocaleDateString("ro",{day:"2-digit",month:"2-digit",year:"numeric"}); };
+/** Afișare dată eveniment: zi exactă, lună, an, variante, text liber, fără dată */
+const MONTHS_SHORT_RO = ["ian.","feb.","mar.","apr.","mai","iun.","iul.","aug.","sep.","oct.","nov.","dec."];
+const getEventDateKind = (ev) => {
+  if (!ev) return "none";
+  if (ev.dateKind) return ev.dateKind;
+  if (ev.dateMonth && /^\d{4}-\d{2}$/.test(ev.dateMonth)) return "month";
+  if (ev.dateYear != null && ev.dateYear !== "") return "year";
+  if ((ev.dateOptions || []).length) return "multi";
+  if (ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return "day";
+  return "none";
+};
+const fEvDate = (ev) => {
+  if (!ev) return "—";
+  const k = getEventDateKind(ev);
+  if (k === "none") return (ev.dateNote || "").trim() || "Fără dată";
+  if (k === "text") return (ev.dateNote || "").trim() || "—";
+  if (k === "month" && ev.dateMonth && /^\d{4}-\d{2}$/.test(ev.dateMonth)) {
+    const [y, mo] = ev.dateMonth.split("-").map(Number);
+    return `${MONTHS_SHORT_RO[mo - 1]} ${y}`;
+  }
+  if (k === "year" && ev.dateYear != null && ev.dateYear !== "") return String(ev.dateYear);
+  if (k === "multi") {
+    const o = (ev.dateOptions || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    return o.length ? o.map(fD).join(" · ") : "—";
+  }
+  if (ev.date) return fD(ev.date);
+  return "—";
+};
+const evPeriodStartMs = (ev) => {
+  if (!ev) return 0;
+  const k = getEventDateKind(ev);
+  if (k === "day" && ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return new Date(ev.date + "T00:00:00").getTime();
+  if (k === "month" && ev.dateMonth && /^\d{4}-\d{2}$/.test(ev.dateMonth)) {
+    const [y, mo] = ev.dateMonth.split("-").map(Number);
+    return new Date(y, mo - 1, 1).getTime();
+  }
+  if (k === "year" && ev.dateYear != null && ev.dateYear !== "") return new Date(Number(ev.dateYear), 0, 1).getTime();
+  if (k === "multi") {
+    const opts = (ev.dateOptions || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (opts.length) return Math.min(...opts.map(d => new Date(d + "T00:00:00").getTime()));
+  }
+  if (k === "text" || k === "none") {
+    if (ev.cr && /^\d{4}-\d{2}-\d{2}$/.test(ev.cr)) return new Date(ev.cr + "T12:00:00").getTime();
+    return 0;
+  }
+  if (ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return new Date(ev.date + "T00:00:00").getTime();
+  return 0;
+};
+const evPeriodEndMs = (ev) => {
+  if (!ev) return 0;
+  const k = getEventDateKind(ev);
+  if (k === "day" && ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return new Date(ev.date + "T23:59:59").getTime();
+  if (k === "month" && ev.dateMonth && /^\d{4}-\d{2}$/.test(ev.dateMonth)) {
+    const [y, mo] = ev.dateMonth.split("-").map(Number);
+    return new Date(y, mo, 0, 23, 59, 59).getTime();
+  }
+  if (k === "year" && ev.dateYear != null && ev.dateYear !== "") {
+    const y = Number(ev.dateYear);
+    return new Date(y, 11, 31, 23, 59, 59).getTime();
+  }
+  if (k === "multi") {
+    const opts = (ev.dateOptions || []).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+    if (opts.length) return Math.max(...opts.map(d => new Date(d + "T23:59:59").getTime()));
+  }
+  if (k === "text" || k === "none") return evPeriodStartMs(ev) + 864e5 - 1;
+  if (ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return new Date(ev.date + "T23:59:59").getTime();
+  return evPeriodStartMs(ev);
+};
+/** Sortare stabilă în liste (perioadă + fallback data creării / zi veche). */
+const evSortKey = (e) => {
+  const t = evPeriodStartMs(e);
+  if (t) return t;
+  if (e?.cr && /^\d{4}-\d{2}-\d{2}$/.test(e.cr)) return new Date(e.cr + "T12:00:00").getTime();
+  if (e?.date && /^\d{4}-\d{2}-\d{2}$/.test(e.date)) return new Date(e.date + "T00:00:00").getTime();
+  return 0;
+};
+const evExactDayCountdown = (ev) => (getEventDateKind(ev) === "day" && ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date) ? dU(ev.date) : null);
+const evMatchesCalendarCell = (ev, ds, y, m0, dayNum) => {
+  const k = getEventDateKind(ev);
+  if (k === "day" || (!ev.dateKind && ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date))) return ev.date === ds;
+  const mStr = String(m0 + 1).padStart(2, "0");
+  if (k === "month" && ev.dateMonth) return ev.dateMonth === `${y}-${mStr}` && dayNum === 1;
+  if (k === "year" && ev.dateYear != null && ev.dateYear !== "") return Number(ev.dateYear) === y && dayNum === 1;
+  if (k === "multi" && (ev.dateOptions || []).includes(ds)) return true;
+  return false;
+};
+const eventTimingAnchorDate = (ev) => {
+  const k = getEventDateKind(ev);
+  if (k === "day" && ev.date) return ev.date;
+  if (k === "multi" && (ev.dateOptions || [])[0]) return ev.dateOptions[0];
+  return ev.date || "";
+};
+const formTimingAnchorDate = (fm) => {
+  if (!fm) return "";
+  const k = fm.dateKind || "day";
+  if (k === "day") return fm.date || "";
+  if (k === "multi" && (fm.dateOptions || [])[0]) return fm.dateOptions[0];
+  return "";
+};
+const evGCalEligible = (ev) => getEventDateKind(ev) === "day" && ev.date && /^\d{4}-\d{2}-\d{2}$/.test(ev.date);
+const fisaPdfDateSlug = (ev) => {
+  const ad = eventTimingAnchorDate(ev);
+  if (ad && /^\d{4}-\d{2}-\d{2}$/.test(ad)) return ad.split("-").reverse().join("-");
+  return sanitizeExportFilename(String(fEvDate(ev)).replace(/\s+/g, "-").replace(/·/g, "-")) || "event";
+};
 /** Nume fișier sigur pe Windows/macOS (fără : * ? " < > | \ /). */
 const sanitizeExportFilename = (s) => String(s||"")
   .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
@@ -332,7 +437,7 @@ const buildFisaHtml = (ev) => {
     if(val.includes("T")){ const [d,t]=val.split("T"); return (d&&d!==evDate?fD(d)+" ":"")+(t||"").slice(0,5)||""; }
     return val.slice(0,5)||"";
   };
-  const timingHtml = timingItems.map(x=>`<div style="padding:10px;border-radius:8px;background:#f8f8f8;text-align:center;border:1px solid #e5e5e5"><div style="font-size:14px;margin-bottom:3px">${x.i}</div><div style="font-size:9px;color:#888;text-transform:uppercase;margin-bottom:3px">${esc(x.l)}</div><div style="font-size:15px;font-weight:800;color:${x.v?"#111":"#999"}">${esc(formatDt(x.v,ev.date))}</div></div>`).join("");
+  const timingHtml = timingItems.map(x=>`<div style="padding:10px;border-radius:8px;background:#f8f8f8;text-align:center;border:1px solid #e5e5e5"><div style="font-size:14px;margin-bottom:3px">${x.i}</div><div style="font-size:9px;color:#888;text-transform:uppercase;margin-bottom:3px">${esc(x.l)}</div><div style="font-size:15px;font-weight:800;color:${x.v?"#111":"#999"}">${esc(formatDt(x.v,eventTimingAnchorDate(ev)))}</div></div>`).join("");
   const repDurs = ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45);
   const repStarts = ev.repStarts||[];
   const repHtml = repDurs.map((d,i)=>{const st=repStarts[i];return `<span style="padding:4px 10px;border-radius:6px;background:rgba(0,0,0,.06);font-size:11px;font-weight:600;margin-right:6px;margin-bottom:4px;display:inline-block">R${i+1}: ${st?esc(st)+" ":""}${d} min</span>`}).join("");
@@ -348,7 +453,7 @@ ${ev.cat==="private"?`<div style="margin-bottom:16px"><div style="font-size:9px;
 <div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Timing show</div><div style="padding:10px;border-radius:8px;background:#f8f8f8;border:1px solid #e5e5e5">${repHtml}</div></div>
 ${svcHtml?`<div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Servicii</div><div style="display:flex;flex-direction:column;gap:6px">${svcHtml}</div></div>`:""}
 <div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Alți participanți / furnizori externi</div>${extraHtml||"<div style='font-size:12px;color:#999'>—</div>"}${ev.fisaExtra?`<div style="margin-top:8px;padding:8px;border-radius:6px;background:#f8f8f8;font-size:12px;color:#666;white-space:pre-wrap">${esc(ev.fisaExtra)}</div>`:""}</div>
-<div style="font-size:10px;color:#999;margin-top:24px;text-align:center">PHASER · Fișa evenimentului · O${ev.offerNr||"?"} · ${ev.date||""}</div>
+<div style="font-size:10px;color:#999;margin-top:24px;text-align:center">PHASER · Fișa evenimentului · O${ev.offerNr||"?"} · ${esc(fEvDate(ev))}</div>
 </body></html>`;
 };
 // Regex [^ASCII] pe șiruri JS poate sparge emoji în perechi surrogate; iterăm pe code point-uri.
@@ -1713,12 +1818,12 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
   const [bulkOfferPick, setBulkOfferPick] = useState("");
   const toggleSel = (id) => setSelectedIds(s=>s.includes(id)?s.filter(x=>x!==id):[...s,id]);
   const now = new Date();
-  const confConfirmate = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+  const confConfirmate = evs.filter(e=>e.st==="confirmat"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>evSortKey(b)-evSortKey(a));
   const respinseOffers = evs.filter(e=>e.st==="respins"&&(!filterCat||e.cat===filterCat)).sort((a,b)=>new Date(b.cr||0)-new Date(a.cr||0));
   const activeOffers = evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)&&(!filterCat||e.cat===filterCat));
   const activeSorted = [...activeOffers].sort((a,b)=>{
-    if(sortBy==="date") return new Date(a.date||0)-new Date(b.date||0);
-    if(sortBy==="dateDesc") return new Date(b.date||0)-new Date(a.date||0);
+    if(sortBy==="date") return evSortKey(a)-evSortKey(b);
+    if(sortBy==="dateDesc") return evSortKey(b)-evSortKey(a);
     if(sortBy==="cr") return new Date(b.cr||0)-new Date(a.cr||0);
     if(sortBy==="crAsc") return new Date(a.cr||0)-new Date(b.cr||0);
     if(sortBy==="fee") return (b.fee||0)-(a.fee||0);
@@ -1734,8 +1839,8 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
     return true;
   });
   const active = [...base].sort((a,b)=>{
-    if(sortBy==="date") return new Date(a.date||0)-new Date(b.date||0);
-    if(sortBy==="dateDesc") return new Date(b.date||0)-new Date(a.date||0);
+    if(sortBy==="date") return evSortKey(a)-evSortKey(b);
+    if(sortBy==="dateDesc") return evSortKey(b)-evSortKey(a);
     if(sortBy==="cr") return new Date(b.cr||0)-new Date(a.cr||0);
     if(sortBy==="crAsc") return new Date(a.cr||0)-new Date(b.cr||0);
     if(sortBy==="fee") return (b.fee||0)-(a.fee||0);
@@ -1814,7 +1919,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
               <div style={{fontSize:11,fontWeight:700,color:ST[col]?.c,marginBottom:10,display:"flex",alignItems:"center",gap:6}}><span style={{width:8,height:8,borderRadius:"50%",background:ST[col]?.c}}/> {ST[col]?.l||col} ({colEvs.length})</div>
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
                 {colEvs.map(ev=>{
-                  const d=dU(ev.date); const urgent=d<=14;
+                  const d=evExactDayCountdown(ev); const urgent=d!=null&&d<=14;
                   return <div key={ev.id} draggable onDragStart={e=>e.dataTransfer.setData("evId",ev.id)} onClick={()=>onSelect(ev)}
                     style={{background:th.c,borderRadius:8,padding:12,cursor:"grab",border:`${selectedIds.includes(ev.id)?2:1}px solid ${selectedIds.includes(ev.id)?th.a:(ev.st==="confirmat"?"rgba(34,197,94,0.35)":ev.st==="respins"?"rgba(239,68,68,0.35)":th.b)}`,boxShadow:glowCardShadow(ev.st),transition:"transform .15s, box-shadow .2s",position:"relative"}}
                     onMouseOver={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.cursor="grab";}}
@@ -1822,7 +1927,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                     {(showSelection||onDeleteSelected)&&<div style={{position:"absolute",top:8,right:8}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} style={{cursor:"pointer",width:14,height:14}}/></div>}
                     <div style={{fontSize:10,color:th.tm,marginBottom:2}}>{ev.type} {ev.cat==="private"?"· ZGV":"· PHASER"}</div>
                     <div style={{fontSize:13,fontWeight:700,marginBottom:4}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
-                    <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fD(ev.date)}</div>
+                    <div style={{fontSize:13,fontWeight:600,marginBottom:2}}>{fEvDate(ev)}</div>
                     <div style={{fontSize:10,color:th.tm,marginBottom:6}}>{fFmt(ev.fee,ev.valuta)}</div>
                     <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
                       <BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={onStatusChange}/>
@@ -1853,7 +1958,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
-                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
+                    <td style={{padding:"10px 12px",fontSize:11}}>{fEvDate(ev)}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{fD(ev.cr)}</td>
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{fFmt(ev.fee,ev.valuta)}</td>
                     <td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}>
@@ -1878,7 +1983,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                 <tbody>{confConfirmate.map((ev)=>(
                   <tr key={ev.id} onClick={()=>onSelect(ev)} style={{cursor:"pointer",background:selectedIds.includes(ev.id)?th.ab:th.c,borderRadius:10,overflow:"hidden",boxShadow:"0 2px 14px rgba(34, 197, 94, 0.2)",border:"1px solid rgba(34, 197, 94, 0.12)",outline:"none"}} onMouseOver={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.ab}} onMouseOut={e=>{if(!selectedIds.includes(ev.id))e.currentTarget.style.background=th.c}}>
                     {(showSelection||onDeleteSelected)&&<td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedIds.includes(ev.id)} onChange={()=>toggleSel(ev.id)} onClick={e=>e.stopPropagation()} style={{cursor:"pointer"}}/></td>}
-                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}{ev.date&&new Date(ev.date+"T00:00:00")>=now?<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div>:null}</td>
+                    <td style={{padding:"10px 12px",fontSize:11}}>{fEvDate(ev)}{(()=>{const dd=evExactDayCountdown(ev);return dd!=null&&ev.date&&new Date(ev.date+"T00:00:00")>=now?<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dd} zile</div>:null;})()}</td>
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{ev.type||"—"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                   </tr>
@@ -1901,7 +2006,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.st==="cerere"?"📞":ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
                     <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
-                    <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
+                    <td style={{padding:"10px 12px",fontSize:11}}>{fEvDate(ev)}</td>
                     <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{fD(ev.cr)}</td>
                     <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{fFmt(ev.fee,ev.valuta)}</td>
                   </tr>
@@ -1937,7 +2042,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
               <td style={{padding:"10px 12px",fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</td>
               <td style={{padding:"10px 12px",fontSize:11}}>{ev.type} · {ev.cat==="private"?"Privat":"Public"}</td>
               <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
-              <td style={{padding:"10px 12px",fontSize:11}}>{fD(ev.date)}</td>
+              <td style={{padding:"10px 12px",fontSize:11}}>{fEvDate(ev)}</td>
               <td style={{padding:"10px 12px",fontSize:11,color:th.tm}}>{fD(ev.cr)}</td>
               <td style={{padding:"10px 12px",fontSize:13,fontWeight:700}}>{fFmt(ev.fee,ev.valuta)}</td>
               <td style={{padding:"10px 12px"}} onClick={e=>e.stopPropagation()}>
@@ -1957,7 +2062,7 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
       {active.length===0 && <div style={{...sty.cd,padding:40,textAlign:"center",color:th.tm}}><div style={{fontSize:32,marginBottom:8}}>📭</div><div style={{fontSize:13}}>Nicio ofertă</div></div>}
       <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(auto-fill,minmax(280px,1fr))",gap:10}}>
         {active.map(ev=>{
-          const d=dU(ev.date); const urgent=d<=14;
+          const d=evExactDayCountdown(ev); const urgent=d!=null&&d<=14;
           const glowB = ev.st==="confirmat"?"rgba(34,197,94,0.4)":ev.st==="respins"?"rgba(239,68,68,0.4)":null;
           return <div key={ev.id} onClick={()=>onSelect(ev)}
             style={{...sty.cd,cursor:"pointer",borderColor:selectedIds.includes(ev.id)?th.a:(glowB||(urgent?ST[ev.st].c:th.b)),padding:16,transition:"all .15s",position:"relative",borderWidth:selectedIds.includes(ev.id)?2:1,boxShadow:glowCardShadow(ev.st)}}
@@ -1977,10 +2082,10 @@ function OffersBoard({ evs, th, sty, mob, onSelect, onAddOffer, onStatusChange, 
               </div>
             </div>
             <div style={{fontSize:11,color:th.tm,marginBottom:2}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
-            <div style={{fontSize:11,color:th.tm,marginBottom:10}}>{fD(ev.date)}</div>
+            <div style={{fontSize:11,color:th.tm,marginBottom:10}}>{fEvDate(ev)}</div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <span style={{fontSize:17,fontWeight:800}}>{fFmt(ev.fee,ev.valuta)}</span>
-              <span style={{fontSize:10,color:urgent?"#ef4444":th.tm,fontWeight:urgent?700:400}}>{d>0?`în ${d} zile`:d===0?"Azi!":"Trecut"}</span>
+              <span style={{fontSize:10,color:urgent?"#ef4444":th.tm,fontWeight:urgent?700:400}}>{d==null?"":d>0?`în ${d} zile`:d===0?"Azi!":"Trecut"}</span>
             </div>
           </div>;
         })}
@@ -2448,7 +2553,7 @@ function ContractView({ ev, th, contractFields, onContractChange }) {
         <p style={{marginBottom:6,fontStyle:"italic"}}>Art.2.1 Obiectul prezentului contract constă în îndeplinirea activității de interpretare artistică de către Prestator prin actul artistic „PHASER" în cadrul unui eveniment {isP?"privat":"public"} organizat de Beneficiar.</p>
         <p style={{marginBottom:6,fontStyle:"italic"}}>
           Art.2.2 Evenimentul care face obiectul prezentului contract se desfășoară în data de{" "}
-          <Fi k="dataEv" w={120} placeholder={ev.date||"____-__-__"}/>, în locația <Fi k="locatie" w={160} placeholder={ev.venue||"locația"} align="left"/> cu adresa: <Fi k="adresaEv" w={180} placeholder={ev.city||"adresa"} align="left"/>.
+          <Fi k="dataEv" w={180} placeholder={fEvDate(ev)||"____-__-__"}/>, în locația <Fi k="locatie" w={160} placeholder={ev.venue||"locația"} align="left"/> cu adresa: <Fi k="adresaEv" w={180} placeholder={ev.city||"adresa"} align="left"/>.
         </p>
         <p style={{fontStyle:"italic"}}>
           Art.2.3 Durata recitalului artistic este de aproximativ{" "}
@@ -2590,7 +2695,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const [contractFields, setContractFields] = useState({
     nr:"", dataSemnare:"", clientNume:ev.cn||"", clientEmail:ev.ce||"", clientTel:ev.cp||"",
     jud:"", mun:"", str:"", nr2:"", ap:"", ciSeria:"", ciNr:"", cnp:"",
-    dataEv:ev.date||"", locatie:ev.venue||"", adresaEv:ev.city||"",
+    dataEv:fEvDate(ev)||"", locatie:ev.venue||"", adresaEv:ev.city||"",
     durataTotal:String((ev.rep||1)*45), nrSeturiInput:String(ev.rep||1), durataSeturiInput:"45",
     valoare:String((ev.fee||0)+Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0)),
     avansContract:String(ev.dep||0),
@@ -2617,23 +2722,28 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   };
 
   const eventDateDdMmYyyy = () => {
-    if (!ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return "";
+    if (getEventDateKind(ev) !== "day" || !ev.date || !/^\d{4}-\d{2}-\d{2}$/.test(ev.date)) return "";
     const [y, m, d] = ev.date.split("-");
     return `${d}.${m}.${y}`;
   };
   /** Ofertă: «O1 15.06.2026». Contract: «C1 15.06.2026». */
   const getOfferExportBasename = () => {
     const dc = eventDateDdMmYyyy();
-    return sanitizeExportFilename(`O${ev.offerNr ?? "?"}${dc ? " " + dc : ""}`);
+    const slug = sanitizeExportFilename(String(fEvDate(ev)).replace(/\s+/g, "-").replace(/·/g, "-"));
+    return sanitizeExportFilename(`O${ev.offerNr ?? "?"}${dc ? " " + dc : slug && slug !== "—" ? " " + slug : ""}`);
   };
   const getContractExportBasename = () => {
     const dc = eventDateDdMmYyyy();
-    return sanitizeExportFilename(`C${ev.offerNr ?? "?"}${dc ? " " + dc : ""}`);
+    const slug = sanitizeExportFilename(String(fEvDate(ev)).replace(/\s+/g, "-").replace(/·/g, "-"));
+    return sanitizeExportFilename(`C${ev.offerNr ?? "?"}${dc ? " " + dc : slug && slug !== "—" ? " " + slug : ""}`);
   };
   const getOfferContractExportBasename = (isContract) => (isContract ? getContractExportBasename() : getOfferExportBasename());
   const getPdfFilename = (kind) => {
     if (kind==="fisa") {
-      const dateStr = (ev.date||"").split("-").reverse().join("-") || "event";
+      const ad = eventTimingAnchorDate(ev);
+      const dateStr = (ad && /^\d{4}-\d{2}-\d{2}$/.test(ad))
+        ? ad.split("-").reverse().join("-")
+        : (sanitizeExportFilename(String(fEvDate(ev)).replace(/\s+/g, "-").replace(/·/g, "-")) || "event");
       const evType = (ev.type||"Event").replace(/\s+/g,"-");
       return sanitizeExportFilename(`Fisa-${evType}-${dateStr}`) + ".pdf";
     }
@@ -3131,7 +3241,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
     if(ev.desc) lines.push(ev.desc,"");
     lines.push("Tip: "+(isPriv?"Privat":"Public"));
     lines.push("Locație: "+(ev.venue||"—")+(ev.city?", "+ev.city:""));
-    lines.push("Data: "+fD(ev.date),"");
+    lines.push("Data: "+fEvDate(ev),"");
     const repStr = isPriv
       ? (ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs.map((d,i)=>`R${i+1}:${d}min`).join(" ") : `${ev.rep||1} reprize × ${ev.repDur||45} min`)
       : publicPrestatieLine();
@@ -3243,7 +3353,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{fontSize:17,fontWeight:700,color:"#fff"}}>{ev.type}</div>
                 <div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/>
-                <div style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fD(ev.date)}</div>
+                <div style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fEvDate(ev)}</div>
                 {(ev.venue||ev.city)&&<><div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/><div style={{fontSize:14,color:"rgba(251,191,36,.75)"}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div></>}
               </div>
             </div>
@@ -3283,7 +3393,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
                 <div style={{fontSize:17,fontWeight:700,color:"#fff"}}>{ev.type}</div>
                 <div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/>
-                <div style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fD(ev.date)}</div>
+                <div style={{fontSize:14,fontWeight:500,color:"rgba(255,255,255,.85)"}}>{fEvDate(ev)}</div>
                 {(ev.venue||ev.city)&&<><div style={{width:1,height:16,background:"rgba(251,191,36,.35)",flexShrink:0}}/><div style={{fontSize:14,color:"rgba(251,191,36,.75)"}}>{ev.venue||""}{ev.city?", "+ev.city:""}</div></>}
               </div>
             </div>}
@@ -3579,7 +3689,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
             <div style={{marginBottom:16}}>
               <div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Timing — Load in · Soundcheck · Show start · Load out</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:6}}>
-                {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=><div key={i} style={{padding:10,borderRadius:8,background:"#f8f8f8",textAlign:"center",border:"1px solid #e5e5e5"}}><div style={{fontSize:14,marginBottom:3}}>{x.i}</div><div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div><div style={{fontSize:15,fontWeight:800,color:x.v?"#111":"#999"}}>{formatDisplayDateTime(x.v,ev.date)}</div></div>)}
+                {[{l:"Load In",v:ev.li,i:"📦"},{l:"Soundcheck",v:ev.sc,i:"🎛"},{l:"Show Start",v:ev.ss,i:"🎤"},{l:"Load Out",v:ev.lo,i:"🚐"}].map((x,i)=><div key={i} style={{padding:10,borderRadius:8,background:"#f8f8f8",textAlign:"center",border:"1px solid #e5e5e5"}}><div style={{fontSize:14,marginBottom:3}}>{x.i}</div><div style={{fontSize:9,color:"#888",textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div><div style={{fontSize:15,fontWeight:800,color:x.v?"#111":"#999"}}>{formatDisplayDateTime(x.v,eventTimingAnchorDate(ev))}</div></div>)}
               </div>
             </div>
             <div style={{marginBottom:16}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Timing show</div><div style={{padding:10,borderRadius:8,background:"#f8f8f8",border:"1px solid #e5e5e5"}}>{(ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45)).map((d,i)=>{const st=(ev.repStarts||[])[i];return <span key={i} style={{padding:"4px 10px",borderRadius:6,background:"rgba(0,0,0,.06)",fontSize:11,fontWeight:600,marginRight:6,marginBottom:4,display:"inline-block"}}>R{i+1}: {st?st+" ":""}{d} min</span>})}</div></div>
@@ -3702,11 +3812,11 @@ function FisaPdfButton({ ev, showToast }) {
         div.innerHTML = getFisaBodyHtmlForWorker(ev);
         div.style.cssText = "position:absolute;left:-9999px;top:0;width:560px;background:#fff;padding:20px";
         document.body.appendChild(div);
-        blob = await html2pdf().set({ margin: 12, filename: `Fisa-O${ev.offerNr||"?"}-${(ev.date||"").split("-").reverse().join("-")||"event"}.pdf`, image: { type: "jpeg", quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" } }).from(div).outputPdf("blob");
+        blob = await html2pdf().set({ margin: 12, filename: `Fisa-O${ev.offerNr||"?"}-${fisaPdfDateSlug(ev)}.pdf`, image: { type: "jpeg", quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" } }).from(div).outputPdf("blob");
         document.body.removeChild(div);
       }
       if (!blob) throw new Error("Nu s-a putut genera PDF");
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `Fisa-O${ev.offerNr||"?"}-${(ev.date||"").split("-").reverse().join("-")||"event"}.pdf`;
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `Fisa-O${ev.offerNr||"?"}-${fisaPdfDateSlug(ev)}.pdf`;
       a.click(); URL.revokeObjectURL(a.href);
       showToast?.("PDF descărcat ✓");
     } catch (e) { showToast?.("Eroare la generare PDF"); console.error(e); }
@@ -4026,7 +4136,7 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
             <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
               <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
               <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div>
-              {editable ? <DateTimeInput value={ev[x.k]} evDate={ev.date} onChange={v=>u(x.k,v)} iStyle={{...iStyle,fontSize:12}}/> : <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,ev.date)}</div>}
+              {editable ? <DateTimeInput value={ev[x.k]} evDate={eventTimingAnchorDate(ev)} onChange={v=>u(x.k,v)} iStyle={{...iStyle,fontSize:12}}/> : <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,eventTimingAnchorDate(ev))}</div>}
             </div>
           ))}
         </div>
@@ -4101,7 +4211,7 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
 
 // FEATURES — Event form, offer preview, contract, location search
 // ═══════════════════════════════════════════════════════════════════════════════
-function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templates }) {
+function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templates, showToast }) {
   const cerereStart = !!mData?.cerereStart;
   const tplCovers = (templates?.playlist&&templates.playlist.length>0) ? templates.playlist : DEFAULT_COVERS;
   const tplVideos = (templates?.videos&&templates.videos.length>0) ? templates.videos : DEFAULT_VIDEOS;
@@ -4111,6 +4221,19 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     st: mData?.st ?? (mData?.directEvent ? "confirmat" : (cerereStart ? "cerere" : "oferta")),
     directEvent: !mData?.id && !!mData?.directEvent,
     date: mData?.date||"",
+    dateKind: (()=>{
+      if (mData?.dateKind) return mData.dateKind;
+      if (mData?.dateMonth && /^\d{4}-\d{2}$/.test(mData.dateMonth)) return "month";
+      if (mData?.dateYear != null && mData.dateYear !== "") return "year";
+      if ((mData?.dateOptions||[]).length) return "multi";
+      if (mData?.id && !(mData?.date||"") && (mData?.dateNote||"").trim()) return "text";
+      if (mData?.id && !(mData?.date||"")) return "none";
+      return "day";
+    })(),
+    dateMonth: mData?.dateMonth || "",
+    dateYear: mData?.dateYear !== undefined && mData?.dateYear !== null && mData.dateYear !== "" ? mData.dateYear : new Date().getFullYear(),
+    dateNote: mData?.dateNote || "",
+    dateOptions: (mData?.dateOptions && mData.dateOptions.length) ? [...mData.dateOptions] : [""],
     li: mData?.li||"", sc: mData?.sc||"", ss: mData?.ss||"", lo: mData?.lo||"",
     venue: mData?.venue||"", city: mData?.city||"", dist: mData?.dist||0, locPhone: mData?.locPhone||"", locAddress: mData?.locAddress||"",
     cn: mData?.cn||"", cp: mData?.cp||"", ce: mData?.ce||"",
@@ -4156,6 +4279,30 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
   const u = (k,v) => setFm(p=>({...p,[k]:v}));
   const svcT = isP ? Object.entries(fm.svcp).reduce((s,[k,v])=>s+(fm.svc[k]?v:0),0) : 0;
   const iStyle = {...sty.i, fontSize: mob?"16px":"14px"};
+
+  const packDateForSave = () => {
+    const k = fm.dateKind || "day";
+    if (k === "day") return { dateKind: "day", date: fm.date || "", dateMonth: null, dateYear: null, dateNote: "", dateOptions: null };
+    if (k === "month") return { dateKind: "month", date: "", dateMonth: fm.dateMonth || "", dateYear: null, dateNote: "", dateOptions: null };
+    if (k === "year") return { dateKind: "year", date: "", dateMonth: null, dateYear: fm.dateYear === "" || fm.dateYear == null ? null : Number(fm.dateYear), dateNote: "", dateOptions: null };
+    if (k === "multi") {
+      const opts = (fm.dateOptions || []).map(s => String(s || "").trim()).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+      return { dateKind: "multi", date: "", dateMonth: null, dateYear: null, dateNote: "", dateOptions: opts.length ? opts : null };
+    }
+    if (k === "text") return { dateKind: "text", date: "", dateMonth: null, dateYear: null, dateNote: (fm.dateNote || "").trim(), dateOptions: null };
+    return { dateKind: "none", date: "", dateMonth: null, dateYear: null, dateNote: (fm.dateNote || "").trim(), dateOptions: null };
+  };
+  const submitForm = (extra = {}) => {
+    const k = fm.dateKind || "day";
+    if (k === "multi") {
+      const ok = (fm.dateOptions || []).some(s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || "").trim()));
+      if (!ok) { showToast?.("Adaugă cel puțin o dată completă (AAAA-LL-ZZ) sau alege alt mod.", "error"); return; }
+    }
+    if (k === "month" && !(fm.dateMonth && /^\d{4}-\d{2}$/.test(fm.dateMonth))) { showToast?.("Alege luna și anul.", "error"); return; }
+    const title = fm.cn ? (isP ? `${fm.type} ${fm.cn}` : `${fm.type} - ${fm.cn}`) : "Eveniment nou";
+    const dp = packDateForSave();
+    onSave({ ...fm, ...dp, title, ...extra });
+  };
 
   const showTehnicTab = !isP || ["Corporate","Private Party","Altele"].includes(fm.type);
   const baseTabs = isP ? (showTehnicTab ? ["detalii","client","servicii","ospitalitate","tehnic","media","playlist","note"] : ["detalii","client","servicii","ospitalitate","media","playlist","note"]) : ["detalii","client","note"];
@@ -4208,7 +4355,35 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                   {Object.entries(ST).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
                 </select>
               </div>}
-              <div><label style={sty.l}>Data eveniment *</label><input type="date" value={fm.date} onChange={e=>u("date",e.target.value)} style={iStyle}/></div>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={sty.l}>Când e evenimentul</label>
+                <select value={fm.dateKind||"day"} onChange={e=>u("dateKind",e.target.value)} className="modernSel" style={{...iStyle,width:"100%"}}>
+                  <option value="day">Zi exactă</option>
+                  <option value="month">Lună + an (ex. iunie 2026)</option>
+                  <option value="year">Doar anul</option>
+                  <option value="multi">Mai multe zile posibile</option>
+                  <option value="text">Text liber (ex. „iunie sau iulie”)</option>
+                  <option value="none">Fără dată încă</option>
+                </select>
+                <div style={{fontSize:10,color:th.tm,marginTop:4,lineHeight:1.4}}>Google Calendar se sincronizează doar la <strong style={{color:th.t}}>zi exactă</strong>. Pentru lună/an variante apare în listă și în PDF fără zi falsă.</div>
+              </div>
+              {(fm.dateKind||"day")==="day"&&<div style={{gridColumn:"1/-1"}}><label style={sty.l}>Ziua evenimentului</label><input type="date" value={fm.date} onChange={e=>u("date",e.target.value)} style={iStyle}/></div>}
+              {fm.dateKind==="month"&&<div style={{gridColumn:"1/-1"}}><label style={sty.l}>Luna</label><input type="month" value={fm.dateMonth||""} onChange={e=>u("dateMonth",e.target.value)} style={iStyle}/></div>}
+              {fm.dateKind==="year"&&<div style={{gridColumn:"1/-1"}}><label style={sty.l}>Anul</label><input type="number" value={fm.dateYear ?? ""} onChange={e=>u("dateYear",e.target.value===""?"":Number(e.target.value))} style={iStyle} min={2020} max={2040} placeholder="ex. 2026"/></div>}
+              {fm.dateKind==="multi"&&<div style={{gridColumn:"1/-1"}}>
+                <label style={sty.l}>Variante de dată (una pe rând)</label>
+                {(fm.dateOptions||[""]).map((row,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6,alignItems:"center"}}>
+                    <input type="date" value={row||""} onChange={e=>{const arr=[...(fm.dateOptions||[""])];arr[i]=e.target.value;u("dateOptions",arr);}} style={{...iStyle,flex:1}}/>
+                    <button type="button" onClick={()=>{const arr=(fm.dateOptions||[""]).filter((_,j)=>j!==i);u("dateOptions",arr.length?arr:[""]);}} style={{padding:"4px 8px",border:`1px solid ${th.b}`,borderRadius:6,background:th.h,color:th.tm,cursor:"pointer",fontSize:11}}>✕</button>
+                  </div>
+                ))}
+                <button type="button" onClick={()=>u("dateOptions",[...(fm.dateOptions||[]),""])} style={{...sty.bg,fontSize:11,marginTop:4}}>+ Încă o dată</button>
+              </div>}
+              {(fm.dateKind==="text"||fm.dateKind==="none")&&<div style={{gridColumn:"1/-1"}}>
+                <label style={sty.l}>{fm.dateKind==="text"?"Descriere (vezi în oferte și liste)":"Notă opțională (lângă „Fără dată”)"}</label>
+                <textarea value={fm.dateNote||""} onChange={e=>u("dateNote",e.target.value)} style={{...iStyle,minHeight:56,resize:"vertical"}} placeholder={fm.dateKind==="text"?"ex: iunie sau iulie 2026, weekend TBD…":"ex: revin client cu data săpt. viitoare"}/>
+              </div>}
               <div><label style={sty.l}>Valută</label>
                 <select value={fm.valuta||"EUR"} onChange={e=>u("valuta",e.target.value)} className="modernSel" style={iStyle}>
                   <option value="EUR">EUR (€)</option>
@@ -4389,7 +4564,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                 {[{l:"Load In",k:"li",i:"📦"},{l:"Soundcheck",k:"sc",i:"🎛"},{l:"Show Start",k:"ss",i:"🎤"},{l:"Load Out",k:"lo",i:"🚐"}].map(x=>(
                   <div key={x.k} style={{padding:10,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
                     <div style={{fontSize:11,color:th.tm,marginBottom:4}}>{x.i} {x.l}</div>
-                    <DateTimeInput value={fm[x.k]} evDate={fm.date} onChange={v=>u(x.k,v)} iStyle={{...iStyle,fontSize:13}}/>
+                    <DateTimeInput value={fm[x.k]} evDate={formTimingAnchorDate(fm)} onChange={v=>u(x.k,v)} iStyle={{...iStyle,fontSize:13}}/>
                   </div>
                 ))}
               </div>
@@ -4641,13 +4816,10 @@ Vom furniza 3 mix-uri separate din Stage Box-ul poziționat pe scenă:
           <div style={{padding:"12px 20px",borderTop:`1px solid ${th.b}`,display:"flex",justifyContent:"space-between",alignItems:"center",gap:6,flexShrink:0,flexWrap:"wrap"}}>
             <button onClick={onClose} style={sty.bg}>Anulează</button>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              {!isE&&!fm.directEvent&&!cerereStart&&<button onClick={()=>{
-                const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
-                onSave({...fm, title, date: fm.date||"2026-06-15", asCerere:true});
-              }} style={{...sty.bg,color:"#64748b",borderColor:"#94a3b8",fontSize:12}} title="Salvează ca cerere — fără ofertă trimisă">📞 Cerere</button>}
+              {!isE&&!fm.directEvent&&!cerereStart&&<button onClick={()=>submitForm({ asCerere:true })} style={{...sty.bg,color:"#64748b",borderColor:"#94a3b8",fontSize:12}} title="Salvează ca cerere — fără ofertă trimisă">📞 Cerere</button>}
               <button onClick={()=>{
-                const title = fm.cn ? (isP?`${fm.type} ${fm.cn}`:`${fm.type} - ${fm.cn}`) : "Eveniment nou";
-                onSave(cerereStart?{...fm, title, date: fm.date||"2026-06-15", asCerere:true}:{...fm, title, date: fm.date||"2026-06-15"});
+                if (isE) submitForm();
+                else submitForm(cerereStart ? { asCerere:true } : {});
               }} style={sty.b}>
                 {isE?"Salvează":fm.directEvent?"Creează eveniment":cerereStart?"Creează cerere":"Creează ofertă"}
               </button>
@@ -4667,7 +4839,7 @@ function buildAIContext(evs, tasks) {
   var confirmed = evs.filter(function(e){return e.st==="confirmat";});
   var pending   = evs.filter(function(e){return e.st==="asteptare";});
   var totalRev  = confirmed.reduce(function(s,e){return s+(e.fee||0);},0);
-  var upcoming  = evs.filter(function(e){return e.date&&new Date(e.date)>=new Date();}).sort(function(a,b){return a.date>b.date?1:-1;}).slice(0,5).map(function(e){return "  - "+e.date+" | "+(e.cn||e.title||"—")+" | "+(e.type||"")+" | "+e.st+" | "+(e.fee||0)+" RON";}).join("\n")||"  (niciun eveniment viitor)";
+  var upcoming  = evs.filter(function(e){return evPeriodEndMs(e)>=new Date(new Date().setHours(0,0,0,0));}).sort(function(a,b){return evSortKey(a)-evSortKey(b);}).slice(0,5).map(function(e){return "  - "+fEvDate(e)+" | "+(e.cn||e.title||"—")+" | "+(e.type||"")+" | "+e.st+" | "+(e.fee||0)+" RON";}).join("\n")||"  (niciun eveniment viitor)";
   var activeTasks = tasks.filter(function(t){return !t.done;}).slice(0,8).map(function(t){return "  - ["+(t.priority||"medium")+"] "+t.text;}).join("\n")||"  (niciun task activ)";
   return "Esti un asistent AI in Phaser Manager.\n\nDATE LIVE:\nEvenimente: "+evs.length+" (confirmate: "+confirmed.length+", asteptare: "+pending.length+")\nVenit: "+totalRev+" RON\nTasks: "+tasks.filter(function(t){return !t.done;}).length+"\n\nEVENIMENTE VIITOARE:\n"+upcoming+"\n\nTASKS ACTIVE:\n"+activeTasks+"\n\nRaspunde in romana. Fii concis si util.";
 }
@@ -4699,7 +4871,7 @@ function processLocalCmd(input, evs, tasks) {
   var norm = function(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,""); };
   var nc = norm(cmd);
   var cur = new Date(); cur.setHours(0,0,0,0);
-  var fmtE = function(e){ return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+(e.cn):"")+" | "+(e.date||"—")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(e.st||"—")+"]"; };
+  var fmtE = function(e){ return "• O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+(e.cn):"")+" | "+fEvDate(e)+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(e.st||"—")+"]"; };
   var PX = {r:{3:4100,2:3100,1:2350},sunet:350,lumini:500,ecran:600,scena:300,dj:600,pub:2000};
   var ST_LABEL = {oferta:"Ofertă",asteptare:"Așt. contract",plata_avans:"Plată avans",confirmat:"Confirmat",respins:"Respins"};
   var MEMBERS = [{id:"m1",n:"Carina Dumitru",r:"Vocal"},{id:"m2",n:"Radu Racz",r:"Bass"},{id:"m3",n:"Lucian Oprișan",r:"Clape"},{id:"m4",n:"Arnold Birta",r:"Tobe"},{id:"m5",n:"Sebastian Bârzeianu",r:"Chitară"}];
@@ -4752,8 +4924,9 @@ function processLocalCmd(input, evs, tasks) {
   if(nc.match(/statistici|stat |breakdown|distributie|structura/)) {
     var types={}, stati={};
     evs.forEach(function(e){ types[e.type||"—"]=(types[e.type||"—"]||0)+1; stati[e.st||"—"]=(stati[e.st||"—"]||0)+1; });
-    var viit=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).length;
-    var trec=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")<cur;}).length;
+    var curMs=cur.getTime();
+    var viit=evs.filter(function(e){return evPeriodEndMs(e)>=curMs;}).length;
+    var trec=evs.filter(function(e){return evPeriodEndMs(e)<curMs;}).length;
     var byType=Object.entries(types).sort(function(a,b){return b[1]-a[1];}).map(function(x){return "  "+x[0]+": "+x[1];}).join("\n");
     var bySt=Object.entries(stati).map(function(x){return "  "+(ST_LABEL[x[0]]||x[0])+": "+x[1];}).join("\n");
     return "📈 STATISTICI\n\nDupă tip:\n"+byType+"\n\nDupă status:\n"+bySt+"\n\n📅 Viitoare: "+viit+" | Trecute: "+trec+" | Total: "+evs.length;
@@ -4810,9 +4983,9 @@ function processLocalCmd(input, evs, tasks) {
   // 10. URMĂTOARELE EVENIMENTE
   // ══════════════════════════════════════════════
   if(nc.match(/urmat[oă]|urmeaz[aă]|agenda|programul|viitoare|urma/)) {
-    var nxt=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).sort(function(a,b){return a.date>b.date?1:-1;}).slice(0,8);
+    var nxt=evs.filter(function(e){return evPeriodEndMs(e)>=cur;}).sort(function(a,b){return evSortKey(a)-evSortKey(b);}).slice(0,8);
     if(nxt.length===0) return "📅 Niciun eveniment viitor.";
-    return "📅 URMĂTOARELE EVENIMENTE:\n\n"+nxt.map(function(e,i){var d=Math.ceil((new Date(e.date+"T00:00:00")-cur)/864e5); return (i+1)+". "+(e.date)+" (în "+d+"z) | O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+e.cn:"")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(ST_LABEL[e.st]||e.st)+"]";}).join("\n");
+    return "📅 URMĂTOARELE EVENIMENTE:\n\n"+nxt.map(function(e,i){var dd=evExactDayCountdown(e);var dayPart=dd!=null?" (în "+dd+"z)":""; return (i+1)+". "+fEvDate(e)+dayPart+" | O"+(e.offerNr||"?")+" · "+(e.type||"—")+(e.cn?" | "+e.cn:"")+" | "+(e.fee||0).toLocaleString("ro-RO")+" € ["+(ST_LABEL[e.st]||e.st)+"]";}).join("\n");
   }
 
   // ══════════════════════════════════════════════
@@ -4823,7 +4996,7 @@ function processLocalCmd(input, evs, tasks) {
     var ev=evByNr(nr); if(!ev) return "Oferta O"+nr+" nu există.";
     var svcs=[]; ["sunet","lumini","ecran","scena","dj"].forEach(function(k){if(ev.svc&&ev.svc[k])svcs.push(k);});
     var tot=evTot(ev); var av=ev.dep||0; var rest=tot-av;
-    return "📋 OFERTA O"+nr+"\n\nTip: "+(ev.type||"—")+" ("+(ev.cat==="private"?"Privat":"Public")+")\nClient: "+(ev.cn||"—")+"\nData: "+(ev.date||"—")+"\nLocație: "+(ev.venue||"—")+(ev.city?", "+ev.city:"")+"\nStatus: "+(ST_LABEL[ev.st]||ev.st)+"\n\nTarif: "+(ev.fee||0).toLocaleString("ro-RO")+" €"+(svcs.length>0?"\nServicii: "+svcs.join(", ")+" (+"+svcTot(ev).toLocaleString("ro-RO")+" €)":"")+"\nTotal: "+tot.toLocaleString("ro-RO")+" €\nAvans: "+av.toLocaleString("ro-RO")+" € ("+(ev.dp?"✅ plătit":"⏳ nepreluat")+")\nRest: "+rest.toLocaleString("ro-RO")+" €"+(ev.rep?"\nReprezentații: "+ev.rep+"×"+(ev.repDur||45)+" min":"");
+    return "📋 OFERTA O"+nr+"\n\nTip: "+(ev.type||"—")+" ("+(ev.cat==="private"?"Privat":"Public")+")\nClient: "+(ev.cn||"—")+"\nData: "+fEvDate(ev)+"\nLocație: "+(ev.venue||"—")+(ev.city?", "+ev.city:"")+"\nStatus: "+(ST_LABEL[ev.st]||ev.st)+"\n\nTarif: "+(ev.fee||0).toLocaleString("ro-RO")+" €"+(svcs.length>0?"\nServicii: "+svcs.join(", ")+" (+"+svcTot(ev).toLocaleString("ro-RO")+" €)":"")+"\nTotal: "+tot.toLocaleString("ro-RO")+" €\nAvans: "+av.toLocaleString("ro-RO")+" € ("+(ev.dp?"✅ plătit":"⏳ nepreluat")+")\nRest: "+rest.toLocaleString("ro-RO")+" €"+(ev.rep?"\nReprezentații: "+ev.rep+"×"+(ev.repDur||45)+" min":"");
   }
 
   // ══════════════════════════════════════════════
@@ -4905,7 +5078,8 @@ function processLocalCmd(input, evs, tasks) {
     var mMatch=nc.match(/(ian|feb|mar|apr|mai|iun|iul|aug|sep|oct|nov|dec)/);
     var targetM=mMatch?MONTHS[mMatch[1]]:cur.getMonth();
     var yr=cur.getFullYear(); var mName=mMatch?mMatch[1]:"luna curentă";
-    var evL=evs.filter(function(e){if(!e.date)return false; var d=new Date(e.date+"T00:00:00"); return d.getMonth()===targetM&&d.getFullYear()===yr;});
+    var moStart=new Date(yr,targetM,1).getTime(); var moEnd=new Date(yr,targetM+1,0,23,59,59).getTime();
+    var evL=evs.filter(function(e){return evPeriodStartMs(e)<=moEnd&&evPeriodEndMs(e)>=moStart;});
     if(evL.length===0) return "📅 Niciun eveniment în "+mName+" "+yr+".";
     var tL=evL.reduce(function(s,e){return s+(e.fee||0);},0);
     return "📅 EVENIMENTE ÎN "+mName.toUpperCase()+" "+yr+" ("+evL.length+"):\n\n"+evL.map(fmtE).join("\n")+"\n\nTotal: "+tL.toLocaleString("ro-RO")+" €";
@@ -4938,7 +5112,8 @@ function processLocalCmd(input, evs, tasks) {
   // 21. TRECUTE
   // ══════════════════════════════════════════════
   if(nc.match(/trecut[e]?|istoricul|istori[ck]|terminate|finalizat/)) {
-    var past=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")<cur;}).sort(function(a,b){return a.date<b.date?1:-1;}).slice(0,8);
+    var curMs2=cur.getTime();
+    var past=evs.filter(function(e){return evPeriodEndMs(e)<curMs2;}).sort(function(a,b){return evSortKey(b)-evSortKey(a);}).slice(0,8);
     if(past.length===0) return "Niciun eveniment trecut.";
     return "⏮ ULTIMELE EVENIMENTE:\n\n"+past.map(fmtE).join("\n");
   }
@@ -4947,10 +5122,12 @@ function processLocalCmd(input, evs, tasks) {
   // 22. CEL MAI APROPIAT EVENIMENT
   // ══════════════════════════════════════════════
   if(nc.match(/urmatorul|cel mai apropiat|cand e urmatorul|cand cantam/)) {
-    var next=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur&&["confirmat","plata_avans","asteptare"].indexOf(e.st)>-1;}).sort(function(a,b){return a.date>b.date?1:-1;})[0];
+    var curMs3=cur.getTime();
+    var next=evs.filter(function(e){return evPeriodEndMs(e)>=curMs3&&["confirmat","plata_avans","asteptare"].indexOf(e.st)>-1;}).sort(function(a,b){return evSortKey(a)-evSortKey(b);})[0];
     if(!next) return "Niciun eveniment confirmat în viitor.";
-    var zile=Math.ceil((new Date(next.date+"T00:00:00")-cur)/864e5);
-    return "🎯 URMĂTORUL EVENIMENT:\n\nO"+(next.offerNr||"?")+" · "+(next.type||"—")+"\nData: "+next.date+" (în "+zile+" zile)\nClient: "+(next.cn||"—")+"\nLocație: "+(next.venue||"—")+(next.city?", "+next.city:"")+"\nValoare: "+(next.fee||0).toLocaleString("ro-RO")+" €\nStatus: "+(ST_LABEL[next.st]||next.st);
+    var zc=evExactDayCountdown(next);
+    var zTxt=zc!=null?" (în "+zc+" zile)":"";
+    return "🎯 URMĂTORUL EVENIMENT:\n\nO"+(next.offerNr||"?")+" · "+(next.type||"—")+"\nData: "+fEvDate(next)+zTxt+"\nClient: "+(next.cn||"—")+"\nLocație: "+(next.venue||"—")+(next.city?", "+next.city:"")+"\nValoare: "+(next.fee||0).toLocaleString("ro-RO")+" €\nStatus: "+(ST_LABEL[next.st]||next.st);
   }
 
   // ══════════════════════════════════════════════
@@ -4978,7 +5155,7 @@ function processLocalCmd(input, evs, tasks) {
   // ══════════════════════════════════════════════
   if(nc.match(/^azi$|astazi|eveniment azi|ce avem azi/)) {
     var azi=new Date(); var aziStr=azi.toISOString().split("T")[0];
-    var ev_azi=evs.filter(function(e){return e.date===aziStr;});
+    var ev_azi=(function(){var ax=aziStr.split("-").map(Number);return evs.filter(function(e){return evMatchesCalendarCell(e,aziStr,ax[0],ax[1]-1,ax[2]);});})();
     if(ev_azi.length===0) return "📅 Niciun eveniment azi ("+aziStr+").";
     return "📅 AZI - "+aziStr+":\n\n"+ev_azi.map(fmtE).join("\n");
   }
@@ -4992,8 +5169,9 @@ function processLocalCmd(input, evs, tasks) {
     var vConf=evs.filter(function(e){return e.st==="confirmat";}).reduce(function(s,e){return s+evTot(e);},0);
     var vPipe=pipe_.reduce(function(s,e){return s+(e.fee||0);},0);
     var actTasks=tasks.filter(function(t){return !t.done;}).length;
-    var nxt_=evs.filter(function(e){return e.date&&new Date(e.date+"T00:00:00")>=cur;}).sort(function(a,b){return a.date>b.date?1:-1;})[0];
-    return "⚡ REZUMAT RAPID\n\n📁 Oferte totale: "+tot_ev+"\n✅ Confirmate: "+conf_+" → "+vConf.toLocaleString("ro-RO")+" €\n🔄 Pipeline: "+pipe_.length+" → "+vPipe.toLocaleString("ro-RO")+" €\n📋 Tasks active: "+actTasks+"\n📅 Următor: "+(nxt_?"O"+(nxt_.offerNr||"?")+" · "+(nxt_.type||"—")+" | "+(nxt_.date||"—"):"—");
+    var curMs4=cur.getTime();
+    var nxt_=evs.filter(function(e){return evPeriodEndMs(e)>=curMs4;}).sort(function(a,b){return evSortKey(a)-evSortKey(b);})[0];
+    return "⚡ REZUMAT RAPID\n\n📁 Oferte totale: "+tot_ev+"\n✅ Confirmate: "+conf_+" → "+vConf.toLocaleString("ro-RO")+" €\n🔄 Pipeline: "+pipe_.length+" → "+vPipe.toLocaleString("ro-RO")+" €\n📋 Tasks active: "+actTasks+"\n📅 Următor: "+(nxt_?"O"+(nxt_.offerNr||"?")+" · "+(nxt_.type||"—")+" | "+fEvDate(nxt_):"—");
   }
 
   // ══════════════════════════════════════════════
@@ -5526,9 +5704,13 @@ function App() {
     const past3 = new Date(now); past3.setMonth(past3.getMonth()-3);
     const future6 = new Date(now); future6.setMonth(future6.getMonth()+6);
     const filteredEvs = evs.filter(e => {
-      if(!e.date) return true; // fără dată — include oricum
-      const d = new Date(e.date+"T00:00:00");
-      return d >= past3 && d <= future6;
+      const k = getEventDateKind(e);
+      if (k === "none" || k === "text") return true;
+      if (k === "day" && !e.date) return true;
+      const st = evPeriodStartMs(e);
+      const en = evPeriodEndMs(e);
+      if (!st && !en) return true;
+      return en >= past3.getTime() && st <= future6.getTime();
     });
     const filteredBlocks = (calBlocks||[]).filter(b => {
       if(!b.date) return true;
@@ -6119,7 +6301,7 @@ function App() {
     }
     const run = async () => {
     let token = await getGcalAccessTokenUnified();
-    if (!token || !ev.date) return null;
+    if (!token || !evGCalEligible(ev)) return null;
     const startRaw = ev.ss || ev.li || "20:00";
     const startTime = startRaw.includes("T") ? startRaw.split("T")[1].slice(0,5) : startRaw;
     const startDate = startRaw.includes("T") ? startRaw.split("T")[0] : ev.date;
@@ -6602,7 +6784,7 @@ function App() {
       showToast("Oferta e ștearsă local, dar fișierul din Supabase Storage nu: " + storageErr + ". Rulează în SQL Editor politica fisa_public_delete din supabase-fix-fisa-rls.sql", "error");
     }
   };
-  const moveEvToDate = (evId, newDate) => { setEvs(p=>p.map(e=>e.id===evId?{...e,date:newDate}:e)); showToast("Data actualizată"); };
+  const moveEvToDate = (evId, newDate) => { setEvs(p=>p.map(e=>e.id===evId?{...e,date:newDate,dateKind:"day",dateMonth:null,dateYear:null,dateNote:"",dateOptions:null}:e)); showToast("Data actualizată (zi exactă)"); };
   const moveEvToDateRef = useRef(moveEvToDate);
   moveEvToDateRef.current = moveEvToDate;
 
@@ -6844,9 +7026,13 @@ function App() {
       }
     }
     const evMatches = evs.filter(e=>{
-      if([e.cn,e.type,e.venue,e.city,e.notes,e.desc,e.title].some(f=>String(f||"").toLowerCase().includes(q))) return true;
+      if([e.cn,e.type,e.venue,e.city,e.notes,e.desc,e.title,e.dateNote].some(f=>String(f||"").toLowerCase().includes(q))) return true;
+      if(String(fEvDate(e)||"").toLowerCase().includes(q)) return true;
+      if((e.dateOptions||[]).some(d=>String(d).toLowerCase().includes(q)||String(d).includes(qDate))) return true;
+      if(e.dateMonth&&(e.dateMonth.includes(q)||e.dateMonth.includes(qDate))) return true;
       if(e.date&&(e.date.includes(q)||e.date.includes(qDate)||fD(e.date).toLowerCase().includes(q))) return true;
       if(e.date) for (const [name, num] of Object.entries(MONTHS_RO)) if (q.includes(name) && e.date.startsWith(`${searchYear}-${String(num).padStart(2,"0")}`)) return true;
+      if(e.dateMonth) for (const [name, num] of Object.entries(MONTHS_RO)) if (q.includes(name) && e.dateMonth.startsWith(`${searchYear}-${String(num).padStart(2,"0")}`)) return true;
       return false;
     });
     const taskMatchesSearch = t=>{ if((t.text||"").toLowerCase().includes(q)) return true; if((t.notes||"").toLowerCase().includes(q)) return true; if((t.tags||[]).some(tag=>tag.toLowerCase().includes(q))) return true; if((t.subtasks||[]).some(s=>taskMatchesSearch(s))) return true; return false; };
@@ -7017,11 +7203,11 @@ function App() {
   }
 
   // Evenimentele împărțite pt. tab "events" — Viitoare / Trecute
-  const now = new Date();
-  const viitoare = evs.filter(e=>e.st==="confirmat"&&new Date(e.date+"T00:00:00")>=now).sort((a,b)=>new Date(a.date)-new Date(b.date));
-  const trecute  = evs.filter(e=>e.st==="confirmat"&&new Date(e.date+"T00:00:00")<now).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const startTodayMs = (() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t.getTime(); })();
+  const viitoare = evs.filter(e=>e.st==="confirmat"&&evPeriodEndMs(e)>=startTodayMs).sort((a,b)=>evSortKey(a)-evSortKey(b));
+  const trecute  = evs.filter(e=>e.st==="confirmat"&&evPeriodEndMs(e)<startTodayMs).sort((a,b)=>evSortKey(b)-evSortKey(a));
   // Toate evenimentele (inclusiv oferte) pentru search
-  const allEvsSorted = [...evs].sort((a,b)=>new Date(a.date)-new Date(b.date));
+  const allEvsSorted = [...evs].sort((a,b)=>evSortKey(a)-evSortKey(b));
   const fEvs = search ? allEvsSorted.filter(e=>[e.title,e.cn,e.venue,e.city].some(f=>f?.toLowerCase().includes(search.toLowerCase()))) : allEvsSorted;
 
   return (
@@ -7134,7 +7320,7 @@ function App() {
               {/* Dacă e o dată detectată, arată un card de calendar */}
               {globalSearchResults.parsedDate&&(()=>{
                 const pd=globalSearchResults.parsedDate;
-                const evsOnDate=evs.filter(e=>e.date===pd);
+                const ax=pd.split("-").map(Number); const evsOnDate=evs.filter(e=>evMatchesCalendarCell(e,pd,ax[0],ax[1]-1,ax[2]));
                 return <div style={{padding:"10px 14px",borderBottom:`1px solid ${th.bl}`,background:"rgba(59,130,246,0.06)"}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
                     <span style={{fontSize:16}}>📅</span>
@@ -7155,7 +7341,7 @@ function App() {
               })()}
               {globalSearchResults.evs.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Cereri / Evenimente</div>}
               {globalSearchResults.evs.map(ev=><div key={ev.id} onClick={()=>{setGlobalSearch("");openModal("detail",ev.id);}} style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${th.bl}`,display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
-                <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.venue}</div></div>
+                <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.venue}</div></div>
                 <div onClick={e=>e.stopPropagation()}><BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={updSt}/></div>
               </div>)}
               {globalSearchResults.tasks.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Tasks</div>}
@@ -7183,18 +7369,19 @@ function App() {
               </div>
             </div>
 
-            {dashboardDateSearch&&<div style={{...sty.cd,marginBottom:16}}>
+            {dashboardDateSearch&&(()=>{const ds=dashboardDateSearch;const [dy,dm,dd]=ds.split("-").map(Number);const dashList=evs.filter(e=>evMatchesCalendarCell(e,ds,dy,dm-1,dd));return(
+            <div style={{...sty.cd,marginBottom:16}}>
               <div style={{fontSize:13,fontWeight:700,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <span>📅 În data {fD(dashboardDateSearch)}</span>
                 <button onClick={()=>setDashboardDateSearch("")} style={{fontSize:10,color:th.tm,background:"transparent",border:"none",cursor:"pointer"}}>șterge</button>
               </div>
-              {evs.filter(e=>e.date===dashboardDateSearch).length===0&&<div style={{padding:16,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă sau eveniment în această zi</div>}
-              {evs.filter(e=>e.date===dashboardDateSearch).map(ev=><div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:7,marginBottom:4,cursor:"pointer",borderLeft:"3px solid "+(ST[ev.st]?.c||th.a)}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
+              {dashList.length===0&&<div style={{padding:16,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă sau eveniment în această zi</div>}
+              {dashList.map(ev=><div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:7,marginBottom:4,cursor:"pointer",borderLeft:"3px solid "+(ST[ev.st]?.c||th.a)}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
                 <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div></div>
                 <Badge s={ev.st} th={th}/>
               </div>)}
-              {evs.filter(e=>e.date===dashboardDateSearch).length>0&&<button onClick={()=>{setTab("calendar");setCalM(new Date(dashboardDateSearch));}} style={{...sty.bg,fontSize:11,marginTop:8,width:"100%"}}>Deschide în calendar</button>}
-            </div>}
+              {dashList.length>0&&<button onClick={()=>{setTab("calendar");setCalM(new Date(dashboardDateSearch));}} style={{...sty.bg,fontSize:11,marginTop:8,width:"100%"}}>Deschide în calendar</button>}
+            </div>);})()}
 
             <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:12,marginBottom:14}}>
               {/* Evenimente viitoare */}
@@ -7208,7 +7395,7 @@ function App() {
                     onMouseOver={e=>e.currentTarget.style.background=th.h}
                     onMouseOut={e=>e.currentTarget.style.background="transparent"}>
                     <div><div style={{fontSize:12,fontWeight:600}}>{ev.type||"—"}</div><div style={{fontSize:10,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div></div>
-                    <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}><div style={{fontSize:11,fontWeight:600}}>{fD(ev.date)}</div><div style={{fontSize:10,color:th.tm}}>în {dU(ev.date)}z</div></div>
+                    <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}><div style={{fontSize:11,fontWeight:600}}>{fEvDate(ev)}</div>{(()=>{const c=evExactDayCountdown(ev);return c==null?null:<div style={{fontSize:10,color:th.tm}}>în {c}z</div>;})()}</div>
                   </div>
                 )}
                 {viitoare.length===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Niciun eveniment confirmat viitor</div>}
@@ -7220,11 +7407,11 @@ function App() {
                   <span>📤 Cereri active</span>
                   <button onClick={()=>setTab("offers")} style={{fontSize:10,color:th.tm,background:"transparent",border:"none",cursor:"pointer"}}>toate ({pendingCount}) →</button>
                 </div>
-                {evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,5).map(ev=>
+                {evs.filter(e=>["cerere","oferta","asteptare","plata_avans"].includes(e.st)).sort((a,b)=>evSortKey(a)-evSortKey(b)).slice(0,5).map(ev=>
                   <div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 10px",borderRadius:7,marginBottom:3,cursor:"pointer"}}
                     onMouseOver={e=>e.currentTarget.style.background=th.h}
                     onMouseOut={e=>e.currentTarget.style.background="transparent"}>
-                    <div><div style={{fontSize:12,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:10,color:th.tm}}>{fD(ev.date)}</div></div>
+                    <div><div style={{fontSize:12,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:10,color:th.tm}}>{fEvDate(ev)}</div></div>
                     <div onClick={e=>e.stopPropagation()}><BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={(id,st)=>{updSt(id,st);}}/></div>
                   </div>
                 )}
@@ -7280,7 +7467,7 @@ function App() {
                       onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                       {(p.d||p.e)&&<td style={{padding:"9px 12px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
-                      <td style={{padding:"9px 12px",fontSize:11}}>{fD(ev.date)}</td>
+                      <td style={{padding:"9px 12px",fontSize:11}}>{fEvDate(ev)}</td>
                       <td style={{padding:"9px 12px"}}><div style={{fontSize:12,fontWeight:600}}>{ev.type||"—"}</div></td>
                       <td style={{padding:"9px 12px",fontSize:11}}>{[ev.venue,ev.city].filter(Boolean).join(", ")||"—"}</td>
                     </tr>
@@ -7300,7 +7487,7 @@ function App() {
                       onMouseOver={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                       {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
-                      <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {dU(ev.date)} zile</div></td>
+                      <td style={{padding:"10px 14px",fontSize:11}}>{fEvDate(ev)}{(()=>{const c=evExactDayCountdown(ev);return c==null?null:<div style={{fontSize:10,color:"#22c55e",fontWeight:600}}>în {c} zile</div>;})()}</td>
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:700}}>{ev.type||"—"}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                       {p.e&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><button onClick={()=>openModal("form",ev.id)} style={{padding:4,borderRadius:4,border:`1px solid ${th.b}`,background:"transparent",color:th.tm,cursor:"pointer"}}><IcEdit s={13}/></button></td>}
@@ -7319,7 +7506,7 @@ function App() {
                       onMouseOver={e=>{e.currentTarget.style.opacity="1";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background=th.h}}
                       onMouseOut={e=>{e.currentTarget.style.opacity=".7";if(!selectedEvIds.includes(ev.id))e.currentTarget.style.background="transparent"}}>
                       {(p.d||p.e)&&<td style={{padding:"10px 14px"}} onClick={e=>e.stopPropagation()}><input type="checkbox" checked={selectedEvIds.includes(ev.id)} onChange={()=>setSelectedEvIds(s=>s.includes(ev.id)?s.filter(x=>x!==ev.id):[...s,ev.id])} style={{cursor:"pointer"}}/></td>}
-                      <td style={{padding:"10px 14px",fontSize:11}}>{fD(ev.date)}</td>
+                      <td style={{padding:"10px 14px",fontSize:11}}>{fEvDate(ev)}</td>
                       <td style={{padding:"10px 14px"}}><div style={{fontSize:13,fontWeight:600}}>{ev.type||"—"}</div></td>
                       <td style={{padding:"10px 14px",fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</td>
                     </tr>
@@ -7884,7 +8071,7 @@ function App() {
                   {Array.from({length:dn}).map((_,i)=>{
                     const d=i+1;
                     const ds=`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-                    const de=evs.filter(e=>e.date===ds);
+                    const de=evs.filter(e=>evMatchesCalendarCell(e,ds,y,m,d));
                     const dayOcc=(calBlocks||[]).filter(b=>b.date===ds);
                     const dayTasks=collectTasksForDate(tasks,ds);
                     const hasStuff=de.length>0||dayOcc.length>0||dayTasks.length>0;
@@ -7897,7 +8084,7 @@ function App() {
                         <span style={{fontSize:mob?10:12,fontWeight:isSearchedDay||td?800:hasStuff?600:400,color:isSearchedDay?"#3b82f6":td?th.t:hasStuff?th.t:th.tm}}>{d}</span>
                       </div>
                       <div style={{flex:1,minHeight:0,overflow:mob?"hidden":"auto",maxHeight:mob?52:120}}>
-                        {de.map(ev=><div key={ev.id} draggable={!mob} onDragStart={e=>{e.stopPropagation();setCalDragEvId(ev.id);}} onDragEnd={()=>setCalDragEvId(null)} onClick={e=>{e.stopPropagation();if(calSuppressChipClickRef.current)return;openModal("calEvPreview",ev.id);}} onDoubleClick={e=>e.stopPropagation()} onTouchStart={mob?(e=>{e.stopPropagation();const t=e.touches[0];if(!t)return;calTouchDragMetaRef.current={evId:ev.id,fromDs:ds,x:t.clientX,y:t.clientY};if(calLongPressTimerRef.current)clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=setTimeout(()=>{calLongPressTimerRef.current=null;setCalTouchDragActive(true);setCalDragEvId(ev.id);calLastDropDsRef.current=null;try{if(navigator.vibrate)navigator.vibrate(20);}catch(_){}},460);}):undefined} onTouchMove={mob?(e=>{if(calLongPressTimerRef.current&&calTouchDragMetaRef.current){const t=e.touches[0];if(!t)return;const m=calTouchDragMetaRef.current;if(Math.hypot(t.clientX-m.x,t.clientY-m.y)>14){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}}):undefined} onTouchEnd={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} onTouchCancel={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} style={{padding:mob?"2px 3px":"3px 5px",borderRadius:4,marginBottom:2,fontSize:mob?8:9,fontWeight:600,cursor:mob?"pointer":"grab",background:dk?ST[ev.st]?.bd:ST[ev.st]?.bg,color:ST[ev.st]?.c,lineHeight:1.2,borderLeft:`2px solid ${ST[ev.st]?.c}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:calTouchDragActive&&calDragEvId===ev.id?0.55:1}} title={`${ev.type} — ${resp(ev)} · ${ST[ev.st]?.l||ev.st}${mob?" — ține apăsat ~0,5s, apoi trage pe altă zi":" (trage pentru a muta)"}`}>{ev.type} ({resp(ev)}) · {ST[ev.st]?.l||ev.st}</div>)}
+                        {de.map(ev=><div key={ev.id} draggable={!mob&&(getEventDateKind(ev)==="day"||!ev.dateKind)} onDragStart={e=>{e.stopPropagation();setCalDragEvId(ev.id);}} onDragEnd={()=>setCalDragEvId(null)} onClick={e=>{e.stopPropagation();if(calSuppressChipClickRef.current)return;openModal("calEvPreview",ev.id);}} onDoubleClick={e=>e.stopPropagation()} onTouchStart={mob?(e=>{e.stopPropagation();const t=e.touches[0];if(!t)return;calTouchDragMetaRef.current={evId:ev.id,fromDs:ds,x:t.clientX,y:t.clientY};if(calLongPressTimerRef.current)clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=setTimeout(()=>{calLongPressTimerRef.current=null;setCalTouchDragActive(true);setCalDragEvId(ev.id);calLastDropDsRef.current=null;try{if(navigator.vibrate)navigator.vibrate(20);}catch(_){}},460);}):undefined} onTouchMove={mob?(e=>{if(calLongPressTimerRef.current&&calTouchDragMetaRef.current){const t=e.touches[0];if(!t)return;const m=calTouchDragMetaRef.current;if(Math.hypot(t.clientX-m.x,t.clientY-m.y)>14){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}}):undefined} onTouchEnd={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} onTouchCancel={mob?(e=>{if(calLongPressTimerRef.current){clearTimeout(calLongPressTimerRef.current);calLongPressTimerRef.current=null;}}):undefined} style={{padding:mob?"2px 3px":"3px 5px",borderRadius:4,marginBottom:2,fontSize:mob?8:9,fontWeight:600,cursor:mob?"pointer":(getEventDateKind(ev)==="day"||!ev.dateKind?"grab":"pointer"),background:dk?ST[ev.st]?.bd:ST[ev.st]?.bg,color:ST[ev.st]?.c,lineHeight:1.2,borderLeft:`2px solid ${ST[ev.st]?.c}`,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",opacity:calTouchDragActive&&calDragEvId===ev.id?0.55:1}} title={`${fEvDate(ev)} — ${ev.type} · ${resp(ev)} · ${ST[ev.st]?.l||ev.st}${getEventDateKind(ev)!=="day"?" — pentru mutare pe grid: «Zi exactă»":mob?" — ține apăsat ~0,5s, apoi trage":" (trage ziua)"}`}>{ev.type} ({resp(ev)}) · {ST[ev.st]?.l||ev.st}{getEventDateKind(ev)!=="day"?` · ${fEvDate(ev)}`:""}</div>)}
                         {dayOcc.map(b=>{
                           const mem=MEMBERS.find(x=>x.id===b.memberId);
                           const hue=occHue(b.memberId);
@@ -7918,7 +8105,8 @@ function App() {
             })()}
             </div>
             {calSidebarDate&&(()=>{
-              const dayEvs=evs.filter(e=>e.date===calSidebarDate);
+              const cv=calSidebarDate; const [cy,cm,cd]=cv.split("-").map(Number);
+              const dayEvs=evs.filter(e=>evMatchesCalendarCell(e,cv,cy,cm-1,cd));
               const dayOcc=(calBlocks||[]).filter(b=>b.date===calSidebarDate);
               const occHue = (mid) => { const idx = MEMBERS.findIndex(x => x.id === mid); const hues = ["#6366f1","#f59e0b","#22c55e","#ec4899","#06b6d4","#a855f7"]; return hues[(idx >= 0 ? idx : 0) % hues.length]; };
               return <div style={{position:mob?"fixed":"sticky",top:0,right:0,width:mob?"100%":360,maxWidth:"100%",height:mob?"70vh":"auto",maxHeight:"85vh",background:th.c,borderLeft:`1px solid ${th.b}`,boxShadow:"-4px 0 20px rgba(0,0,0,.15)",zIndex:100,overflow:"auto",padding:16}}>
@@ -8132,7 +8320,7 @@ function App() {
 
               const myEvs = evs
                 .filter(ev=>isLinkedEv(ev))
-                .sort((a,b)=>new Date(b.date||b.cr||0).getTime()-new Date(a.date||a.cr||0).getTime());
+                .sort((a,b)=>evSortKey(b)-evSortKey(a));
               const myEvsList = myEvs.slice(0,6);
 
               return <div>
@@ -8191,7 +8379,7 @@ function App() {
                               {ev.type||"—"}
                             </div>
                           </div>
-                          <div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.cat==="private"?"Privat":"Public"}</div>
+                          <div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.cat==="private"?"Privat":"Public"}</div>
                         </div>
                       ))}
                       {myEvs.length>myEvsList.length && (
@@ -8290,7 +8478,7 @@ function App() {
             if(finMember){
               const m=MEMBERS.find(x=>x.id===finMember);
               if(!m) return null;
-              const allEvs=evs.filter(e=>e.st==="confirmat").sort((a,b)=>b.date?.localeCompare(a.date||"")||0);
+              const allEvs=evs.filter(e=>e.st==="confirmat").sort((a,b)=>evSortKey(b)-evSortKey(a));
               const paid=allEvs.filter(e=>e.restPaid);
               const waiting=allEvs.filter(e=>!e.restPaid);
               const totPaid=paid.reduce((s,e)=>s+memberDetail(e,finMember).total,0);
@@ -8323,7 +8511,7 @@ function App() {
                         const d=memberDetail(ev,finMember); const amt=d[roleKey];
                         if(amt<=0) return null;
                         return <tr key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{borderBottom:`1px solid ${th.bl}`,cursor:"pointer"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
-                          <td style={{padding:"8px 10px"}}>{fD2(ev.date)}</td>
+                          <td style={{padding:"8px 10px"}}>{fEvDate(ev)}</td>
                           <td style={{padding:"8px 10px"}}>{ev.type||"—"}</td>
                           <td style={{padding:"8px 10px",fontSize:11,color:th.tm,maxWidth:150,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={ev.desc||""}>{ev.desc||"—"}</td>
                           <td style={{padding:"8px 10px",fontWeight:700,color:roleColor}}>{fv2(amt)}</td>
@@ -8602,7 +8790,8 @@ function App() {
 
       {modal==="calDay"&&mData&&(()=>{
         const ds=mData;
-        const dayEvs=evs.filter(e=>e.date===ds);
+        const [cy,cm,cd]=ds.split("-").map(Number);
+        const dayEvs=evs.filter(e=>evMatchesCalendarCell(e,ds,cy,cm-1,cd));
         const dayOcc=(calBlocks||[]).filter(b=>b.date===ds);
         const dayTasks=collectTasksForDate(tasks,ds);
         if(!dayEvs.length&&!dayOcc.length&&!dayTasks.length)return null;
@@ -8887,7 +9076,7 @@ function App() {
       {/* EVENT FORM */}
       {modal==="form"&&(()=>{
         const isE=!!mData?.id; const isP=mData?.cat==="private"||!mData?.cat;
-        return <EventForm th={th} sty={sty} isE={isE} isP={isP} mData={mData} user={user} onSave={saveEv} onClose={closeModal} mob={mob} templates={templates}/>;
+        return <EventForm th={th} sty={sty} isE={isE} isP={isP} mData={mData} user={user} onSave={saveEv} onClose={closeModal} mob={mob} templates={templates} showToast={showToast}/>;
       })()}
 
       {/* EVENT DETAIL — Fișa apare DOAR când e confirmat */}
@@ -8911,7 +9100,7 @@ function App() {
                     {ev.type&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:th.ab,color:th.tm}}>{ev.type}</span>}
                   </div>
                   <div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{isConfirmed?ev.type:ev.st==="cerere"?("📞 "+(ev.type||"Cerere")):((ev.offerNr?"O"+ev.offerNr:"???")+" · "+(ev.type||""))}</div>
-                  <div style={{fontSize:11,color:th.tm}}>{fD(ev.date)} · {ev.venue}{ev.city?", "+ev.city:""}</div>
+                  <div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.venue}{ev.city?", "+ev.city:""}</div>
                   {(ev.responsabilPrincipal||(ev.responsabili||[]).length>0)&&<div style={{fontSize:10,color:th.tm,marginTop:4}}>Preluat: {ev.responsabilPrincipal||"—"} {(ev.responsabili||[]).length>0&&` · ${(ev.responsabili||[]).filter(r=>r.nume||r.rol).map(r=>r.nume+(r.rol?" ("+r.rol+")":"")).join(", ")}`}</div>}
                 </div>
                 <button onClick={closeModal} style={{padding:mob?12:3,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:th.tm,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX s={16}/></button>
@@ -9080,7 +9269,7 @@ function App() {
                         <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
                           <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
                           <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div>
-                          <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,ev.date)}</div>
+                          <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,eventTimingAnchorDate(ev))}</div>
                         </div>
                       )}
                     </div>
@@ -9124,7 +9313,7 @@ function App() {
                     {ev.cp&&<div style={{fontSize:11,color:th.ts}}>{ev.cp}</div>}
                     {ev.ce&&<div style={{fontSize:11,color:th.ts}}>{ev.ce}</div>}
                     </div>
-                    <div><div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:2}}>Dată · Locație</div><div style={{fontSize:13,fontWeight:700}}>{fD(ev.date)}</div>
+                    <div><div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:2}}>Dată · Locație</div><div style={{fontSize:13,fontWeight:700}}>{fEvDate(ev)}</div>
                     <div style={{fontSize:11,color:th.ts}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
                     </div>
                   </div>
@@ -9146,7 +9335,7 @@ function App() {
                         <div key={i} style={{padding:10,borderRadius:8,background:th.c,textAlign:"center",border:`1px solid ${th.b}`}}>
                           <div style={{fontSize:14,marginBottom:3}}>{x.i}</div>
                           <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:.5,marginBottom:3}}>{x.l}</div>
-                          <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,ev.date)}</div>
+                          <div style={{fontSize:15,fontWeight:800,color:x.v?th.t:th.tm}}>{formatDisplayDateTime(x.v,eventTimingAnchorDate(ev))}</div>
                         </div>
                       )}
                     </div>
@@ -9383,7 +9572,7 @@ function App() {
                 {fromDetail&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("detail",ev.id),80);}} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,border:`1px solid ${th.b}`,background:"transparent",color:th.t,fontSize:12,cursor:"pointer",fontWeight:600}}>← Înapoi</button>}
                 <div>
                   <div style={{fontSize:15,fontWeight:700}}>Fișa financiară · O{ev.offerNr||"?"}</div>
-                  <div style={{fontSize:11,color:th.tm,marginTop:2}}>{isPrivate?"Privat":"Public"} · {fD(ev.date)}</div>
+                  <div style={{fontSize:11,color:th.tm,marginTop:2}}>{isPrivate?"Privat":"Public"} · {fEvDate(ev)}</div>
                 </div>
               </div>
               <button onClick={closeModal} style={{padding:mob?12:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:th.tm,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX s={14}/></button>
