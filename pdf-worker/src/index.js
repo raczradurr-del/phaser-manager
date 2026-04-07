@@ -61,8 +61,8 @@ export default {
   <base href="${baseUrl.replace(/"/g, "&quot;")}"/>
   <style>
     *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
-    body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f4f4f4;padding:12px}
-    @media print{body{padding:0;background:#f4f4f4}@page{margin:0.5cm}}
+    body{font-family:'Helvetica Neue',Arial,sans-serif;background:#fff;padding:12px}
+    @media print{body{padding:0;background:#fff}@page{margin:0.5cm}}
     img{max-width:100%;height:auto}
     .print-break{break-before:page!important;page-break-before:always!important}
     .offer-page-1{break-inside:avoid!important;page-break-inside:avoid!important}
