@@ -1,0 +1,9 @@
+node_modules/**
+.git/**
+.cursor/**
+.wrangler/**
+mcps/**
+agent-transcripts/**
+terminals/**
+**/*.log
+**/.DS_Store
