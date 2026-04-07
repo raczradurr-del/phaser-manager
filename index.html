@@ -145,7 +145,7 @@ const { useState, useEffect, useMemo, useRef, useId, useCallback } = React;
 
 // 1) Domenii proprii: în Cloudflare → phaser-html-proxy (sau PDF/AI) → Triggers → Custom domains
 //    Ex.: offer.phaser.ro → același worker; linkurile de ofertă devin https://offer.phaser.ro/offer-….html
-const WORKER_PUBLIC_HTML_BASE = "https://offer.phaser.ro";
+const WORKER_PUBLIC_HTML_BASE = "";
 const WORKER_URL_PDF = ""; // ex. "https://pdf.phaser.ro" după ce adaugi domeniu pe phaser-pdf-worker
 const WORKER_URL_AI = ""; // ex. "https://ai.phaser.ro" pe phaser-ai-worker
 
@@ -156,6 +156,7 @@ const FISA_PUBLIC_BUCKET = "fisa-public";
 
 function normalizeOfferHtmlProxyBase(raw) {
   const t = String(raw ?? "").trim();
+  if (/^https?:\/\/offer\.phaser\.ro\b/i.test(t)) return "";
   if (t.startsWith("http")) return t.replace(/\/$/, "");
   return "";
 }
@@ -6143,17 +6144,18 @@ function App() {
       gcalResp?"("+gcalResp+")":null
     ].filter(Boolean).join(" ");
     const pathSuffix = isConfirmedEv ? `fisa-${ev.id}.html` : `offer-${ev.id}.html`;
-    const proxyBase = htmlShareProxyBase;
-    let builtDefault = "";
-    if (proxyBase) builtDefault = `${proxyBase}/${pathSuffix}`;
-    else {
-      const sb = getSbClient();
-      if (sb) {
-        const { data } = sb.storage.from(FISA_PUBLIC_BUCKET).getPublicUrl(pathSuffix);
-        builtDefault = data?.publicUrl || "";
-      }
+    let builtStorage = "";
+    const sb = getSbClient();
+    if (sb) {
+      const { data } = sb.storage.from(FISA_PUBLIC_BUCKET).getPublicUrl(pathSuffix);
+      builtStorage = data?.publicUrl || "";
     }
-    const gcalLink = isConfirmedEv ? (ev.fisaUrl || builtDefault) : (ev.offerUrl || builtDefault);
+    const proxyBase = htmlShareProxyBase;
+    const builtDefault = proxyBase ? `${proxyBase}/${pathSuffix}` : builtStorage;
+    let gcalLink = isConfirmedEv ? (ev.fisaUrl || builtDefault) : (ev.offerUrl || builtDefault);
+    if (/^https?:\/\/offer\.phaser\.ro\b/i.test(String(gcalLink || "")) && builtStorage) {
+      gcalLink = builtStorage;
+    }
     const body = {
       summary: gcalSummary,
       location: [ev.venue,ev.city].filter(Boolean).join(", "),
