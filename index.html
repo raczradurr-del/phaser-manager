@@ -5860,40 +5860,9 @@ function App() {
 
   useEffect(() => {
     if (!GCAL_USE_SERVER_OAUTH || !authReady || !sbSession) return;
-    const run = async () => {
-      const sb = getSbClient();
-      if (!sb) return;
-      const { data: { session } } = await sb.auth.getSession();
-      if (!session) return;
-      const base = `${String(SUPABASE_CFG.url||"").replace(/\/$/,"")}/functions/v1`;
-      let fromOauth = null;
-      try {
-        const u = new URL(window.location.href);
-        fromOauth = u.searchParams.get("gcal_oauth");
-        if (fromOauth === "ok") {
-          gcalEdgeCacheRef.current = { token: "", exp: 0 };
-          u.searchParams.delete("gcal_oauth");
-          u.searchParams.delete("reason");
-          const q1 = u.searchParams.toString();
-          window.history.replaceState({}, "", u.pathname + (q1 ? "?" + q1 : "") + u.hash);
-        } else if (fromOauth === "err") {
-          const raw = u.searchParams.get("reason") || "eroare";
-          const calErrMsg = {
-            redirect_uri_mismatch: "Google: redirect URI nu coincide cu cel din Google Cloud (vezi setup).",
-            access_denied: "Ai anulat sau Google a refuzat accesul la Calendar.",
-            server_config: "Server: lipsește GOOGLE_CLIENT_SECRET sau OAUTH_STATE_SECRET în Supabase.",
-            bad_state: "Sesiune OAuth expirată — încearcă Conectează din nou.",
-            db_save_failed: "Nu s-a putut salva tokenul — rulează migrarea SQL google_calendar_credentials pe Supabase.",
-            no_refresh_token: "Google nu a trimis refresh token — revocă accesul app în contul Google și reconectează.",
-            invalid_grant: "Codul OAuth a expirat — încearcă Conectează din nou.",
-          };
-          showToast("Calendar: " + (calErrMsg[raw] || decodeURIComponent(raw)), "error");
-          u.searchParams.delete("gcal_oauth");
-          u.searchParams.delete("reason");
-          const q2 = u.searchParams.toString();
-          window.history.replaceState({}, "", u.pathname + (q2 ? "?" + q2 : "") + u.hash);
-        }
-      } catch (e) {}
+
+    // ── Helper: verifică statusul conexiunii și actualizează state-ul ──
+    const checkAndSetConnected = async (session, base, fromOauth) => {
       try {
         const headers = { Authorization: `Bearer ${session.access_token}`, apikey: SUPABASE_CFG.key };
         let connected = false;
@@ -5911,9 +5880,101 @@ function App() {
           if (connected) showToast("📅 Google Calendar conectat (persistă cu refresh token)!");
           else showToast("Calendar: te-ai întors de la Google dar conexiunea nu apare salvată — verifică migrarea DB și logurile funcției callback.", "error");
         }
+        return connected;
+      } catch (e) { return false; }
+    };
+
+    const run = async () => {
+      const sb = getSbClient();
+      if (!sb) return;
+      const { data: { session } } = await sb.auth.getSession();
+      if (!session) return;
+      const base = `${String(SUPABASE_CFG.url||"").replace(/\/$/,"")}/functions/v1`;
+      let fromOauth = null;
+      try {
+        const u = new URL(window.location.href);
+        fromOauth = u.searchParams.get("gcal_oauth");
+        if (fromOauth === "ok") {
+          gcalEdgeCacheRef.current = { token: "", exp: 0 };
+          u.searchParams.delete("gcal_oauth");
+          u.searchParams.delete("reason");
+          const q1 = u.searchParams.toString();
+          window.history.replaceState({}, "", u.pathname + (q1 ? "?" + q1 : "") + u.hash);
+          // Dacă suntem în popup (fereastra deschisă de connectGCal), notificăm fereastra principală
+          // și închidem popup-ul — nu mai încărcăm toată aplicația aici.
+          if (window.opener && !window.opener.closed) {
+            try {
+              const bc = new BroadcastChannel("gcal_oauth_result");
+              bc.postMessage({ status: "ok" });
+              bc.close();
+            } catch(e) {}
+            window.close();
+            return;
+          }
+        } else if (fromOauth === "err") {
+          const raw = u.searchParams.get("reason") || "eroare";
+          const calErrMsg = {
+            redirect_uri_mismatch: "Google: redirect URI nu coincide cu cel din Google Cloud (vezi setup).",
+            access_denied: "Ai anulat sau Google a refuzat accesul la Calendar.",
+            server_config: "Server: lipsește GOOGLE_CLIENT_SECRET sau OAUTH_STATE_SECRET în Supabase.",
+            bad_state: "Sesiune OAuth expirată — încearcă Conectează din nou.",
+            db_save_failed: "Nu s-a putut salva tokenul — rulează migrarea SQL google_calendar_credentials pe Supabase.",
+            no_refresh_token: "Google nu a trimis refresh token — revocă accesul app în contul Google și reconectează.",
+            invalid_grant: "Codul OAuth a expirat — încearcă Conectează din nou.",
+          };
+          u.searchParams.delete("gcal_oauth");
+          u.searchParams.delete("reason");
+          const q2 = u.searchParams.toString();
+          window.history.replaceState({}, "", u.pathname + (q2 ? "?" + q2 : "") + u.hash);
+          // Dacă suntem în popup, trimitem eroarea la fereastra principală și închidem
+          if (window.opener && !window.opener.closed) {
+            try {
+              const bc = new BroadcastChannel("gcal_oauth_result");
+              bc.postMessage({ status: "err", reason: raw });
+              bc.close();
+            } catch(e) {}
+            window.close();
+            return;
+          }
+          showToast("Calendar: " + (calErrMsg[raw] || decodeURIComponent(raw)), "error");
+        }
       } catch (e) {}
+      await checkAndSetConnected(session, base, fromOauth);
     };
     run();
+
+    // ── Listener BroadcastChannel: primim notificări din popup-ul OAuth ──
+    let bc = null;
+    try {
+      bc = new BroadcastChannel("gcal_oauth_result");
+      bc.onmessage = async (e) => {
+        bc.close();
+        bc = null;
+        gcalEdgeCacheRef.current = { token: "", exp: 0 };
+        const sb = getSbClient();
+        if (!sb) return;
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) return;
+        const base = `${String(SUPABASE_CFG.url||"").replace(/\/$/,"")}/functions/v1`;
+        const calErrMsg = {
+          redirect_uri_mismatch: "Google: redirect URI nu coincide cu cel din Google Cloud (vezi setup).",
+          access_denied: "Ai anulat sau Google a refuzat accesul la Calendar.",
+          server_config: "Server: lipsește GOOGLE_CLIENT_SECRET sau OAUTH_STATE_SECRET în Supabase.",
+          bad_state: "Sesiune OAuth expirată — încearcă Conectează din nou.",
+          db_save_failed: "Nu s-a putut salva tokenul — rulează migrarea SQL google_calendar_credentials pe Supabase.",
+          no_refresh_token: "Google nu a trimis refresh token — revocă accesul app în contul Google și reconectează.",
+          invalid_grant: "Codul OAuth a expirat — încearcă Conectează din nou.",
+        };
+        if (e.data?.status === "ok") {
+          await checkAndSetConnected(session, base, "ok");
+        } else if (e.data?.status === "err") {
+          const raw = e.data.reason || "eroare";
+          showToast("Calendar: " + (calErrMsg[raw] || decodeURIComponent(raw)), "error");
+        }
+      };
+    } catch(e) {}
+
+    return () => { if (bc) { bc.close(); } };
   }, [authReady, sbSession?.user?.id]);
 
   const getGcalAccessTokenUnified = async () => {
@@ -5959,11 +6020,12 @@ function App() {
           showToast(j.error || "Nu pornesc OAuth Google. Deploy Edge Functions + secrete (vezi GOOGLE_CALENDAR_EDGE_SETUP.md).", "error");
           return;
         }
-        // OAuth Google nu e suportat într-un iframe — navighează fereastra de sus ca să nu rămână „în învârtit” pe accounts.google.com
-        try {
-          if (window.top && window.top !== window) window.top.location.href = j.url;
-          else window.location.href = j.url;
-        } catch (e) {
+        // Deschidem OAuth în popup explicit — evităm că browserul blochează navigarea ca „popup”
+        // și evităm problema cu iframe-uri (accounts.google.com refuză să se încarce în iframe).
+        // Popup-ul notifică fereastra principală via BroadcastChannel când OAuth e gata.
+        const oauthPopup = window.open(j.url, “gcal_oauth_popup”, “width=520,height=660,left=200,top=100”);
+        if (!oauthPopup) {
+          // Dacă popup e blocat de browser, navigăm direct (fallback)
           window.location.href = j.url;
         }
       })();
