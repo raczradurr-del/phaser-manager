@@ -6251,6 +6251,10 @@ function App() {
               continue;
             }
             if (res.status === 404 || res.status === 410) removedEventIds.push(ev.id);
+            else if (res.ok) {
+              const body = await res.json().catch(() => ({}));
+              if (body?.status === "cancelled") removedEventIds.push(ev.id);
+            }
           } catch (e) {}
         }
 
@@ -6267,6 +6271,10 @@ function App() {
               continue;
             }
             if (res.status === 404 || res.status === 410) removedBlockIds.push(b.id);
+            else if (res.ok) {
+              const body = await res.json().catch(() => ({}));
+              if (body?.status === "cancelled") removedBlockIds.push(b.id);
+            }
           } catch (e) {}
         }
 
@@ -6283,6 +6291,10 @@ function App() {
               continue;
             }
             if (res.status === 404 || res.status === 410) removedTaskIds.push(t.id);
+            else if (res.ok) {
+              const body = await res.json().catch(() => ({}));
+              if (body?.status === "cancelled") removedTaskIds.push(t.id);
+            }
           } catch (e) {}
         }
 
