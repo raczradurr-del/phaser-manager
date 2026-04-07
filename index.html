@@ -819,126 +819,59 @@ const computeFinanceDistribution = (ev, servicePrices) => {
     roundedShares, roundedSharesLei, leadAmt, adminAmt, socialAmt, stageAmt
   };
 };
-/** Finanțe profil: aceleași pași ca în Fișa — la «Tot pe firmă» rotunjirea pool-ului e în lei, deci «Parte cantat» / bonus se calculează din rtLei (pcL/prL), nu din rt €; apoi împărțire Cantat interpretare / Social lei ca în fișă. */
+/**
+ * Finanțe profil pe membru: **aceleași numere ca fișa**, fără calcule paralele.
+ * Sursă: `computeFinanceDistribution` (pool + rotunjiri) + aceleași formule ca în modal la «Total per membru» (rt EUR, pcE/prE când hasRol).
+ * Dacă în fișă **nu** apar sub-liniile «Parte cantat / Bonus», pentru membru «Parte cantat» afișată = **totalul rotunjit rt** (ex. Carina 790€).
+ */
 const computeMemberPayoutBreakdown = (ev, mId, servicePrices) => {
   const d = computeFinanceDistribution(ev, servicePrices);
-  const { CURS, isLei, restFirma, baseShares, roleBonus, leadAmt, adminAmt, socialAmt, stageAmt, roundedShares, roundedSharesLei } = d;
+  const { CURS, isLei, baseShares, roleBonus, socialAmt, roundedShares } = d;
   const rt = roundedShares[mId] || 0;
-  const rtLei = roundedSharesLei[mId] || 0;
-  const base = baseShares[mId] || 0;
+  const baseM = baseShares[mId] || 0;
   const rol = roleBonus[mId] || 0;
-  const rawW = base + rol;
-  if (rawW <= 0) {
-    return { base: 0, lead: 0, admin: 0, social: 0, stage: 0, bonusRol: 0, rolLabel: null, total: 0, socialLei: 0, curs: CURS, isLei };
-  }
+  const rawW = baseM + rol;
+  const z = { base: 0, lead: 0, admin: 0, social: 0, stage: 0, bonusRol: 0, rolLabel: null, total: 0, socialLei: 0, curs: CURS, isLei };
+  if (rawW <= 0) return z;
+
   const socialInCantat = mId === "m1";
-  const baseDisp = socialInCantat ? base + socialAmt : base;
-  const rolDisp = socialInCantat ? Math.max(0, rol - socialAmt) : rol;
+  const baseDisp = socialInCantat ? baseM + socialAmt : baseM;
+  const rolDisp = socialInCantat ? rol - socialAmt : rol;
+  const hasRol = rolDisp > 0.005;
 
-  const useLeiCore = !!restFirma && rtLei > 0;
-  let cantat;
-  let rolTotal;
-  if (useLeiCore) {
-    let pcL = Math.round(rtLei * (baseDisp / rawW) * 100) / 100;
-    let prL = Math.round((rtLei - pcL) * 100) / 100;
-    const driftL = Math.round((rtLei - pcL - prL) * 100) / 100;
-    if (Math.abs(driftL) >= 0.005) pcL = Math.round((pcL + driftL) * 100) / 100;
-    prL = Math.round((rtLei - pcL) * 100) / 100;
-    cantat = pcL;
-    rolTotal = prL;
-  } else {
-    let pcE = Math.round(rt * (baseDisp / rawW) * 100) / 100;
-    let prE = Math.round((rt - pcE) * 100) / 100;
-    const driftE = Math.round((rt - pcE - prE) * 100) / 100;
-    if (Math.abs(driftE) >= 0.005) pcE = Math.round((pcE + driftE) * 100) / 100;
-    prE = Math.round((rt - pcE) * 100) / 100;
-    cantat = pcE;
-    rolTotal = prE;
-  }
-
-  let outBase = 0;
-  let outLead = 0;
-  let outAdmin = 0;
-  let outSocial = 0;
-  let outStage = 0;
-  let outSocialLei = 0;
-
-  const splitRolBonus = (toEur) => {
-    if (rolDisp <= 0.005 || rolTotal <= 0.005) return;
-    const rw = [];
-    if (canonMemId(ev.leadId) === mId && !ev.leadCustom && leadAmt > 0) rw.push({ k: "lead", w: leadAmt });
-    if (canonMemId(ev.adminId) === mId && adminAmt > 0) rw.push({ k: "admin", w: adminAmt });
-    if (canonMemId(ev.stageId) === mId && stageAmt > 0) rw.push({ k: "stage", w: stageAmt });
-    const sumRw = rw.reduce((s, x) => s + x.w, 0);
-    if (sumRw <= 0) {
-      const add = toEur ? rolTotal : Math.round((rolTotal / CURS) * 100) / 100;
-      outBase = Math.round((outBase + add) * 100) / 100;
-      return;
-    }
-    let acc = 0;
-    rw.forEach((x, i) => {
-      let val;
-      if (i === rw.length - 1) val = Math.round((rolTotal - acc) * 100) / 100;
-      else {
-        val = Math.round(rolTotal * (x.w / sumRw) * 100) / 100;
-        acc += val;
-      }
-      const valE = toEur ? val : Math.round((val / CURS) * 100) / 100;
-      if (x.k === "lead") outLead = valE;
-      else if (x.k === "admin") outAdmin = valE;
-      else if (x.k === "stage") outStage = valE;
-    });
-  };
-
-  if (useLeiCore) {
-    if (socialInCantat && baseDisp > 0) {
-      let oBL = Math.round(cantat * (base / baseDisp) * 100) / 100;
-      let oSL = Math.round((cantat - oBL) * 100) / 100;
-      const dB = Math.round((cantat - oBL - oSL) * 100) / 100;
-      if (Math.abs(dB) >= 0.005) oBL = Math.round((oBL + dB) * 100) / 100;
-      oSL = Math.round((cantat - oBL) * 100) / 100;
-      outBase = Math.round((oBL / CURS) * 100) / 100;
-      outSocialLei = oSL;
-      outSocial = Math.round((oSL / CURS) * 100) / 100;
-    } else {
-      outBase = Math.round((cantat / CURS) * 100) / 100;
-    }
-    splitRolBonus(false);
-    if (rolDisp <= 0.005 && rolTotal > 0.005) {
-      outBase = Math.round((outBase + Math.round((rolTotal / CURS) * 100) / 100) * 100) / 100;
-    }
-  } else {
-    if (socialInCantat && baseDisp > 0) {
-      outBase = Math.round(cantat * (base / baseDisp) * 100) / 100;
-      outSocial = Math.round((cantat - outBase) * 100) / 100;
-      const dB = Math.round((cantat - outBase - outSocial) * 100) / 100;
-      if (Math.abs(dB) >= 0.005) outBase = Math.round((outBase + dB) * 100) / 100;
-      outSocial = Math.round((cantat - outBase) * 100) / 100;
-    } else {
-      outBase = cantat;
-    }
-    splitRolBonus(true);
-    if (rolDisp <= 0.005 && rolTotal > 0.005) {
-      outBase = Math.round((outBase + rolTotal) * 100) / 100;
-    }
-  }
-
-  const sumP = Math.round((outBase + outLead + outAdmin + outSocial + outStage) * 100) / 100;
-  const driftF = Math.round((rt - sumP) * 100) / 100;
-  if (Math.abs(driftF) >= 0.005) outBase = Math.round((outBase + driftF) * 100) / 100;
-
-  let socialLei = 0;
-  if (mId === "m1") {
-    if (useLeiCore) socialLei = outSocialLei;
-    else socialLei = isLei ? outSocial : Math.round(outSocial * CURS * 100) / 100;
-  }
-  const bonusRol = Math.round((outLead + outAdmin + outStage) * 100) / 100;
   const rl = [];
   if (canonMemId(ev.leadId) === mId && !ev.leadCustom) rl.push("Lead");
   if (canonMemId(ev.adminId) === mId) rl.push("Admin");
   if (canonMemId(ev.stageId) === mId) rl.push("Stage");
   const rolLabel = rl.length ? rl.join(" + ") : null;
-  return { base: outBase, lead: outLead, admin: outAdmin, social: outSocial, stage: outStage, bonusRol, rolLabel, total: rt, socialLei, curs: CURS, isLei };
+
+  let pcE = 0;
+  let prE = 0;
+  if (hasRol) {
+    const sw = rawW;
+    pcE = sw > 0 ? Math.round(rt * (baseDisp / sw) * 100) / 100 : 0;
+    prE = Math.round((rt - pcE) * 100) / 100;
+    const driftE = Math.round((rt - pcE - prE) * 100) / 100;
+    if (Math.abs(driftE) >= 0.005) pcE = Math.round((pcE + driftE) * 100) / 100;
+    prE = Math.round((rt - pcE) * 100) / 100;
+  }
+
+  const baseUi = hasRol ? pcE : rt;
+  const bonusUi = hasRol ? prE : 0;
+
+  return {
+    base: baseUi,
+    lead: 0,
+    admin: 0,
+    social: 0,
+    stage: 0,
+    bonusRol: bonusUi,
+    rolLabel: hasRol ? rolLabel : null,
+    total: rt,
+    socialLei: 0,
+    curs: CURS,
+    isLei,
+  };
 };
 const calcFond7 = (ev) => {
   const CURS = ev.cursLei||CURS_DEFAULT;
@@ -8920,7 +8853,8 @@ function App() {
           {tab==="finances"&&(()=>{
             // ── shared helpers ──
             const fv2=v=>v.toLocaleString("ro-RO",{minimumFractionDigits:0,maximumFractionDigits:2})+"€";
-            const fvBonusRound=v=>Math.round(Number(v||0)).toLocaleString("ro-RO")+"€";
+            /** Euro întregi în profilul financiar pe membru (fără zecimale în listă). */
+            const fvEurInt=v=>Math.round(Number(v||0)).toLocaleString("ro-RO")+"€";
             const fSocialLei=v=>(Number(v||0)).toLocaleString("ro-RO",{minimumFractionDigits:0,maximumFractionDigits:2})+" lei";
             const fD2=d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"numeric",month:"short",year:"numeric"}):"";
             const memberDetail=(ev,mId)=>computeMemberPayoutBreakdown(ev,mId,templates?.servicePrices);
@@ -8942,13 +8876,13 @@ function App() {
               const totSocialLeiAll=allEvs.reduce((s,e)=>s+memberDetail(e,finMember).socialLei,0);
               const ROLES=[
                 {k:"base",l:"🎵 Parte cantat",c:"#a5b4fc",bg:"rgba(99,102,241,.15)",round:false},
-                {k:"bonusRol",l:"⭐ Bonus rol",c:"#f59e0b",bg:"rgba(245,158,11,.15)",round:true},
+                {k:"bonusRol",l:"⭐ Bonus rol",c:"#f59e0b",bg:"rgba(245,158,11,.15)",round:false},
                 {k:"social",l:"📱 Social Media Mgr",c:"#c4b5fd",bg:"rgba(139,92,246,.15)",round:false}
               ];
               const RoleSection=({roleKey,roleLabel,roleColor,roleBg,tot,roundDisplay})=>{
                 const isSocial=roleKey==="social";
                 const isBonus=roleKey==="bonusRol";
-                const fmt=isSocial?fSocialLei:(roundDisplay?fvBonusRound:fv2);
+                const fmt=isSocial?fSocialLei:(roundDisplay?fvEurInt:fv2);
                 const evsForRole=allEvs.filter(ev=>{
                   const d=memberDetail(ev,finMember);
                   if(isBonus)return d.bonusRol>0.005;
@@ -8958,7 +8892,7 @@ function App() {
                 return <div style={{...sty.cd,marginBottom:16,border:`1px solid ${roleBg.replace(".15",".3")}`}}>
                   <div style={{fontSize:11,color:roleColor,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span>{roleLabel}</span>
-                    <span style={{fontSize:14,fontWeight:800}}>{roundDisplay?fvBonusRound(tot):isSocial?fSocialLei(tot):fv2(tot)}</span>
+                    <span style={{fontSize:14,fontWeight:800}}>{roundDisplay?fvEurInt(tot):isSocial?fSocialLei(tot):fv2(tot)}</span>
                   </div>
                   <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"hidden"}}>
                     <table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12,borderCollapse:"collapse"}}>
@@ -8974,7 +8908,7 @@ function App() {
                           <td style={{padding:"8px 10px"}}>{fEvDate(ev)}</td>
                           <td style={{padding:"8px 10px"}}>{ev.type||"—"}</td>
                           <td style={{padding:"8px 10px",fontSize:11,color:th.tm,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={desc}>{desc}</td>
-                          <td style={{padding:"8px 10px",fontWeight:700,color:roleColor}}>{isBonus?fvBonusRound(amt):fmt(amt)}</td>
+                          <td style={{padding:"8px 10px",fontWeight:700,color:roleColor}}>{roundDisplay?fvEurInt(amt):fmt(amt)}</td>
                           <td style={{padding:"8px 10px",fontSize:10,color:ev.restPaid?"#22c55e":"#f59e0b"}}>{ev.restPaid?"✅ primit":"⏳ în așteptare"}</td>
                         </tr>;
                       })}</tbody>
@@ -9009,7 +8943,7 @@ function App() {
                   </div>
                 </div>
                 <div style={{fontSize:11,color:th.tm,lineHeight:1.55,marginBottom:14,padding:"10px 12px",borderRadius:10,background:th.h,border:`1px solid ${th.bl}`}}>
-                  Aceleași linii ca în <strong>Fișa financiară</strong> pe membru: «Parte cantat», apoi un singur <strong>Bonus rol</strong> (ex. Admin + Stage sau Lead) și Social în lei. Bonusul e afișat <strong>rotunjit la euro întreg</strong>, ca în sumarul practic al fișei.
+                  <strong>Parte cantat</strong>, <strong>Bonus rol</strong> și totalurile din carduri sunt <strong>aceleași numere</strong> ca în Fișa financiară la „Total per membru” (fără formule paralele). Când în fișă nu apar sub-liniile parte cantat / bonus, aici întreaga sumă e la <strong>Parte cantat</strong>, egală cu totalul rotunjit (ex. 790€).
                 </div>
                 {totPaid>0&&<div style={{...sty.cd,marginBottom:16}}>
                   <div style={{fontSize:11,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Sumar sursă câștig (încasat)</div>
@@ -9020,7 +8954,7 @@ function App() {
                     </div>}
                     {totBonus>0&&<div style={{padding:"8px 14px",borderRadius:10,background:"rgba(245,158,11,.1)",border:"1px solid rgba(245,158,11,.2)"}}>
                       <div style={{fontSize:9,color:"#fbbf24",textTransform:"uppercase",letterSpacing:1}}>⭐ Bonus rol</div>
-                      <div style={{fontSize:16,fontWeight:700,color:"#fbbf24"}}>{fvBonusRound(totBonus)}</div>
+                      <div style={{fontSize:16,fontWeight:700,color:"#fbbf24"}}>{fv2(totBonus)}</div>
                     </div>}
                     {totSocialLei>0&&<div style={{padding:"8px 14px",borderRadius:10,background:"rgba(139,92,246,.1)",border:"1px solid rgba(139,92,246,.2)"}}>
                       <div style={{fontSize:9,color:"#c4b5fd",textTransform:"uppercase",letterSpacing:1}}>📱 Social Media Mgr</div>
