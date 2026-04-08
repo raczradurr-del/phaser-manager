@@ -869,14 +869,25 @@ const getTransportDistanceKmOneWay = (ev) => {
   if (cityKm != null && Number.isFinite(cityKm) && cityKm > 0) return cityKm;
   return 0;
 };
-const computeTransportKmSurchargeLei = (ev) => {
+/** Lei/km dus-întors pe distanța peste prag: din eveniment, apoi șablon, apoi constantă oficiu (3). */
+const getTransportKmSurchargeRates = (ev, spCfg) => {
+  const sp = spCfg || {};
+  const baseRaw = ev?.transportLeiPerKmRoundTrip ?? sp.transportLeiPerKmRoundTrip ?? TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP;
+  const heavyRaw = ev?.transportHeavyExtraLeiPerKmRoundTrip ?? sp.transportHeavyExtraLeiPerKmRoundTrip ?? TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP;
+  const base = Number(baseRaw);
+  const heavy = Number(heavyRaw);
+  return {
+    base: Number.isFinite(base) && base >= 0 ? base : TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP,
+    heavy: Number.isFinite(heavy) && heavy >= 0 ? heavy : TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP,
+  };
+};
+const computeTransportKmSurchargeLei = (ev, spCfg) => {
   const d = getTransportDistanceKmOneWay(ev);
   if (!Number.isFinite(d) || d <= TRANSPORT_FREE_RADIUS_KM) return 0;
   const extraOneWayKm = d - TRANSPORT_FREE_RADIUS_KM;
   const extraRoundTripKm = extraOneWayKm * 2;
-  const rate =
-    TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP +
-    (hasTransportHeavyExtras(ev?.svc) ? TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP : 0);
+  const { base, heavy } = getTransportKmSurchargeRates(ev, spCfg);
+  const rate = base + (hasTransportHeavyExtras(ev?.svc) ? heavy : 0);
   return Math.round(extraRoundTripKm * rate);
 };
 /**
@@ -887,7 +898,7 @@ const resolveEventTransportLei = (ev, spCfg) => {
   const templateT =
     Number((spCfg || {}).fixedCostTransport ?? DEFAULT_SERVICE_PRICES.fixedCostTransport ?? DEFAULT_FIXED_COSTS.transport) ||
     DEFAULT_FIXED_COSTS.transport;
-  const autoTotal = Math.max(0, Math.round(templateT + computeTransportKmSurchargeLei(ev)));
+  const autoTotal = Math.max(0, Math.round(templateT + computeTransportKmSurchargeLei(ev, spCfg)));
   if (ev?.transportTariffManual === true && ev.fixedCosts?.transport != null && ev.fixedCosts.transport !== "") {
     const m = Number(ev.fixedCosts.transport);
     if (Number.isFinite(m) && m >= 0) return Math.round(m);
@@ -922,6 +933,10 @@ const DEFAULT_SERVICE_PRICES = {
   splitM1:24, splitM2:19, splitM3:19, splitM4:19, splitM5:19,
   bonusLeadPrivatePct:2, bonusLeadPublicPct:1, bonusAdminPct:2, bonusSocialPct:2, bonusStagePct:2,
   fixedCostTechnician:600, fixedCostEquipment:1000, fixedCostSoundman:400, fixedCostSoundmanLevi:200, fixedCostTransport:100,
+  /** Lei / km dus-întors pentru km parcurs peste 25 km (o direcție) față de reper TM. Implicit oficiu: 3. */
+  transportLeiPerKmRoundTrip: 3,
+  /** +Lei/km dus-întors când sunt bifate lumini + ecran LED + scenă/podium. Implicit: 3. */
+  transportHeavyExtraLeiPerKmRoundTrip: 3,
 };
 /** Atribuire sunetist: trupa = fără plată sunetist din cheltuieli fixe (banii rămân în pool). */
 const normalizeSoundAttribution = (ev) => {
@@ -3900,6 +3915,10 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const pkPublic = !isPriv ? normPressKitPublic(templates?.pressKitPublic) : null;
   const svcTot = isPriv ? Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0) : 0;
   const tot = (ev.fee||0)+svcTot;
+  const spOffer = {...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};
+  /** La public nu există `hosp` — transportul se afișează aici, nu în blocul de cazare (doar privat). */
+  const showPublicOfferTransport = !isPriv && (getTransportDistanceKmOneWay(ev) > TRANSPORT_FREE_RADIUS_KM || ev.transportTariffManual === true);
+  const publicOfferTransportLei = showPublicOfferTransport ? resolveEventTransportLei(ev, spOffer) : 0;
   const dk = th.bg==="#09090b";
 
   const handleStatus = (k) => {
@@ -4650,12 +4669,21 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               {(ev.svc?.sunet||ev.svc?.lumini||ev.svc?.ecran||ev.svc?.scena)&&<div style={{fontSize:11,color:"rgba(255,255,255,.4)",marginTop:10,paddingTop:10,borderTop:"1px solid rgba(255,255,255,.08)"}}>Echipamentele tehnice vin cu operatori tehnici disponibili pe tot parcursul evenimentului.</div>}
             </div>}
 
+            {/* Transport — ofertă publică (la privat: același rând e în «Cazare și Transport», condiționat de hosp) */}
+            {showPublicOfferTransport && publicOfferTransportLei > 0 && <div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Transport</div>
+              <div style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0"}}>
+                <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
+                <span style={{fontSize:13,color:"#444"}}>{`Transport — ${publicOfferTransportLei.toLocaleString("ro-RO")} RON`}</span>
+              </div>
+            </div>}
+
             {/* Cazare și Transport — doar dacă există camere sau depășire raza gratis față de reper TM */}
             {isPriv&&ev.hosp&&((ev.hosp.camere??0)>0||getTransportDistanceKmOneWay(ev)>TRANSPORT_FREE_RADIUS_KM)&&<div style={{background:"#fff",borderRadius:12,padding:"18px 20px",marginBottom:8}}>
               <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:2,color:"#999",marginBottom:14}}>Cazare și Transport</div>
               {[
                 ...((ev.hosp.camere??0)>0?[`Cazare — ${ev.hosp.camere} camere twin la locație sau în apropierea ei`]:[]),
-                ...(getTransportDistanceKmOneWay(ev)>TRANSPORT_FREE_RADIUS_KM?[`Transport — ${resolveEventTransportLei(ev,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})}).toLocaleString("ro-RO")} RON (estimare logistică, reper Timișoara)`]:[]),
+                ...(getTransportDistanceKmOneWay(ev)>TRANSPORT_FREE_RADIUS_KM?[`Transport — ${resolveEventTransportLei(ev,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})}).toLocaleString("ro-RO")} RON`]:[]),
               ].filter(Boolean).map((item,i)=>(
                 <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:"1px solid #f5f5f5"}}>
                   <div style={{width:6,height:6,borderRadius:"50%",background:"#22c55e",flexShrink:0}}/>
@@ -5528,6 +5556,8 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     venue: mData?.venue||"", city: mData?.city||"", dist: mData?.dist||0, locPhone: mData?.locPhone||"", locAddress: mData?.locAddress||"",
     venueLat: mData?.venueLat, venueLng: mData?.venueLng,
     transportKmOneWay: mData?.transportKmOneWay, transportTariffManual: mData?.transportTariffManual ?? false,
+    transportLeiPerKmRoundTrip: Number(mData?.transportLeiPerKmRoundTrip ?? templates?.servicePrices?.transportLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportLeiPerKmRoundTrip) || DEFAULT_SERVICE_PRICES.transportLeiPerKmRoundTrip,
+    transportHeavyExtraLeiPerKmRoundTrip: Number(mData?.transportHeavyExtraLeiPerKmRoundTrip ?? templates?.servicePrices?.transportHeavyExtraLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportHeavyExtraLeiPerKmRoundTrip) || DEFAULT_SERVICE_PRICES.transportHeavyExtraLeiPerKmRoundTrip,
     cn: mData?.cn||"", cp: mData?.cp||"", ce: mData?.ce||"",
     rep: mData?.rep||(isP?1:1),
     repDurs: mData?.repDurs||[],
@@ -5861,6 +5891,32 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                   style={iStyle}
                   placeholder={`Lasă gol: din hartă / oraș · reper: ${TRANSPORT_FREE_RADIUS_KM} km TM`}
                 />
+                <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:12,marginTop:10}}>
+                  <div>
+                    <label style={sty.l}>Lei / km (dus-întors) — peste {TRANSPORT_FREE_RADIUS_KM} km o direcție</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={fm.transportLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportLeiPerKmRoundTrip}
+                      onChange={e=>setFm(p=>({...p,transportLeiPerKmRoundTrip:Math.max(0,Number(e.target.value)||0),transportTariffManual:false}))}
+                      style={iStyle}
+                    />
+                    <div style={{fontSize:10,color:th.tm,marginTop:2,lineHeight:1.35}}>Implicit oficiu: 3 lei/km parcurs suplimentar dus-întors. Modifică per ofertă dacă e nevoie.</div>
+                  </div>
+                  <div>
+                    <label style={sty.l}>+ Lei / km dacă lumini + LED + scenă bifate</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={fm.transportHeavyExtraLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportHeavyExtraLeiPerKmRoundTrip}
+                      onChange={e=>setFm(p=>({...p,transportHeavyExtraLeiPerKmRoundTrip:Math.max(0,Number(e.target.value)||0),transportTariffManual:false}))}
+                      style={iStyle}
+                    />
+                    <div style={{fontSize:10,color:th.tm,marginTop:2,lineHeight:1.35}}>Se adună la rata de mai sus, același calcul dus-întors.</div>
+                  </div>
+                </div>
                 <div style={{fontSize:10,color:th.tm,marginTop:4}}>
                   Tarif transport calculat acum: <strong style={{color:th.t}}>{resolveEventTransportLei(fm,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})})} lei</strong>
                   {fm.transportTariffManual ? " (manual)" : ""}
@@ -9503,7 +9559,9 @@ function App() {
                     {k:"fixedCostEquipment",l:"Cheltuială logistică echipamente (lei)",def:1000},
                     {k:"fixedCostSoundman",l:"Sunetist Prezent (lei) — când atribuirea e Prezent",def:400},
                     {k:"fixedCostSoundmanLevi",l:"Sunetist Levi (lei) — când atribuirea e Levi",def:200},
-                    {k:"fixedCostTransport",l:"Cheltuială logistică transport (lei)",def:100},
+                    {k:"fixedCostTransport",l:"Cheltuială logistică transport (lei) — tarif bază (sub pragul de distanță)",def:100},
+                    {k:"transportLeiPerKmRoundTrip",l:"Transport: lei/km dus-întors peste prag (implicit oficiu 3)",def:3},
+                    {k:"transportHeavyExtraLeiPerKmRoundTrip",l:"Transport: +lei/km dus-întors cu lumini+LED+scenă (implicit 3)",def:3},
                   ];
                   const Section = ({title, help, fields}) => <div style={{padding:12,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,marginBottom:12}}>
                     <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:4}}>{title}</div>
@@ -11713,7 +11771,20 @@ function App() {
                         {ev.transportTariffManual&&<button type="button" onClick={()=>upd({transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportTariffManual:false},spCfgFinance)}})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>↻ Auto</button>}
                       </div>
                     </div>
-                    <div style={{fontSize:10,color:th.tm,lineHeight:1.35,marginBottom:4}}>Până la 25 km (sens unic) față de {TRANSPORT_REF_TIMISOARA.label}: bază șablon; peste: +3 lei/km dus-întors{hasTransportHeavyExtras(ev.svc)?"; cu lumini+LED+scenă: încă +3 lei/km dus-întors":""}. Estimare aeriană din hartă sau km mai jos.</div>
+                    {(()=>{
+                      const { base, heavy } = getTransportKmSurchargeRates(ev, spCfgFinance);
+                      return <div style={{fontSize:10,color:th.tm,lineHeight:1.35,marginBottom:4}}>Până la {TRANSPORT_FREE_RADIUS_KM} km (sens unic) față de reper TM: tarif transport bază din șablon; peste: <strong>{base} lei/km</strong> parcurs suplimentar dus-întors{hasTransportHeavyExtras(ev.svc)?<>; cu lumini+LED+scenă: <strong>+{heavy} lei/km</strong></>:""}. Distanță din hartă / oraș sau km mai jos.</div>;
+                    })()}
+                    <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:8,marginBottom:6}}>
+                      <div>
+                        <label style={{fontSize:9,color:th.tm,display:"block",marginBottom:2}}>Lei/km dus-întors (peste prag)</label>
+                        <input type="number" min={0} step={0.5} value={Number(ev.transportLeiPerKmRoundTrip ?? spCfgFinance.transportLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportLeiPerKmRoundTrip) || 0} onChange={e=>{const v=Math.max(0,Number(e.target.value)||0);upd({transportLeiPerKmRoundTrip:v,transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportLeiPerKmRoundTrip:v,transportTariffManual:false},spCfgFinance)}});}} style={{...sty.i,width:"100%",padding:4,fontSize:12}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,color:th.tm,display:"block",marginBottom:2}}>+Lei/km (lumini+LED+scenă)</label>
+                        <input type="number" min={0} step={0.5} value={Number(ev.transportHeavyExtraLeiPerKmRoundTrip ?? spCfgFinance.transportHeavyExtraLeiPerKmRoundTrip ?? DEFAULT_SERVICE_PRICES.transportHeavyExtraLeiPerKmRoundTrip) || 0} onChange={e=>{const v=Math.max(0,Number(e.target.value)||0);upd({transportHeavyExtraLeiPerKmRoundTrip:v,transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportHeavyExtraLeiPerKmRoundTrip:v,transportTariffManual:false},spCfgFinance)}});}} style={{...sty.i,width:"100%",padding:4,fontSize:12}}/>
+                      </div>
+                    </div>
                     <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                       <span style={{fontSize:11,color:th.tm}}>Km o direcție (opțional)</span>
                       <input type="number" min={0} step={0.1} value={ev.transportKmOneWay??""} placeholder="auto" onChange={e=>{const raw=e.target.value.trim();upd({transportKmOneWay:raw===""?undefined:Math.max(0,Number(raw)||0),transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportKmOneWay:raw===""?undefined:Math.max(0,Number(raw)||0),transportTariffManual:false},spCfgFinance)}});}} style={{...sty.i,width:72,padding:4,fontSize:12}}/>
