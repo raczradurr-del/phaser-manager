@@ -1406,8 +1406,17 @@ const loadTemplates = () => {
       if (d && typeof d === "object") {
         d.pressKitPublic = normPressKitPublic(d.pressKitPublic);
         d.servicePrices = d.servicePrices || { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:40 };
-        d.contractModelPrivate = mergeContractModelFromTemplates({ contractModelPrivate: d.contractModelPrivate }, true);
-        d.contractModelPublic = mergeContractModelFromTemplates({ contractModelPublic: d.contractModelPublic }, false);
+        if (d.contractModelPrivatePf == null && d.contractModelPrivate != null) {
+          d.contractModelPrivatePf = d.contractModelPrivate;
+        }
+        if (d.contractModelPrivateFirma == null) {
+          const src = d.contractModelPrivate != null ? d.contractModelPrivate : d.contractModelPrivatePf;
+          if (src != null) d.contractModelPrivateFirma = JSON.parse(JSON.stringify(src));
+        }
+        delete d.contractModelPrivate;
+        d.contractModelPrivatePf = mergeContractModelFromTemplatesByKey({ contractModelPrivatePf: d.contractModelPrivatePf }, CONTRACT_MODEL_KEYS.privatePf);
+        d.contractModelPrivateFirma = mergeContractModelFromTemplatesByKey({ contractModelPrivateFirma: d.contractModelPrivateFirma }, CONTRACT_MODEL_KEYS.privateFirma);
+        d.contractModelPublic = mergeContractModelFromTemplatesByKey({ contractModelPublic: d.contractModelPublic }, CONTRACT_MODEL_KEYS.public);
         return d;
       }
     }
@@ -1420,7 +1429,8 @@ const loadTemplates = () => {
     pressKitPublic: JSON.parse(JSON.stringify(DEFAULT_PRESS_KIT_PUBLIC)),
     poveste: "Suntem o gașcă de visători muzicali și artiști pasionați, gata să aducem vibe-ul ăla bun la evenimentul vostru. Trebuie doar să ne vezi live și vei înțelege că un show-ul este un tour de force încărcat cu intensitate dar și cu momente de sensibilitate simplă. Printre cuvinte, imagini și muzică spunem povestea tuturor, a celor ce iubesc sau a celor îndrăgostiți de viață.",
     servicePrices: { sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0, tehnicPerService:120, tehnicExtraPerService:40 },
-    contractModelPrivate: getDefaultContractModelPrivate(),
+    contractModelPrivatePf: getDefaultContractModelPrivatePf(),
+    contractModelPrivateFirma: getDefaultContractModelPrivateFirma(),
     contractModelPublic: getDefaultContractModelPublic()
   };
 };
@@ -2993,7 +3003,8 @@ function formatContractCap1Inline(s) {
     return <span key={i}>{p}</span>;
   });
 }
-function getDefaultContractModelPrivate() {
+/** Model implicit: eveniment privat + beneficiar persoană fizică (cap. 1.2 cu etichete PF). */
+function getDefaultContractModelPrivatePf() {
   return {
     v: 1,
     cap1SectionTitle: "CAP. 1. PĂRȚILE CONTRACTANTE",
@@ -3027,16 +3038,35 @@ function getDefaultContractModelPrivate() {
     footerLine: "PHASER MUSIC SRL · CUI 37199434 · Timișoara, Str. Răsăritului 17 · contact@phaser.ro · www.phaser.ro"
   };
 }
+/** Eveniment privat + beneficiar firmă — același schelet ca PF; poți diferenția clauzele în Docs. */
+function getDefaultContractModelPrivateFirma() {
+  return JSON.parse(JSON.stringify(getDefaultContractModelPrivatePf()));
+}
 function getDefaultContractModelPublic() {
-  const p = getDefaultContractModelPrivate();
+  const p = getDefaultContractModelPrivatePf();
   return {
-    ...p,
+    ...JSON.parse(JSON.stringify(p)),
     art21: "Art.2.1 Obiectul prezentului contract constă în îndeplinirea activității de interpretare artistică de către Prestator prin actul artistic „PHASER\" în cadrul unui eveniment public organizat de Beneficiar.",
   };
 }
-function mergeContractModelFromTemplates(templates, isPrivate) {
-  const def = isPrivate ? getDefaultContractModelPrivate() : getDefaultContractModelPublic();
-  const src = isPrivate ? templates?.contractModelPrivate : templates?.contractModelPublic;
+const CONTRACT_MODEL_KEYS = {
+  privatePf: "contractModelPrivatePf",
+  privateFirma: "contractModelPrivateFirma",
+  public: "contractModelPublic",
+};
+function defaultContractModelForStorageKey(cmKey) {
+  if (cmKey === CONTRACT_MODEL_KEYS.public) return getDefaultContractModelPublic();
+  if (cmKey === CONTRACT_MODEL_KEYS.privateFirma) return getDefaultContractModelPrivateFirma();
+  return getDefaultContractModelPrivatePf();
+}
+/** Cheia din `templates` folosită pentru acest eveniment: privat+PF, privat+firmă sau public. */
+function getContractModelTemplateKey(ev) {
+  if (!ev || ev.cat !== "private") return CONTRACT_MODEL_KEYS.public;
+  return ev.contractBen === "firma" ? CONTRACT_MODEL_KEYS.privateFirma : CONTRACT_MODEL_KEYS.privatePf;
+}
+function mergeContractModelFromTemplatesByKey(templates, cmKey) {
+  const def = defaultContractModelForStorageKey(cmKey);
+  const src = templates?.[cmKey];
   if (!src || typeof src !== "object") {
     return JSON.parse(JSON.stringify(def));
   }
@@ -3087,10 +3117,12 @@ function normalizeFirmaContractFields(fields, ev) {
   if (!(String(o.benFirma || "").trim()) && (String(o.clientNume || "").trim())) o.benFirma = o.clientNume;
   return o;
 }
-function buildContractSnapshot(ev, templates, contractFields, isPriv) {
+function buildContractSnapshot(ev, templates, contractFields) {
+  const cmKey = getContractModelTemplateKey(ev);
   return {
     cat: ev.cat,
-    model: mergeContractModelFromTemplates(templates, isPriv),
+    contractModelKey: cmKey,
+    model: mergeContractModelFromTemplatesByKey(templates, cmKey),
     fields: { ...contractFields },
     savedAt: Date.now()
   };
@@ -3104,7 +3136,7 @@ function ContractView({ ev, th, contractFields, onContractChange, contractModel,
   const avans = ev.dep || 0;
   const rest = tot - avans;
   const cf = contractFields || {};
-  const m = contractModel || (isP ? getDefaultContractModelPrivate() : getDefaultContractModelPublic());
+  const m = contractModel || mergeContractModelFromTemplatesByKey({}, getContractModelTemplateKey(ev));
   const setF = (k, v) => !readOnly && onContractChange && onContractChange({ ...cf, [k]: v });
   const today = new Date().toLocaleDateString("ro", { day: "numeric", month: "long", year: "numeric" });
   const nrSeturi = cf.nrSeturi || (ev.rep || 1);
@@ -3332,6 +3364,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const [videos, setVideos] = useState(ev.videos||DEFAULT_VIDEOS);
   const syncOffer = (up)=>{ onOfferUpdate&&onOfferUpdate(ev.id,up); };
   const isPriv = ev.cat==="private";
+  const contractTplKey = getContractModelTemplateKey(ev);
   const [covers, setCovers] = useState(ev.covers||DEFAULT_COVERS);
   const [showPlaylist, setShowPlaylist] = useState(true);
   const [configVisible, setConfigVisible] = useState(false);
@@ -3365,8 +3398,8 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   const contractLocked = !!ev.contractSnapshot;
   const effectiveContractModel = useMemo(() => {
     if (ev.contractSnapshot?.model) return JSON.parse(JSON.stringify(ev.contractSnapshot.model));
-    return mergeContractModelFromTemplates(templates, isPriv);
-  }, [ev.contractSnapshot?.savedAt, templates, isPriv]);
+    return mergeContractModelFromTemplatesByKey(templates, contractTplKey);
+  }, [ev.contractSnapshot?.savedAt, templates, contractTplKey]);
   const [contractFields, setContractFields] = useState(() =>
     normalizeFirmaContractFields(
       ev.contractSnapshot?.fields ? { ...ev.contractSnapshot.fields } : makeDefaultContractFields(ev),
@@ -3418,8 +3451,8 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
   useEffect(() => {
     if (ev.contractSnapshot || !isEventPastForContract(ev) || pastContractSnapRef.current) return;
     pastContractSnapRef.current = true;
-    syncOffer({ contractSnapshot: buildContractSnapshot(ev, templates, makeDefaultContractFields(ev), isPriv) });
-  }, [ev.id, ev.date, ev.contractSnapshot, templates, isPriv]);
+    syncOffer({ contractSnapshot: buildContractSnapshot(ev, templates, makeDefaultContractFields(ev)) });
+  }, [ev.id, ev.date, ev.contractSnapshot, templates, contractTplKey]);
   const publicPrestatieLine = () => {
     const t = (ev.durataRecital || "").trim();
     if (t) return t;
@@ -3947,7 +3980,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
       syncOffer({
         offerUrl: publicUrl,
         ...(prefix === "contract"
-          ? { contractPublishedAt: Date.now(), contractSnapshot: buildContractSnapshot(ev, templates, contractFields, isPriv) }
+          ? { contractPublishedAt: Date.now(), contractSnapshot: buildContractSnapshot(ev, templates, contractFields) }
           : {}),
       });
       verifyShareableProxyUrl(publicUrl).then((proxyOk) => {
@@ -6289,7 +6322,7 @@ function App() {
   const [globalSearch, setGlobalSearch] = useState("");
   const [sectTab, setSectTab] = useState("playlist");
   const docsSectTab = sectTab==="poveste" ? "playlist" : sectTab;
-  const [contractDocKind, setContractDocKind] = useState("private");
+  const [contractDocKind, setContractDocKind] = useState(CONTRACT_MODEL_KEYS.privatePf);
   const [riderVersions, setRiderVersions] = useState(loadRiderVersions);
   const [pressKitVersions, setPressKitVersions] = useState(loadPressKitVersions);
   const [playlistVersions, setPlaylistVersions] = useState(loadPlaylistVersions);
@@ -8413,7 +8446,7 @@ function App() {
           {tab==="docs"&&<div style={{animation:"su .3s ease"}}>
             <div style={{marginBottom:20}}>
               <h1 style={{fontSize:22,fontWeight:700,letterSpacing:"-0.5px"}}>Docs</h1>
-              <p style={{color:th.tm,fontSize:12,marginTop:2}}>Contract (privat/public), rider, playlist și press kit — template-uri editabile. Ofertele noi preiau ultimul model; contractul îngheță după trimitere sau pentru evenimente trecute.</p>
+              <p style={{color:th.tm,fontSize:12,marginTop:2}}>Contract (privat PF / privat firmă / public), rider, playlist și press kit — template-uri editabile. Ofertele noi folosesc modelul potrivit tipului evenimentului și beneficiarului; contractul îngheță după trimitere sau pentru evenimente trecute.</p>
             </div>
             <div className={mob?"mob-tab-scroll":""} style={{display:"flex",gap:6,marginBottom:16,flexWrap:mob?"nowrap":"wrap",overflowX:mob?"auto":"visible",paddingBottom:mob?4:0}}>
               {["contract","rider","servicePrices","playlist","media","pressKitPublic"].map(s=>(
@@ -8424,45 +8457,53 @@ function App() {
             </div>
             <div style={sty.cd}>
               {docsSectTab==="contract"&&(() => {
-                const isPr = contractDocKind === "private";
-                const cmKey = isPr ? "contractModelPrivate" : "contractModelPublic";
-                const cm = mergeContractModelFromTemplates(templates, isPr);
-                const patchCm = (partial) => saveTemplates((tpl) => ({ ...tpl, [cmKey]: { ...mergeContractModelFromTemplates(tpl, isPr), ...partial } }));
+                const cmKey = contractDocKind;
+                const showCap1PfLabels = cmKey === CONTRACT_MODEL_KEYS.privatePf;
+                const cm = mergeContractModelFromTemplatesByKey(templates, cmKey);
+                const patchCm = (partial) => saveTemplates((tpl) => ({ ...tpl, [cmKey]: { ...mergeContractModelFromTemplatesByKey(tpl, cmKey), ...partial } }));
                 const patchCap = (idx, field, val) => saveTemplates((tpl) => {
-                  const base = mergeContractModelFromTemplates(tpl, isPr);
+                  const base = mergeContractModelFromTemplatesByKey(tpl, cmKey);
                   const caps = (base.caps612 || []).map((c, i) => i === idx ? { ...c, [field]: val } : c);
                   return { ...tpl, [cmKey]: { ...base, caps612: caps } };
                 });
+                const docKindLabel =
+                  cmKey === CONTRACT_MODEL_KEYS.privatePf ? "privat · persoană fizică" :
+                  cmKey === CONTRACT_MODEL_KEYS.privateFirma ? "privat · firmă" : "public · firmă";
                 return <div>
-                  <p style={{fontSize:11,color:th.tm,marginBottom:12,lineHeight:1.5}}>Aici sunt <strong>două modele salvate</strong>: <strong>Privat</strong> (eveniment privat) și <strong>Public</strong> (eveniment public). Nu există al treilea model doar pentru „firmă” — alegerea <strong>Persoană fizică / Firmă</strong> la beneficiar se face în <strong>formularul evenimentului → Client</strong> (doar la privat). Modelele se folosesc la oferte <strong>noi</strong> până la înghețare (link public contract / eveniment trecut).</p>
-                  <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-                    <button type="button" onClick={()=>setContractDocKind("private")} style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${contractDocKind==="private"?th.a:th.b}`,background:contractDocKind==="private"?th.ab:"transparent",fontWeight:600,cursor:"pointer",fontSize:12}}>Privat</button>
-                    <button type="button" onClick={()=>setContractDocKind("public")} style={{padding:"8px 16px",borderRadius:8,border:`2px solid ${contractDocKind==="public"?th.a:th.b}`,background:contractDocKind==="public"?th.ab:"transparent",fontWeight:600,cursor:"pointer",fontSize:12}}>Public</button>
-                    <span style={{fontSize:11,color:th.tm,alignSelf:"center"}}>Versiune model: <strong>v{cm.v ?? 1}</strong> ({isPr ? "privat" : "public"})</span>
+                  <p style={{fontSize:11,color:th.tm,marginBottom:12,lineHeight:1.5}}>Sunt <strong>trei modele salvate separat</strong>: <strong>Privat + PF</strong>, <strong>Privat + firmă</strong> și <strong>Public</strong> (firmă). La fiecare ofertă se aplică automat modelul potrivit: evenimentul <strong>public</strong> folosește «Public»; la <strong>privat</strong>, alegerea <strong>Persoană fizică / Firmă</strong> din <strong>Eveniment → Client</strong> alege între primele două. Poți diferenția textele (ex. clauze, art. 2.1) pentru fiecare variantă.</p>
+                  <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+                    <button type="button" onClick={()=>setContractDocKind(CONTRACT_MODEL_KEYS.privatePf)} style={{padding:"8px 14px",borderRadius:8,border:`2px solid ${contractDocKind===CONTRACT_MODEL_KEYS.privatePf?th.a:th.b}`,background:contractDocKind===CONTRACT_MODEL_KEYS.privatePf?th.ab:"transparent",fontWeight:600,cursor:"pointer",fontSize:12}}>Privat · PF</button>
+                    <button type="button" onClick={()=>setContractDocKind(CONTRACT_MODEL_KEYS.privateFirma)} style={{padding:"8px 14px",borderRadius:8,border:`2px solid ${contractDocKind===CONTRACT_MODEL_KEYS.privateFirma?th.a:th.b}`,background:contractDocKind===CONTRACT_MODEL_KEYS.privateFirma?th.ab:"transparent",fontWeight:600,cursor:"pointer",fontSize:12}}>Privat · firmă</button>
+                    <button type="button" onClick={()=>setContractDocKind(CONTRACT_MODEL_KEYS.public)} style={{padding:"8px 14px",borderRadius:8,border:`2px solid ${contractDocKind===CONTRACT_MODEL_KEYS.public?th.a:th.b}`,background:contractDocKind===CONTRACT_MODEL_KEYS.public?th.ab:"transparent",fontWeight:600,cursor:"pointer",fontSize:12}}>Public</button>
+                    <span style={{fontSize:11,color:th.tm}}>Versiune: <strong>v{cm.v ?? 1}</strong> ({docKindLabel})</span>
                   </div>
-                  {isPr && <div style={{padding:"12px 14px",borderRadius:10,marginBottom:16,background:th.h,border:`1px solid ${th.b}`,fontSize:11,color:th.ts,lineHeight:1.55}}>
-                    <div style={{fontWeight:700,color:th.t,marginBottom:6,fontSize:12}}>Cum apare beneficiarul la eveniment <strong>privat</strong></div>
+                  {cmKey === CONTRACT_MODEL_KEYS.privatePf && <div style={{padding:"12px 14px",borderRadius:10,marginBottom:16,background:th.h,border:`1px solid ${th.b}`,fontSize:11,color:th.ts,lineHeight:1.55}}>
+                    <div style={{fontWeight:700,color:th.t,marginBottom:6,fontSize:12}}>Privat + persoană fizică</div>
                     <ul style={{margin:0,paddingLeft:18}}>
-                      <li><strong>Persoană fizică</strong> (din formular): în contract se folosesc etichetele din secțiunea de mai jos + <strong>GDPR</strong> la final.</li>
-                      <li><strong>Firmă</strong> (din formular): cap. 1.2 = același <strong>bloc juridic</strong> ca la eveniment public (societate, sediu, ONRC, CUI, IBAN, reprezentant) — <em>nu</em> are câmpuri separate aici în Docs; textul introductiv comun e în ambele modele (Privat vs Public diferă la art. 2.1 etc., nu la structura firmă).</li>
+                      <li>Se folosește când evenimentul e <strong>privat</strong> și în Client ai <strong>Persoană fizică</strong>.</li>
+                      <li>Secțiunea de mai jos pentru cap. 1.2 (etichete domiciliu, CI, mail, telefon) + <strong>GDPR</strong> la final în previzualizare.</li>
                     </ul>
                   </div>}
-                  {!isPr && <div style={{padding:"12px 14px",borderRadius:10,marginBottom:16,background:th.h,border:`1px solid ${th.b}`,fontSize:11,color:th.ts,lineHeight:1.55}}>
+                  {cmKey === CONTRACT_MODEL_KEYS.privateFirma && <div style={{padding:"12px 14px",borderRadius:10,marginBottom:16,background:th.h,border:`1px solid ${th.b}`,fontSize:11,color:th.ts,lineHeight:1.55}}>
+                    <div style={{fontWeight:700,color:th.t,marginBottom:4,fontSize:12}}>Privat + firmă</div>
+                    În previzualizare, cap. 1.2 = bloc juridic (societate, sediu, ONRC, CUI, IBAN, reprezentant). Aici poți adapta restul clauzelor față de modelul PF sau față de public, fără să atingi structura câmpurilor din formular.
+                  </div>}
+                  {cmKey === CONTRACT_MODEL_KEYS.public && <div style={{padding:"12px 14px",borderRadius:10,marginBottom:16,background:th.h,border:`1px solid ${th.b}`,fontSize:11,color:th.ts,lineHeight:1.55}}>
                     <div style={{fontWeight:700,color:th.t,marginBottom:4,fontSize:12}}>Eveniment public</div>
-                    Beneficiarul în contract este <strong>mereu firmă</strong> (același tip de câmpuri ca la privat+când ai ales Firmă). Completezi valorile în previzualizarea contractului.
+                    Beneficiarul este <strong>mereu firmă</strong>. Acest model se aplică automat tuturor evenimentelor <strong>public</strong>.
                   </div>}
                   <div style={{display:"flex",flexDirection:"column",gap:12}}>
                     <div style={{paddingBottom:12,borderBottom:`1px solid ${th.bl}`,marginBottom:4}}>
-                      <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:8}}>CAP. 1 — Prestator (ambele modele)</div>
+                      <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:8}}>CAP. 1 — Prestator (toate variantele)</div>
                       <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5}}><strong>Prestatorul</strong> — text static, câte un rând; <code>**îngroșat**</code> în text.</p>
                       <div><label style={sty.l}>Titlu capitol</label><input value={cm.cap1SectionTitle||""} onChange={e=>patchCm({ cap1SectionTitle: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Art. 1.1 (titlu)</label><input value={cm.cap1Art11Title||""} onChange={e=>patchCm({ cap1Art11Title: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Bloc Prestator — rânduri</label><textarea value={cm.cap1PrestatorBlock||""} onChange={e=>patchCm({ cap1PrestatorBlock: e.target.value })} style={{...sty.i,minHeight:160,resize:"vertical",fontSize:12}} placeholder={"Câte un rând...\n**Etichetă:** valoare"}/></div>
                       <div><label style={sty.l}>Art. 1.2 (titlu capitol beneficiar)</label><input value={cm.cap1Art12Title||""} onChange={e=>patchCm({ cap1Art12Title: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
-                      {isPr ? <>
+                      {showCap1PfLabels ? <>
                         <div style={{marginTop:14,paddingTop:12,borderTop:`2px solid ${th.b}`}}>
-                          <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:6}}>Cap. 1.2 — doar pentru <strong>persoană fizică</strong> (privat)</div>
-                          <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5}}>Aceste câmpuri se folosesc în contract doar când în <strong>Eveniment → Client</strong> ai ales <strong>Persoană fizică</strong>. Dacă alegi <strong>Firmă</strong>, contractul afișează blocul juridic (fără aceste etichete).</p>
+                          <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:6}}>Cap. 1.2 — etichete pentru <strong>persoană fizică</strong> (doar model «Privat · PF»)</div>
+                          <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5}}>Aceste câmpuri apar în contract doar pentru eveniment <strong>privat</strong> cu beneficiar <strong>Persoană fizică</strong>. La «Privat · firmă» și «Public» se folosește blocul juridic firmă (fără aceste rânduri).</p>
                         </div>
                         <div><label style={sty.l}>Etichetă înainte de nume (ex. Persoană fizică:)</label><input value={cm.cap1BeneficiarPartyLabel||""} onChange={e=>patchCm({ cap1BeneficiarPartyLabel: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                         <div><label style={sty.l}>Text «cu următoarele date...»</label><input value={cm.cap1BeneficiarIdIntro||""} onChange={e=>patchCm({ cap1BeneficiarIdIntro: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
@@ -8472,9 +8513,6 @@ function App() {
                         <div><label style={sty.l}>Rând e-mail</label><input value={cm.cap1BenLblEmail||""} onChange={e=>patchCm({ cap1BenLblEmail: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                         <div><label style={sty.l}>Rând telefon</label><input value={cm.cap1BenLblTel||""} onChange={e=>patchCm({ cap1BenLblTel: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                         <div><label style={sty.l}>Încheiere Beneficiar (înainte de Cap. 2)</label><textarea value={cm.cap1BeneficiarClosing||""} onChange={e=>patchCm({ cap1BeneficiarClosing: e.target.value })} style={{...sty.i,minHeight:48,resize:"vertical",fontSize:12}} placeholder={"**Beneficiar** pentru îngroșat"}/></div>
-                        <div style={{marginTop:12,padding:"10px 12px",borderRadius:8,background:"rgba(245,158,11,.08)",border:"1px solid rgba(245,158,11,.25)",fontSize:10,color:th.tm,lineHeight:1.5}}>
-                          <strong style={{color:th.t}}>Privat + Firmă:</strong> nu are câmpuri suplimentare în Docs — structura e fixă în aplicație (societate, sediu, ONRC…). Alegerea <strong>Firmă</strong> e în formularul evenimentului.
-                        </div>
                       </> : null}
                     </div>
                     {[{ k:"art21", l:"Art. 2.1 (obiect)" },{ k:"art31", l:"Art. 3.1" },{ k:"art42", l:"Art. 4.2 (plată RON)" },{ k:"art43Intro", l:"Art. 4.3 introducere" },{ k:"art43a", l:"Art. 4.3 a)" },{ k:"art43b", l:"Art. 4.3 b)" },{ k:"art44", l:"Art. 4.4 penalități" }].map(({k,l})=>(
@@ -8497,8 +8535,8 @@ function App() {
                     ))}
                   </div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8,marginTop:16}}>
-                    <button type="button" onClick={()=>{saveTemplates((tpl)=>({...tpl,[cmKey]:mergeContractModelFromTemplates({}, isPr)}));showToast("Reset la textele implicite ✓");}} style={sty.bg}>Reset la implicit</button>
-                    <button type="button" onClick={()=>{saveTemplates((tpl)=>{const cur=mergeContractModelFromTemplates(tpl,isPr);return {...tpl,[cmKey]:{...cur,v:(Number(cur.v)||1)+1}};});showToast("Versiune incrementată — oferte noi folosesc acest model");}} style={{...sty.b,padding:"8px 14px",fontSize:12}}>Salvează ca versiune nouă (v++)</button>
+                    <button type="button" onClick={()=>{saveTemplates((tpl)=>({...tpl,[cmKey]:mergeContractModelFromTemplatesByKey({}, cmKey)}));showToast("Reset la textele implicite ✓");}} style={sty.bg}>Reset la implicit</button>
+                    <button type="button" onClick={()=>{saveTemplates((tpl)=>{const cur=mergeContractModelFromTemplatesByKey(tpl,cmKey);return {...tpl,[cmKey]:{...cur,v:(Number(cur.v)||1)+1}};});showToast("Versiune incrementată — oferte noi folosesc acest model");}} style={{...sty.b,padding:"8px 14px",fontSize:12}}>Salvează ca versiune nouă (v++)</button>
                   </div>
                 </div>;
               })()}
