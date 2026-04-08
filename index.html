@@ -646,7 +646,7 @@ const getSvcCost = (ev, prices) => {
 };
 const getSvcCostBreakdown = (ev, prices) => {
   const p = prices || {};
-  const CURS = ev?.cursLei || 5;
+  const CURS = getCursLeiPrincipal(ev);
   const svc = ev?.svc || {}; const svcp = ev?.svcp || {};
   const sunetCost = p.sunetCost ?? 150;
   const luminiCost = p.luminiCost ?? (p.lumini ?? 500);
@@ -803,7 +803,86 @@ function formatSbPasswordLoginError(error) {
   return raw;
 }
 const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei — soundman în obiect e legacy; suma efectivă pentru finanțe = getSoundmanOutsourceLei
+/** Reper transport logistică: Casa Studenților, Bd. Regele Carol I 9, Timișoara (coord. aprox. OSM). */
+const TRANSPORT_REF_TIMISOARA = { lat: 45.74685, lon: 21.22595, label: "Casa Studenților · Bd. Regele Carol I 9, Timișoara" };
+const TRANSPORT_FREE_RADIUS_KM = 25;
+/** Lei / km parcurs suplimentar dus-întors (peste 25 km sens unic față de reper). */
+const TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP = 3;
+/** +3 lei/km dus-întors dacă evenimentul include lumini + ecran LED + scenă/podium. */
+const TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP = 3;
+const haversineKm = (lat1, lon1, lat2, lon2) => {
+  const R = 6371;
+  const rad = (d) => (d * Math.PI) / 180;
+  const dLat = rad(lat2 - lat1);
+  const dLon = rad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+const hasTransportHeavyExtras = (svc) => !!(svc && svc.lumini && svc.ecran && svc.scena);
+/** km sens unic reper Timișoara → locație: manual `transportKmOneWay`, apoi coordonate venue, apoi `dist` (oraș / fallback). */
+const getTransportDistanceKmOneWay = (ev) => {
+  if (ev?.transportKmOneWay != null && ev.transportKmOneWay !== "") {
+    const m = Number(ev.transportKmOneWay);
+    if (Number.isFinite(m) && m >= 0) return m;
+  }
+  const la = ev?.venueLat;
+  const lo = ev?.venueLng;
+  if (typeof la === "number" && typeof lo === "number" && Number.isFinite(la) && Number.isFinite(lo)) {
+    return haversineKm(TRANSPORT_REF_TIMISOARA.lat, TRANSPORT_REF_TIMISOARA.lon, la, lo);
+  }
+  const d = Number(ev?.dist);
+  if (Number.isFinite(d) && d > 0) return d;
+  return 0;
+};
+const computeTransportKmSurchargeLei = (ev) => {
+  const d = getTransportDistanceKmOneWay(ev);
+  if (!Number.isFinite(d) || d <= TRANSPORT_FREE_RADIUS_KM) return 0;
+  const extraOneWayKm = d - TRANSPORT_FREE_RADIUS_KM;
+  const extraRoundTripKm = extraOneWayKm * 2;
+  const rate =
+    TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP +
+    (hasTransportHeavyExtras(ev?.svc) ? TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP : 0);
+  return Math.round(extraRoundTripKm * rate);
+};
+/**
+ * Transport total lei în fișă: tarif din șablon (implicit 100) + supliment distanță.
+ * Dacă `transportTariffManual`, se folosește valoarea din `fixedCosts.transport`.
+ */
+const resolveEventTransportLei = (ev, spCfg) => {
+  const templateT =
+    Number((spCfg || {}).fixedCostTransport ?? DEFAULT_SERVICE_PRICES.fixedCostTransport ?? DEFAULT_FIXED_COSTS.transport) ||
+    DEFAULT_FIXED_COSTS.transport;
+  const autoTotal = Math.max(0, Math.round(templateT + computeTransportKmSurchargeLei(ev)));
+  if (ev?.transportTariffManual === true && ev.fixedCosts?.transport != null && ev.fixedCosts.transport !== "") {
+    const m = Number(ev.fixedCosts.transport);
+    if (Number.isFinite(m) && m >= 0) return Math.round(m);
+  }
+  return autoTotal;
+};
 const CURS_DEFAULT = 5; // 1€ = 5 lei
+const cursLeiNum = (v, fb = CURS_DEFAULT) => {
+  const n = Number(v);
+  return n > 0 ? n : fb;
+};
+/** Curs „principal” pe eveniment: ofertă, logistică (lei→EUR), linii tehnic. */
+const getCursLeiPrincipal = (ev) => cursLeiNum(ev?.cursLei);
+/** Curs la încasarea avansului pe firmă (ex. BNR în ziua plății avansului). */
+const getCursLeiAvans = (ev) => cursLeiNum(ev?.cursLeiAvans, getCursLeiPrincipal(ev));
+/** Curs la încasarea restului pe firmă (ex. BNR în ziua plății restului). */
+const getCursLeiRest = (ev) => cursLeiNum(ev?.cursLeiRest, getCursLeiPrincipal(ev));
+/**
+ * Impozit 1% pe încasările pe firmă — pentru contract în EUR, baza în lei folosește cursAvans/cursRest;
+ * rezultatul e în moneda evenimentului (EUR: împărțire la curs principal).
+ */
+const getImpVenitFisa = (ev, isLei, avFirma, restFirma, dep, rest) => {
+  if (!avFirma && !restFirma) return 0;
+  if (isLei) return Math.round(((avFirma ? dep : 0) + (restFirma ? rest : 0)) * 0.01 * 100) / 100;
+  const CURS = getCursLeiPrincipal(ev);
+  const impRon = Math.round(((avFirma ? dep * getCursLeiAvans(ev) : 0) + (restFirma ? rest * getCursLeiRest(ev) : 0)) * 0.01 * 100) / 100;
+  return Math.round((impRon / CURS) * 100) / 100;
+};
 const DEFAULT_SERVICE_PRICES = {
   sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0,
   tehnicPerService:120, tehnicExtraPerService:40,
@@ -894,7 +973,9 @@ const techSlotPayeeLabel = (slotCfg) => {
  */
 const buildFinanceFisaModel = (ev, servicePrices) => {
   const spCfg = { ...DEFAULT_SERVICE_PRICES, ...(servicePrices || {}) };
-  const CURS = ev.cursLei || CURS_DEFAULT;
+  const CURS = getCursLeiPrincipal(ev);
+  /** Curs pentru conversia pool-ului în lei (împărțire pe firmă la rest). */
+  const cursPoolLei = getCursLeiRest(ev);
   const isLei = ev.valuta === "lei";
   const MULT = isLei ? CURS : 1;
   const isPrivate = ev.cat === "private";
@@ -905,7 +986,19 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
   const total = (ev.fee || 0) + svcTot;
   const dep = ev.dep || 0;
   const rest = total - dep;
-  const impVenit = Math.round(((avFirma ? dep : 0) + (restFirma ? rest : 0)) * 0.01 * 100) / 100;
+  const impVenit = getImpVenitFisa(ev, isLei, avFirma, restFirma, dep, rest);
+  const rawImpAvLei = avFirma ? (isLei ? dep * 0.01 : dep * getCursLeiAvans(ev) * 0.01) : 0;
+  const rawImpRestLei = restFirma ? (isLei ? rest * 0.01 : rest * getCursLeiRest(ev) * 0.01) : 0;
+  const rawImpSum = rawImpAvLei + rawImpRestLei;
+  let impVenitAvans = 0;
+  let impVenitRest = 0;
+  if (impVenit > 0 && rawImpSum > 0) {
+    if (avFirma && restFirma) {
+      impVenitAvans = Math.round((rawImpAvLei / rawImpSum) * impVenit * 100) / 100;
+      impVenitRest = Math.round((impVenit - impVenitAvans) * 100) / 100;
+    } else if (avFirma) impVenitAvans = impVenit;
+    else if (restFirma) impVenitRest = impVenit;
+  }
   const svcCostEur = typeof getSvcCost === "function" ? getSvcCost(ev, servicePrices) : 0;
   const svcCost = Math.round(svcCostEur * MULT * 100) / 100;
   const netDupaTax = Math.max(0, total - impVenit - svcCost);
@@ -916,6 +1009,7 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
     transport: Number(spCfg.fixedCostTransport ?? DEFAULT_FIXED_COSTS.transport) || DEFAULT_FIXED_COSTS.transport,
   };
   const fc = { ...fcDefaults, ...(ev.fixedCosts || {}) };
+  fc.transport = resolveEventTransportLei(ev, spCfg);
   const soundOutLei = getSoundmanOutsourceLei(ev, spCfg);
   const fcLeiTotal = (fc.technician || 0) + (fc.equipment || 0) + soundOutLei + (fc.transport || 0);
   const fcEur = fcLeiTotal / CURS;
@@ -961,7 +1055,7 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
   const shares = {};
   MEMBERS.forEach(m => { shares[m.id] = (baseShares[m.id] || 0) + (roleBonus[m.id] || 0); });
   const shareTotal = MEMBERS.reduce((s, m) => s + (shares[m.id] || 0), 0);
-  const poolLeiExact = pool * CURS;
+  const poolLeiExact = pool * cursPoolLei;
   const exactLeiNormalized = {};
   MEMBERS.forEach(m => {
     exactLeiNormalized[m.id] =
@@ -1011,7 +1105,7 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
     const { alloc: baniAlloc } = allocateSteps(targetBani, stepBani, quotaBani);
     MEMBERS.forEach(m => {
       roundedSharesLei[m.id] = baniAlloc[m.id] / 100;
-      roundedShares[m.id] = Math.round((roundedSharesLei[m.id] / CURS) * 100) / 100;
+      roundedShares[m.id] = Math.round((roundedSharesLei[m.id] / cursPoolLei) * 100) / 100;
     });
     roundingAdjLei = Math.round((poolLei - MEMBERS.reduce((s, m) => s + (roundedSharesLei[m.id] || 0), 0)) * 100) / 100;
     const roundedPoolTotalEur = MEMBERS.reduce((acc, m) => acc + (roundedShares[m.id] || 0), 0);
@@ -1029,7 +1123,7 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
   const hasRounding = roundingInLei ? Math.abs(roundingAdjLei) >= 0.01 : Math.abs(roundingAdjFond) > 0.001;
   return {
     CURS, isLei, MULT, isPrivate, avFirma, restFirma, anyFirma, onFirma,
-    svcTot, total, dep, rest, impVenit, svcCostEur, svcCost, netDupaTax,
+    svcTot, total, dep, rest, impVenit, impVenitAvans, impVenitRest, svcCostEur, svcCost, netDupaTax,
     fc, fcLeiTotal, fcEur, fcBase, fc16, fcEurEffective, netDupaFixed,
     fondDupCheltPct, fond7, dupaFond, div16, dupaDiv,
     leadPct, adminPct, socialPct, stagePct, leadMc, adminMc, stageMc, leadName,
@@ -1158,10 +1252,11 @@ const getCollaboratorCostLines = (ev, collaboratorKey, servicePrices) => {
   const sp = servicePrices || {};
   const breakdown = typeof getSvcCostBreakdown === "function" ? getSvcCostBreakdown(ev, sp) : [];
   const byK = Object.fromEntries((breakdown || []).map(row => [row.k, row]));
-  const curs = Number(ev.cursLei) > 0 ? Number(ev.cursLei) : CURS_DEFAULT;
-  const fixed = { ...DEFAULT_FIXED_COSTS, ...(ev.fixedCosts || {}) };
-  const lines = [];
+  const curs = getCursLeiPrincipal(ev);
   const spMerged = { ...DEFAULT_SERVICE_PRICES, ...sp };
+  const fixed = { ...DEFAULT_FIXED_COSTS, ...(ev.fixedCosts || {}) };
+  fixed.transport = resolveEventTransportLei(ev, spMerged);
+  const lines = [];
   if (collaboratorKey === "prezent") {
     if (ev.svc?.sunet && byK.sunet) lines.push({ label: byK.sunet.label || "Sistem sunet", eur: Number(byK.sunet.cost) || 0 });
     lines.push({ label: "Echipament logistic (fix)", eur: (Number(fixed.equipment) || 0) / curs });
@@ -1276,13 +1371,14 @@ function PayoutStatusPanel({ ev, onPatch, th, readOnly, showToast, servicePrices
 }
 
 const calcFond7 = (ev) => {
-  const CURS = ev.cursLei||CURS_DEFAULT;
+  const CURS = getCursLeiPrincipal(ev);
   const fee = (ev.fee||0) + Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
   const onFirma = ev.payType==="firma";
   const taxVenit = onFirma ? fee*0.01 : 0;
-  const fc = ev.fixedCosts||DEFAULT_FIXED_COSTS;
+  const fc = { ...DEFAULT_FIXED_COSTS, ...(ev.fixedCosts || {}) };
+  const transportLei = resolveEventTransportLei(ev, DEFAULT_SERVICE_PRICES);
   const soundLei = getSoundmanOutsourceLei(ev, DEFAULT_SERVICE_PRICES);
-  const fcEur = ((fc.technician||0)+(fc.equipment||0)+soundLei+(fc.transport||0))/CURS;
+  const fcEur = ((fc.technician||0)+(fc.equipment||0)+soundLei+transportLei)/CURS;
   const netAfterFixed = Math.max(0, fee - taxVenit - fcEur);
   const pct = Math.min(100, Math.max(0, Number(ev.fondDupCheltPct ?? 7)));
   return Math.round(netAfterFixed*pct/100*100)/100;
@@ -5052,12 +5148,12 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
     const cityName = a.city || a.town || a.village || a.municipality || a.county || "";
     const mapUrl = `https://www.openstreetmap.org/?mlat=${place.lat}&mlon=${place.lon}&zoom=17`;
 
-    // Distanță față de TM
-    const cityMatch = RO_CITIES.find(c =>
-      cityName.toLowerCase().includes(c.n.toLowerCase()) ||
-      c.n.toLowerCase().includes(cityName.toLowerCase())
-    );
-    const distKm = cityMatch ? cityMatch.km : 0;
+    const lat = parseFloat(place.lat);
+    const lon = parseFloat(place.lon);
+    const distHaversine =
+      Number.isFinite(lat) && Number.isFinite(lon)
+        ? Math.round(haversineKm(TRANSPORT_REF_TIMISOARA.lat, TRANSPORT_REF_TIMISOARA.lon, lat, lon) * 10) / 10
+        : 0;
 
     setVenueVal(name);
     setCityQuery(cityName);
@@ -5065,14 +5161,29 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
     setVenueMapUrl(mapUrl);
     setShowVenueDrop(false);
     setVenueResults([]);
-    onUpdate({ venue: name, city: cityName, dist: distKm });
+    onUpdate({
+      venue: name,
+      city: cityName,
+      dist: distHaversine,
+      venueLat: lat,
+      venueLng: lon,
+      transportKmOneWay: undefined,
+      transportTariffManual: false,
+    });
   };
 
   const handleVenueChange = (v) => {
     setVenueVal(v);
     setVenueAddress("");
     setVenueMapUrl("");
-    onUpdate({ venue: v, city: cityQuery, dist: dist||0 });
+    onUpdate({
+      venue: v,
+      city: cityQuery,
+      dist: dist || 0,
+      venueLat: undefined,
+      venueLng: undefined,
+      transportTariffManual: false,
+    });
     searchNominatim(v);
   };
 
@@ -5083,7 +5194,15 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
   const pickCity = (c) => {
     setCityQuery(c.n);
     setShowCityDrop(false);
-    onUpdate({ venue: venueVal, city: c.n, dist: c.km });
+    onUpdate({
+      venue: venueVal,
+      city: c.n,
+      dist: c.km,
+      venueLat: undefined,
+      venueLng: undefined,
+      transportKmOneWay: undefined,
+      transportTariffManual: false,
+    });
   };
 
   // Formatare adresă scurtă pentru dropdown (scoate România și codul poștal)
@@ -5136,7 +5255,7 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
           </label>
           <input
             value={cityQuery}
-            onChange={e=>{setCityQuery(e.target.value);setShowCityDrop(true);onUpdate({venue:venueVal,city:e.target.value,dist:0});}}
+            onChange={e=>{setCityQuery(e.target.value);setShowCityDrop(true);onUpdate({venue:venueVal,city:e.target.value,dist:0,venueLat:undefined,venueLng:undefined,transportTariffManual:false});}}
             onFocus={()=>setShowCityDrop(true)}
             onBlur={()=>setTimeout(()=>setShowCityDrop(false),150)}
             style={iStyle}
@@ -5168,6 +5287,9 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
           </a>
         </div>
       )}
+      <div style={{fontSize:10,color:th.tm,lineHeight:1.45}}>
+        <strong>Transport (fișă financiară):</strong> față de {TRANSPORT_REF_TIMISOARA.label}, până la 25 km sens unic rămâne tariful din șablon (implicit 100 lei); peste → +3 lei / km parcurs suplimentar <strong>dus-întors</strong>. Cu <strong>lumini + ecran LED + scenă/podium</strong> în servicii → încă +3 lei / km (același calcul). Distanța după selecție din listă = estimare aeriană.
+      </div>
     </div>
   );
 }
@@ -5385,6 +5507,8 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     dateOptions: (mData?.dateOptions && mData.dateOptions.length) ? [...mData.dateOptions] : [""],
     li: mData?.li||"", sc: mData?.sc||"", ss: mData?.ss||"", lo: mData?.lo||"",
     venue: mData?.venue||"", city: mData?.city||"", dist: mData?.dist||0, locPhone: mData?.locPhone||"", locAddress: mData?.locAddress||"",
+    venueLat: mData?.venueLat, venueLng: mData?.venueLng,
+    transportKmOneWay: mData?.transportKmOneWay, transportTariffManual: mData?.transportTariffManual ?? false,
     cn: mData?.cn||"", cp: mData?.cp||"", ce: mData?.ce||"",
     rep: mData?.rep||(isP?1:1),
     repDurs: mData?.repDurs||[],
@@ -5485,7 +5609,12 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     if (k === "month" && !(fm.dateMonth && /^\d{4}-\d{2}$/.test(fm.dateMonth))) { showToast?.("Alege luna și anul.", "error"); return; }
     const title = fm.cn ? (isP ? `${fm.type} ${fm.cn}` : `${fm.type} - ${fm.cn}`) : "Eveniment nou";
     const dp = packDateForSave();
-    const payload = { ...fm, ...dp, title, ...extra };
+    const spT = { ...DEFAULT_SERVICE_PRICES, ...(templates?.servicePrices || {}) };
+    let payload = { ...fm, ...dp, title, ...extra };
+    if (!payload.transportTariffManual) {
+      const tr = resolveEventTransportLei(payload, spT);
+      payload = { ...payload, fixedCosts: { ...payload.fixedCosts, transport: tr } };
+    }
     if (payload.techAssign) {
       payload.techAssign = {
         t1: { ...DEFAULT_TECH_ASSIGN_T1(), ...(payload.techAssign.t1 || {}) },
@@ -5630,9 +5759,28 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
               </div>}
               <LocationSearch
                 venue={fm.venue} city={fm.city} dist={fm.dist}
-                onUpdate={({venue,city,dist})=>{u("venue",venue);u("city",city);u("dist",dist);}}
+                onUpdate={(patch)=>setFm(p=>({...p,...patch}))}
                 sty={sty} th={th} mob={mob}
               />
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={sty.l}>Distanță rută (km, o singură direcție) — opțional, suprascrie estimarea</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.1}
+                  value={fm.transportKmOneWay ?? ""}
+                  onChange={e=>{
+                    const raw=e.target.value.trim();
+                    setFm(p=>({...p,transportKmOneWay:raw===""?undefined:Math.max(0,Number(raw)||0),transportTariffManual:false}));
+                  }}
+                  style={iStyle}
+                  placeholder={`Lasă gol: din hartă / oraș · reper: ${TRANSPORT_FREE_RADIUS_KM} km TM`}
+                />
+                <div style={{fontSize:10,color:th.tm,marginTop:4}}>
+                  Tarif transport calculat acum: <strong style={{color:th.t}}>{resolveEventTransportLei(fm,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})})} lei</strong>
+                  {fm.transportTariffManual ? " (manual)" : ""}
+                </div>
+              </div>
               <div><label style={sty.l}>Telefon locație</label><input value={fm.locPhone||""} onChange={e=>u("locPhone",e.target.value)} style={iStyle} placeholder="+40..."/></div>
               <div><label style={sty.l}>Adresă locație</label><input value={fm.locAddress||""} onChange={e=>u("locAddress",e.target.value)} style={iStyle} placeholder="Strada, nr., oraș..."/></div>
               {!isP&&<div style={{gridColumn:"1/-1"}}>
@@ -5839,13 +5987,25 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
               <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`,marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:700,marginBottom:8}}>Cheltuieli fixe logistică (lei)</div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:8}}>
-                  {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Echipamente"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                  {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Echipamente"}].map(({k,l})=>(
                     <label key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
                       <span style={{flex:1,color:th.tm}}>{l}</span>
                       <input type="number" min={0} step={10} value={Number(fm.fixedCosts?.[k] ?? 0) || 0} onChange={e=>u("fixedCosts",{...(fm.fixedCosts||{}),[k]:Math.max(0,Number(e.target.value)||0)})} style={{...iStyle,width:90,padding:"6px 8px",textAlign:"right"}}/>
                       <span style={{color:th.tm}}>lei</span>
                     </label>
                   ))}
+                  <label style={{display:"flex",flexDirection:"column",gap:4,fontSize:11,gridColumn:mob?"1/-1":"auto"}}>
+                    <span style={{color:th.tm}}>Transport (auto din locație sau manual)</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                      <input type="number" min={0} step={10}
+                        value={fm.transportTariffManual ? (Number(fm.fixedCosts?.transport)||0) : resolveEventTransportLei(fm,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})})}
+                        onChange={e=>setFm(p=>({...p,transportTariffManual:true,fixedCosts:{...p.fixedCosts,transport:Math.max(0,Number(e.target.value)||0)}}))}
+                        style={{...iStyle,width:90,padding:"6px 8px",textAlign:"right"}}
+                      />
+                      <span style={{color:th.tm}}>lei</span>
+                      {fm.transportTariffManual&&<button type="button" onClick={()=>setFm(p=>({...p,transportTariffManual:false,fixedCosts:{...p.fixedCosts,transport:resolveEventTransportLei(p,{...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})})}}))} style={{...sty.bg,fontSize:10,padding:"4px 8px"}}>↻ Auto</button>}
+                    </div>
+                  </label>
                 </div>
                 <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${th.b}`}}>
                   <div style={{fontSize:10,color:th.tm,marginBottom:6}}>Sunetist (finanțe · colaboratori)</div>
@@ -8036,7 +8196,7 @@ function App() {
     const rev = sg.reduce((s,e)=>s+(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0),0);
     const sp = templates?.servicePrices || {};
     const toEurEv = (e, amt) => {
-      const c = e.cursLei || CURS_DEFAULT;
+      const c = getCursLeiPrincipal(e);
       return e.valuta === "lei" ? (Number(amt) || 0) / c : (Number(amt) || 0);
     };
     let expSvc = 0;
@@ -8098,7 +8258,7 @@ function App() {
       const hasRealDateLabel = dateLabelRaw && dateLabelRaw !== "—" && dateLabelRaw.toLowerCase() !== "fără dată";
       const contractLabel = `C${e.offerNr ?? "?"}`;
       const label = hasRealDateLabel ? `${typeLabel} · ${dateLabelRaw} · ${contractLabel}` : `${typeLabel} · ${contractLabel}`;
-      const curs = e.cursLei || CURS_DEFAULT;
+      const curs = getCursLeiPrincipal(e);
       const toEur = (amt) => (e.valuta === "lei" ? (Number(amt) || 0) / curs : (Number(amt) || 0));
       const dateStr = hasRealDateLabel ? dateLabelRaw : contractLabel;
       const br = typeof getSvcCostBreakdown === "function" ? getSvcCostBreakdown(e, sp) : [];
@@ -10974,7 +11134,7 @@ function App() {
                     const avFirma=ev.avFirma??(ev.payType==="firma");
                     const restFirma=ev.restFirma??(ev.payType==="firma");
                     const svcCost=typeof getSvcCost==="function"?getSvcCost(ev,templates?.servicePrices):0;
-                    const fond7Val=(()=>{try{const C=ev.cursLei||5;const spL={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};const impV=Math.round(((avFirma?dep:0)+(restFirma?rest:0))*0.01*100)/100;const fc={technician:600,equipment:1000,soundman:400,transport:100,...(ev.fixedCosts||{})};const soundL=getSoundmanOutsourceLei(ev,spL);const fcL=(fc.technician||0)+(fc.equipment||0)+soundL+(fc.transport||0);const fcE=fcL/C;const fc16r=restFirma?Math.round(fcE*0.16*100)/100:0;const net=Math.max(0,tot-impV-svcCost-fcE-fc16r);const pct=Math.min(100,Math.max(0,Number(ev.fondDupCheltPct??7)));return Math.round(net*pct/100*100)/100;}catch(e){return 0;}})();
+                    const fond7Val=(()=>{try{const C=getCursLeiPrincipal(ev);const spL={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};const isLv=v==="lei";const impV=getImpVenitFisa(ev,isLv,avFirma,restFirma,dep,rest);const fc={technician:600,equipment:1000,soundman:400,transport:100,...(ev.fixedCosts||{})};fc.transport=resolveEventTransportLei(ev,spL);const soundL=getSoundmanOutsourceLei(ev,spL);const fcL=(fc.technician||0)+(fc.equipment||0)+soundL+(fc.transport||0);const fcE=fcL/C;const fc16r=restFirma?Math.round(fcE*0.16*100)/100:0;const net=Math.max(0,tot-impV-svcCost-fcE-fc16r);const pct=Math.min(100,Math.max(0,Number(ev.fondDupCheltPct??7)));return Math.round(net*pct/100*100)/100;}catch(e){return 0;}})();
                     const totalFond=dep+fond7Val;
                     return <div style={{display:"flex",flexDirection:"column",gap:10}}>
                       <div>
@@ -10993,13 +11153,13 @@ function App() {
                           <div onClick={()=>{const nd=!ev.dp;updEv({dp:nd,...(nd&&ev.st==="plata_avans"?{st:"confirmat"}:{})});showToast(nd?(ev.st==="plata_avans"?"Avans încasat ✓ — confirmat":"Avans: încasat ✓"):"Avans: neîncasat");}} style={{padding:12,borderRadius:10,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":th.b}`,transition:"border-color .15s"}}>
                             <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Avans {ev.dp?"✓":""}</div>
                             <div style={{fontSize:16,fontWeight:700,color:ev.dp?"#22c55e":"#ef4444"}}>{fFmt(dep,v)}</div>
-                            {avFirma&&ev.cursLei&&dep>0&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(dep*ev.cursLei).toLocaleString("ro-RO")} lei</div>}
+                            {avFirma&&dep>0&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(dep*getCursLeiAvans(ev)).toLocaleString("ro-RO")} lei</div>}
                             <div style={{fontSize:9,color:ev.dp?"#22c55e":"#ef4444",marginTop:2}}>{ev.dp?"Încasat":"Neîncasat · click"}</div>
                           </div>
                           <div onClick={()=>{updEv({restPaid:!ev.restPaid});showToast(ev.restPaid?"Rest: neplătit":"Rest: plătit integral ✓");}} style={{padding:12,borderRadius:10,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.restPaid?"#22c55e":th.b}`,transition:"border-color .15s"}}>
                             <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Rest {ev.restPaid?"✓":""}</div>
                             <div style={{fontSize:16,fontWeight:700,color:ev.restPaid?"#22c55e":th.t}}>{fFmt(rest,v)}</div>
-                            {restFirma&&ev.cursLei&&rest>0&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(rest*ev.cursLei).toLocaleString("ro-RO")} lei</div>}
+                            {restFirma&&rest>0&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(rest*getCursLeiRest(ev)).toLocaleString("ro-RO")} lei</div>}
                             <div style={{fontSize:9,color:ev.restPaid?"#22c55e":"#f59e0b",marginTop:2}}>{ev.restPaid?"Plătit integral":"Neîncasat · click"}</div>
                           </div>
                         </div>
@@ -11237,13 +11397,15 @@ function App() {
         // Auto-calculates shares on every update — no "Aplică" needed
         const calcShares=(e)=>{
           const spCfg={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};
-          const C=e.cursLei||CURS_DEFAULT;const isP=e.cat==="private";
+          const C=getCursLeiPrincipal(e);const isP=e.cat==="private";
           const svcT=Object.entries(e.svcp||{}).reduce((s,[k,v])=>s+(e.svc?.[k]?v:0),0);
           const tot=(e.fee||0)+svcT;const d=e.dep||0;const r=tot-d;
           const avF=e.avFirma??(e.payType==="firma");const rF=e.restFirma??(e.payType==="firma");
-          const impV=Math.round(((avF?d:0)+(rF?r:0))*0.01*100)/100;
+          const isLv=e.valuta==="lei";
+          const impV=getImpVenitFisa(e,isLv,avF,rF,d,r);
           const fcDefaults={technician:Number(spCfg.fixedCostTechnician??DEFAULT_FIXED_COSTS.technician)||DEFAULT_FIXED_COSTS.technician,equipment:Number(spCfg.fixedCostEquipment??DEFAULT_FIXED_COSTS.equipment)||DEFAULT_FIXED_COSTS.equipment,soundman:Number(spCfg.fixedCostSoundman??DEFAULT_FIXED_COSTS.soundman)||DEFAULT_FIXED_COSTS.soundman,transport:Number(spCfg.fixedCostTransport??DEFAULT_FIXED_COSTS.transport)||DEFAULT_FIXED_COSTS.transport};
           const fc={...fcDefaults,...(e.fixedCosts||{})};
+          fc.transport=resolveEventTransportLei(e,spCfg);
           const soundL=getSoundmanOutsourceLei(e,spCfg);
           const fcL=(fc.technician||0)+(fc.equipment||0)+soundL+(fc.transport||0);
           const fcE=fcL/C;const fc16=rF?Math.round(fcE*0.16*100)/100:0;
@@ -11272,14 +11434,14 @@ function App() {
           return out;
         };
         const upd=(patch)=>setEvs(p=>p.map(e=>{
-          if(e.id!==ev.id)return e;
+          if(String(e.id)!==String(ev.id))return e;
           const ne={...e,...patch};
           return {...ne,sp:calcShares(ne)};
         }));
         const fisaM = buildFinanceFisaModel(ev, templates?.servicePrices);
         const {
           CURS, isLei, MULT, isPrivate, avFirma, restFirma, anyFirma, onFirma,
-          svcTot, total, dep, rest, impVenit, svcCost, netDupaTax,
+          svcTot, total, dep, rest, impVenit, impVenitAvans, impVenitRest, svcCost, netDupaTax,
           fc, fcLeiTotal, fcEur, fcBase, fc16, fcEurEffective, netDupaFixed,
           fondDupCheltPct, fond7, dupaFond, div16, dupaDiv,
           leadPct, adminPct, socialPct, stagePct, leadMc, adminMc, stageMc, leadName,
@@ -11312,32 +11474,43 @@ function App() {
 
               {/* Tip plată */}
               {(()=>{
-                const fetchBnr = async (patch) => {
+                const fetchBnr = async (scope, patch) => {
+                  const sc = scope || "principal";
                   try {
-                    showToast("Se preia cursul BNR...", "success", 1500);
+                    showToast("Se preia cursul EUR/RON (Frankfurter / ECB)…", "success", 1600);
                     const res = await fetch("https://api.frankfurter.app/latest?from=EUR&to=RON");
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const data = await res.json();
-                    const rate = Math.round(data.rates.RON * 100) / 100;
-                    const today = data.date;
-                    upd({cursLei: rate, ...(patch||{})});
-                    showToast(`Curs BNR ${today}: 1€ = ${rate} lei ✓`);
-                  } catch(e) {
-                    upd(patch||{});
-                    showToast("Nu s-a putut prelua cursul BNR — introdu manual", "error");
+                    const ron = data?.rates?.RON;
+                    const rate = Math.round(Number(ron) * 100) / 100;
+                    if (!(rate > 0)) throw new Error("Rată RON lipsă");
+                    const today = data.date || "";
+                    const base = { ...(patch || {}) };
+                    if (sc === "all" || sc === "principal") base.cursLei = rate;
+                    if (sc === "all" || sc === "avans") base.cursLeiAvans = rate;
+                    if (sc === "all" || sc === "rest") base.cursLeiRest = rate;
+                    upd(base);
+                    showToast(`Curs ${today ? today + " · " : ""}1€ = ${rate} lei (referință ECB, nu curs oficial BNR)`);
+                  } catch (err) {
+                    if (patch && Object.keys(patch).length) upd(patch);
+                    showToast("Nu s-a putut prelua cursul — verifică rețeaua sau introdu manual.", "error");
                   }
                 };
                 const handlePayType = (av, re) => {
                   const switchingToFirma = (av || re) && !(avFirma || restFirma);
-                  if (switchingToFirma) fetchBnr({avFirma:av, restFirma:re});
-                  else upd({avFirma:av, restFirma:re});
+                  if (switchingToFirma) fetchBnr("all", { avFirma: av, restFirma: re });
+                  else upd({ avFirma: av, restFirma: re });
                 };
                 const handleToggle = (k, currentVal) => {
                   const willBeFirma = !currentVal;
                   const alreadyFirma = avFirma || restFirma;
-                  if (willBeFirma && !alreadyFirma) fetchBnr({[k]: true});
-                  else upd({[k]: !currentVal});
+                  if (willBeFirma && !alreadyFirma) fetchBnr("all", { [k]: true });
+                  else upd({ [k]: !currentVal });
                 };
-                const CURS_ACT = ev.cursLei || CURS_DEFAULT;
+                const CURS_P = getCursLeiPrincipal(ev);
+                const CURS_A = getCursLeiAvans(ev);
+                const CURS_R = getCursLeiRest(ev);
+                const cursKey = `${ev.id}_c_${CURS_P}_${CURS_A}_${CURS_R}_${ev.cursLeiAvans}_${ev.cursLeiRest}`;
                 return <div>
                   <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tip plată</div>
                   {/* Shortcuts rapide */}
@@ -11349,30 +11522,49 @@ function App() {
                   </div>
                   {/* Granular toggles */}
                   <div style={{display:"flex",gap:6,marginBottom:8}}>
-                    {[{k:"avFirma",l:"Avans pe firmă",v:avFirma,amt:dep},{k:"restFirma",l:"Rest pe firmă",v:restFirma,amt:rest}].map(({k,l,v,amt})=>(
+                    {[{k:"avFirma",l:"Avans pe firmă",v:avFirma,amt:dep,cLei:CURS_A},{k:"restFirma",l:"Rest pe firmă",v:restFirma,amt:rest,cLei:CURS_R}].map(({k,l,v,amt,cLei})=>(
                       <div key={k} onClick={()=>handleToggle(k,v)} style={{flex:1,padding:"8px 10px",borderRadius:8,border:`2px solid ${v?"#f59e0b":th.b}`,cursor:"pointer",background:v?"rgba(245,158,11,.07)":"transparent",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{fontSize:11,color:v?"#f59e0b":th.tm,fontWeight:v?600:400}}>{l}</span>
                         <div style={{textAlign:"right"}}>
                           <div style={{fontSize:11,fontWeight:700,color:v?"#f59e0b":th.tm}}>{fv(amt)}</div>
-                          {v&&isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(amt*CURS_ACT).toLocaleString("ro-RO")} lei</div>}
-                          {v&&!isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(amt*CURS_ACT).toLocaleString("ro-RO")} lei · imp. 1%: {Math.round(amt*0.01*CURS_ACT).toLocaleString("ro-RO")} lei</div>}
+                          {v&&isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>bază imp. 1%: {Math.round(amt*0.01*100)/100} lei</div>}
+                          {v&&!isLei&&<div style={{fontSize:9,color:"#f59e0b",marginTop:1}}>{Math.round(amt*cLei).toLocaleString("ro-RO")} lei · bază imp. 1%: {Math.round(amt*0.01*cLei).toLocaleString("ro-RO")} lei</div>}
                           {!v&&<div style={{fontSize:9,color:th.tm}}>impozit 1%: {fv(amt*0.01)}</div>}
                         </div>
                       </div>
                     ))}
                   </div>
-                  {/* Curs BNR */}
-                  <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
-                    <span style={{fontSize:11,color:th.tm}}>Curs 1€ =</span>
-                    <input type="number" min={1} max={100} step={0.01} defaultValue={ev.cursLei||5} key={ev.id+"_curs_"+(ev.cursLei||5)} onBlur={e=>{const v=parseFloat(e.target.value)||5;upd({cursLei:v});}} style={{...sty.i,width:70,padding:5,fontSize:12}} placeholder="5.00"/>
-                    <span style={{fontSize:11,color:th.tm}}>lei</span>
-                    <button onClick={()=>fetchBnr()} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,border:`1px solid ${th.b}`,background:"transparent",color:"#f59e0b",fontSize:11,cursor:"pointer",fontWeight:600}}>↻ BNR azi</button>
-                    {(avFirma||restFirma)&&<div style={{fontSize:10,color:th.tm,width:"100%",marginTop:2}}>
-                      {avFirma&&<span>Avans: <strong style={{color:"#f59e0b"}}>{Math.round(dep*CURS_ACT).toLocaleString("ro-RO")} lei</strong></span>}
-                      {avFirma&&restFirma&&<span style={{margin:"0 6px"}}>·</span>}
-                      {restFirma&&<span>Rest: <strong style={{color:"#f59e0b"}}>{Math.round(rest*CURS_ACT).toLocaleString("ro-RO")} lei</strong></span>}
-                    </div>}
+                  {/* Cursuri EUR→RON: principal (ofertă / conversii), avans și rest (ziua încasării) */}
+                  <div style={{fontSize:10,color:th.ts,lineHeight:1.35,marginBottom:8}}>
+                    <strong>Principal</strong> — ofertă și logistică în lei. <strong>Avans</strong> / <strong>Rest</strong> — curs la data încasării pe firmă (bază impozit 1% în lei); conversia impozitului în € folosește cursul principal.
                   </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                    {[
+                      { id:"principal", label:"Principal (ofertă / logistică)", field:"cursLei", val:ev.cursLei },
+                      { id:"avans", label:"Avans pe firmă (zi încasare)", field:"cursLeiAvans", val:ev.cursLeiAvans },
+                      { id:"rest", label:"Rest pe firmă (zi încasare)", field:"cursLeiRest", val:ev.cursLeiRest },
+                    ].map(({ id, label, field, val }) => (
+                      <div key={field} style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                        <span style={{fontSize:11,color:th.tm,minWidth:200,flex:1}}>{label}</span>
+                        <span style={{fontSize:11,color:th.tm}}>1€ =</span>
+                        <input type="number" min={1} max={100} step={0.01} defaultValue={val != null && val !== "" ? Number(val) : CURS_P} key={`${cursKey}_${field}`} onBlur={(e) => {
+                          const raw = e.target.value;
+                          const n = parseFloat(raw);
+                          if (field === "cursLei") upd({ cursLei: Number.isFinite(n) && n > 0 ? n : CURS_DEFAULT });
+                          else if (!Number.isFinite(n) || n <= 0) upd({ [field]: undefined });
+                          else upd({ [field]: n });
+                        }} style={{...sty.i,width:76,padding:5,fontSize:12}} placeholder={String(CURS_P)}/>
+                        <span style={{fontSize:11,color:th.tm}}>lei</span>
+                        <button type="button" onClick={()=>fetchBnr(id)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:7,border:`1px solid ${th.b}`,background:"transparent",color:"#f59e0b",fontSize:11,cursor:"pointer",fontWeight:600}}>↻ Azi</button>
+                      </div>
+                    ))}
+                    <button type="button" onClick={()=>fetchBnr("all")} style={{alignSelf:"flex-start",display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,border:`1px solid ${th.b}`,background:th.ab,color:th.a,fontSize:11,cursor:"pointer",fontWeight:600}}>↻ Toate cele trei (aceeași rată azi)</button>
+                  </div>
+                  {(avFirma||restFirma)&&!isLei&&<div style={{fontSize:10,color:th.tm,width:"100%",marginTop:6,lineHeight:1.4}}>
+                    {avFirma&&<span>Avans în lei (curs avans): <strong style={{color:"#f59e0b"}}>{Math.round(dep*CURS_A).toLocaleString("ro-RO")} lei</strong></span>}
+                    {avFirma&&restFirma&&<span style={{margin:"0 6px"}}>·</span>}
+                    {restFirma&&<span>Rest în lei (curs rest): <strong style={{color:"#f59e0b"}}>{Math.round(rest*CURS_R).toLocaleString("ro-RO")} lei</strong></span>}
+                  </div>}
                 </div>;
               })()}
 
@@ -11411,9 +11603,9 @@ function App() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Cheltuieli fixe logistică</div>
-                  <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS},soundAttribution:"prezent"})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
+                  <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS},soundAttribution:"prezent",transportTariffManual:false})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
                 </div>
-                {[{k:"technician",l:"Tehnician (bază)"},{k:"equipment",l:"Echipamente"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                {[{k:"technician",l:"Tehnician (bază)"},{k:"equipment",l:"Echipamente"}].map(({k,l})=>(
                   <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                     <span style={{fontSize:12,flex:1}}>{l}</span>
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -11423,6 +11615,26 @@ function App() {
                     </div>
                   </div>
                 ))}
+                {(()=>{
+                  const tr=resolveEventTransportLei(ev,spCfgFinance);
+                  const trShow=ev.transportTariffManual?(Number(ev.fixedCosts?.transport)||0):tr;
+                  return <div style={{marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <span style={{fontSize:12,flex:1}}>Transport</span>
+                      <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",justifyContent:"flex-end"}}>
+                        <input type="number" value={trShow} onChange={e=>upd({transportTariffManual:true,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:Math.max(0,Number(e.target.value)||0)}})} style={{...sty.i,width:70,padding:4,fontSize:12,textAlign:"right"}}/>
+                        <span style={{fontSize:11,color:th.tm,width:22}}>lei</span>
+                        {!isLei&&<span style={{fontSize:11,color:th.tm,width:36}}>{fv(trShow/CURS)}</span>}
+                        {ev.transportTariffManual&&<button type="button" onClick={()=>upd({transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportTariffManual:false},spCfgFinance)}})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>↻ Auto</button>}
+                      </div>
+                    </div>
+                    <div style={{fontSize:10,color:th.tm,lineHeight:1.35,marginBottom:4}}>Până la 25 km (sens unic) față de {TRANSPORT_REF_TIMISOARA.label}: bază șablon; peste: +3 lei/km dus-întors{hasTransportHeavyExtras(ev.svc)?"; cu lumini+LED+scenă: încă +3 lei/km dus-întors":""}. Estimare aeriană din hartă sau km mai jos.</div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                      <span style={{fontSize:11,color:th.tm}}>Km o direcție (opțional)</span>
+                      <input type="number" min={0} step={0.1} value={ev.transportKmOneWay??""} placeholder="auto" onChange={e=>{const raw=e.target.value.trim();upd({transportKmOneWay:raw===""?undefined:Math.max(0,Number(raw)||0),transportTariffManual:false,fixedCosts:{...DEFAULT_FIXED_COSTS,...(ev.fixedCosts||{}),transport:resolveEventTransportLei({...ev,transportKmOneWay:raw===""?undefined:Math.max(0,Number(raw)||0),transportTariffManual:false},spCfgFinance)}});}} style={{...sty.i,width:72,padding:4,fontSize:12}}/>
+                    </div>
+                  </div>;
+                })()}
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                   <span style={{fontSize:12,flex:1}}>Sunetist</span>
                   <div style={{display:"flex",alignItems:"center",gap:6}}>
@@ -11446,8 +11658,8 @@ function App() {
                 <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Distribuție</div>
                 <div style={{background:th.h,borderRadius:8,padding:"10px 12px",display:"flex",flexDirection:"column",gap:2}}>
                   <Row l="Total brut" v={fv(total)} bold/>
-                  {avFirma&&<Row l={`Avans pe firmă 1% (din ${fv(dep)})`} v={"-"+fv(dep*0.01)} c="#f59e0b"/>}
-                  {restFirma&&<Row l={`Rest pe firmă 1% (din ${fv(rest)})`} v={"-"+fv(rest*0.01)} c="#f59e0b"/>}
+                  {avFirma&&<Row l={`Avans pe firmă 1% (din ${fv(dep)})`} v={"-"+fv(impVenitAvans)} c="#f59e0b"/>}
+                  {restFirma&&<Row l={`Rest pe firmă 1% (din ${fv(rest)})`} v={"-"+fv(impVenitRest)} c="#f59e0b"/>}
                   {impVenit>0&&<Row l="Total impozit venit 1%" v={"-"+fv(impVenit)} c="#ef4444"/>}
                   {svcCost>0&&<>{typeof getSvcCostBreakdown==="function"&&getSvcCostBreakdown(ev,templates?.servicePrices).map(({label,cost})=><Row key={label} l={label} v={"-"+fv(Math.round(cost*MULT*100)/100)} c="#ef4444"/>)}{<Row l="Cost servicii tehnice (furnizori) — total" v={"-"+fv(svcCost)} c="#ef4444" bold/>}</>}
                   {ev.dp&&<Row l="Avans (intrat în fond)" v={"-"+fv(dep)} c="#818cf8"/>}
