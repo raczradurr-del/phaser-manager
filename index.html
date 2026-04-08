@@ -6242,11 +6242,12 @@ function TourOverlay({ steps, step, setStep, setTab }) {
 
 function AIChatWidget(props) {
   var th=props.th,evs=props.evs,tasks=props.tasks,mob=props.mob;
+  var open=props.open===true;
+  var onOpenChange=props.onOpenChange||function(){};
   var aiSettings=props.aiSettings||{};
   var setAiSettings=props.setAiSettings||function(){};
   var apiKeys=aiSettings;
   var model="llama";
-  var _o=useState(false); var open=_o[0],setOpen=_o[1];
   var _ms=useState([]); var msgs=_ms[0],setMsgs=_ms[1];
   var _in=useState(""); var input=_in[0],setInput=_in[1];
   var _ld=useState(false); var loading=_ld[0],setLoading=_ld[1];
@@ -6304,17 +6305,20 @@ function AIChatWidget(props) {
 
   var hasKey=true;
 
-  return React.createElement("div",null,
-    React.createElement("button",{onClick:function(){setOpen(function(o){return !o;});},title:"AI Assistant",style:{position:"fixed",bottom:mob?72:24,right:20,zIndex:9999,width:50,height:50,borderRadius:25,background:open?"#6d28d9":"linear-gradient(135deg,#7c3aed,#4f46e5)",border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 4px 20px rgba(79,70,229,0.5)",fontSize:22,color:"#fff"}},open?"✕":"🤖"),
-    open&&React.createElement("div",{style:{position:"fixed",bottom:mob?0:82,right:mob?0:20,width:mob?"100%":"370px",height:mob?"78vh":"520px",background:th.c,border:"1px solid "+th.b,borderRadius:mob?"16px 16px 0 0":"16px",boxShadow:"0 8px 40px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",zIndex:9998,overflow:"hidden"}},
+  if (!open) return null;
+
+  return React.createElement(React.Fragment,null,
+    React.createElement("div",{key:"ai-backdrop",role:"presentation",style:{position:"fixed",inset:0,zIndex:10040,background:"rgba(0,0,0,.42)"},onClick:function(){onOpenChange(false);}}),
+    React.createElement("div",{key:"ai-panel",style:{position:"fixed",bottom:mob?0:24,right:mob?0:24,width:mob?"100%":"min(370px,calc(100vw - 48px))",maxWidth:mob?"100%":"370px",height:mob?"min(78vh,640px)":"min(520px,calc(100vh - 48px))",maxHeight:mob?"78vh":"calc(100vh - 48px)",background:th.c,border:"1px solid "+th.b,borderRadius:mob?"16px 16px 0 0":"16px",boxShadow:"0 8px 40px rgba(0,0,0,0.35)",display:"flex",flexDirection:"column",zIndex:10041,overflow:"hidden"},onClick:function(e){e.stopPropagation();}},
       React.createElement("div",{style:{padding:"11px 14px",borderBottom:"1px solid "+th.b,display:"flex",alignItems:"center",gap:8}},
+        React.createElement("button",{type:"button",onClick:function(){onOpenChange(false);},title:"Închide",style:{padding:"4px 8px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:14,color:th.t,lineHeight:1}},"✕"),
         React.createElement("span",{style:{fontSize:20}},"🤖"),
-        React.createElement("div",{style:{flex:1}},
+        React.createElement("div",{style:{flex:1,minWidth:0}},
           React.createElement("div",{style:{fontSize:13,fontWeight:700}},"AI Assistant"),
           React.createElement("div",{style:{fontSize:10,color:th.tm}},"🦙 Llama 3.1 · Cloudflare "+(hasKey?"✓":"— configurează Worker URL"))
         ),
-        React.createElement("button",{onClick:function(){setShowS(true);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"⚙️"),
-        React.createElement("button",{onClick:function(){setMsgs([]);},style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"🗑")
+        React.createElement("button",{type:"button",onClick:function(){setShowS(true);},title:"Setări AI",style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"⚙️"),
+        React.createElement("button",{type:"button",onClick:function(){setMsgs([]);},title:"Golește conversația",style:{padding:"4px 6px",border:"1px solid "+th.b,borderRadius:8,background:th.h,cursor:"pointer",fontSize:13}},"🗑")
       ),
       React.createElement("div",{style:{flex:1,overflowY:"auto",padding:12,display:"flex",flexDirection:"column",gap:8}},
         msgs.length===0&&React.createElement("div",{style:{textAlign:"center",color:th.tm,fontSize:12,marginTop:16}},
@@ -6325,12 +6329,12 @@ function AIChatWidget(props) {
         loading&&React.createElement("div",{style:{alignSelf:"flex-start",padding:"9px 12px",borderRadius:12,background:th.h,border:"1px solid "+th.b,fontSize:12,color:th.tm}},"⏳ Se gandeste..."),
         React.createElement("div",{ref:bottomRef})
       ),
-      React.createElement("div",{style:{padding:"10px 12px",borderTop:"1px solid "+th.b,display:"flex",gap:8}},
+      React.createElement("div",{style:{padding:mob?"10px 12px calc(10px + env(safe-area-inset-bottom))":"10px 12px",borderTop:"1px solid "+th.b,display:"flex",gap:8}},
         React.createElement("input",{value:input,onChange:function(e){setInput(e.target.value);},onKeyDown:function(e){if(e.key==="Enter"&&!e.shiftKey)sendMsg();},placeholder:"Scrie un mesaj...",style:{flex:1,padding:"9px 12px",borderRadius:10,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:12,outline:"none"}}),
         React.createElement("button",{onClick:sendMsg,disabled:loading||!input.trim(),style:{padding:"9px 14px",borderRadius:10,border:"none",background:loading||!input.trim()?th.ab:"linear-gradient(135deg,#7c3aed,#4f46e5)",color:"#fff",fontSize:16,cursor:loading||!input.trim()?"default":"pointer"}},"➤")
       )
     ),
-    showS&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10000},onClick:function(){setShowS(false);}},
+    showS&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:10060},onClick:function(){setShowS(false);}},
       React.createElement(SettingsAI,{th:th,apiKeys:apiKeys,onSave:saveSettings,onClose:function(){setShowS(false);}})
     )
   );
@@ -6367,6 +6371,7 @@ function App() {
   const [pinChangeNew, setPinChangeNew] = useState("");
   const [pinChangeConfirm, setPinChangeConfirm] = useState("");
   const [loginStep, setLoginStep] = useState("pick"); // "pick" | "signin"
+  const [loginCategory, setLoginCategory] = useState(""); // "" | "admin" | "member" | "collaborator"
   const [loginPick, setLoginPick] = useState("");
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPw, setLoginPw] = useState("");
@@ -6380,6 +6385,7 @@ function App() {
   const [sbMode, setSbMode] = useState("full");
   const [tab, setTab]     = useState("acasa");
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const [aiChatOpen, setAiChatOpen] = useState(false);
   const [evs, setEvs]     = useLocalStorageState(LS_KEYS.evs, loadEvs);
   const [genExp, setGE]   = useLocalStorageState(LS_KEYS.genExp, loadGenExp);
   const [bankExp, setBankExp] = useLocalStorageState(LS_KEYS.bankExp, loadBankExp);
@@ -6667,7 +6673,10 @@ function App() {
     try { remembered = localStorage.getItem(LS_KEY_PIN_REMEMBER) === "1"; } catch (e) {}
     if (!remembered) setPinUnlocked(false);
     setUser(null);
+    setAiChatOpen(false);
+    setMobileMoreOpen(false);
     setLoginStep("pick");
+    setLoginCategory("");
     setLoginPick("");
     setLoginEmail("");
     setLoginPw("");
@@ -8241,7 +8250,7 @@ function App() {
         <img src={LOGO_URL} alt="PHASER" style={{width:200,marginBottom:12}}/>
         {loginStep === "signin" && loginPick ? (
           <div style={{width:"100%",maxWidth:400,display:"flex",flexDirection:"column",gap:14}}>
-            <button type="button" onClick={()=>{ try { sessionStorage.removeItem(SS_KEY_LOGIN_LAST); } catch (e) {} setLoginStep("pick"); setLoginPick(""); setLoginEmail(""); setLoginPw(""); setAuthErr(""); }} style={{alignSelf:"flex-start",background:"transparent",border:"none",color:"#737373",fontSize:13,cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>← Alt profil</button>
+            <button type="button" onClick={()=>{ try { sessionStorage.removeItem(SS_KEY_LOGIN_LAST); } catch (e) {} setLoginStep("pick"); setLoginCategory(""); setLoginPick(""); setLoginEmail(""); setLoginPw(""); setAuthErr(""); }} style={{alignSelf:"flex-start",background:"transparent",border:"none",color:"#737373",fontSize:13,cursor:"pointer",padding:"4px 0",fontFamily:"inherit"}}>← Alt profil</button>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:40,lineHeight:1,marginBottom:10}}>{loginPick==="admin"?"🔐":(pickedCollaborator?.emoji || pickedMember?.emoji || "🎵")}</div>
               <div style={{fontSize:11,color:"#737373",textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Pasul 2 · Autentificare</div>
@@ -8271,12 +8280,39 @@ function App() {
           <div style={{width:"100%",maxWidth:440,display:"flex",flexDirection:"column",gap:18}}>
             <div style={{textAlign:"center"}}>
               <div style={{fontSize:11,color:"#737373",textTransform:"uppercase",letterSpacing:2,marginBottom:6}}>Pasul 1</div>
-              <h2 style={{fontSize:22,fontWeight:700,color:"#fafafa",margin:0,lineHeight:1.2}}>Alege profilul tău</h2>
+              <h2 style={{fontSize:22,fontWeight:700,color:"#fafafa",margin:0,lineHeight:1.2}}>{loginCategory ? "Alege profilul tău" : "Alege categoria"}</h2>
             </div>
-            <p style={{fontSize:13,color:"#888",textAlign:"center",lineHeight:1.55,margin:0}}>Alege profilul. Membrii/Admin folosesc Supabase, iar colaboratorii intră cu parola dedicată.</p>
+            <p style={{fontSize:13,color:"#888",textAlign:"center",lineHeight:1.55,margin:0}}>{loginCategory ? "Alege profilul din categoria selectată." : "Membrii/Admin folosesc Supabase, iar colaboratorii intră cu parola dedicată."}</p>
+            {loginCategory && <button type="button" onClick={()=>{ setLoginCategory(""); setLoginPick(""); setLoginEmail(""); setAuthErr(""); }} style={{alignSelf:"flex-start",background:"transparent",border:"none",color:"#737373",fontSize:13,cursor:"pointer",padding:"2px 0",fontFamily:"inherit"}}>← Înapoi la categorii</button>}
             <div style={{width:"100%",maxWidth:380,borderRadius:12,border:"1px solid #2a2a2a",overflow:"hidden",background:"#111"}}>
-              {MEMBERS.map(m=>(
-                <button key={m.id} type="button" className="ph-prof-row" onClick={()=>{ setLoginPick(m.id); setLoginEmail(MEMBER_AUTH_EMAIL[m.id]); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderBottom:"1px solid #262626",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+              {!loginCategory && <>
+                <button type="button" className="ph-prof-row" onClick={()=>{ setLoginCategory("admin"); setAuthErr(""); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderBottom:"1px solid #262626",background:"linear-gradient(180deg,#2a2210,#1a1508)",color:"#fdba74",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0}} aria-hidden>🔐</span>
+                  <span style={{flex:1,minWidth:0}}>
+                    <span style={{display:"block",fontWeight:700,fontSize:15}}>Admin</span>
+                    <span style={{display:"block",fontSize:12,opacity:0.9,marginTop:2}}>Acces administrare</span>
+                  </span>
+                  <span style={{color:"#92400e",fontSize:20,fontWeight:300,flexShrink:0}}>›</span>
+                </button>
+                <button type="button" className="ph-prof-row" onClick={()=>{ setLoginCategory("member"); setAuthErr(""); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderBottom:"1px solid #262626",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0,lineHeight:1}} aria-hidden>🎤</span>
+                  <span style={{flex:1,minWidth:0}}>
+                    <span style={{display:"block",fontWeight:700,fontSize:15}}>Membru</span>
+                    <span style={{display:"block",fontSize:12,color:"#737373",marginTop:2}}>Vezi toți membrii trupei</span>
+                  </span>
+                  <span style={{color:"#525252",fontSize:20,fontWeight:300,flexShrink:0}}>›</span>
+                </button>
+                <button type="button" className="ph-prof-row" onClick={()=>{ setLoginCategory("collaborator"); setAuthErr(""); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0,lineHeight:1}} aria-hidden>🛠️</span>
+                  <span style={{flex:1,minWidth:0}}>
+                    <span style={{display:"block",fontWeight:700,fontSize:15}}>Colaborator</span>
+                    <span style={{display:"block",fontSize:12,color:"#737373",marginTop:2}}>Vezi toți colaboratorii</span>
+                  </span>
+                  <span style={{color:"#525252",fontSize:20,fontWeight:300,flexShrink:0}}>›</span>
+                </button>
+              </>}
+              {loginCategory === "member" && MEMBERS.map((m, idx)=>(
+                <button key={m.id} type="button" className="ph-prof-row" onClick={()=>{ setLoginPick(m.id); setLoginEmail(MEMBER_AUTH_EMAIL[m.id]); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderBottom:idx===MEMBERS.length-1?"none":"1px solid #262626",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                   <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0,lineHeight:1}} aria-hidden>{m.emoji}</span>
                   <span style={{flex:1,minWidth:0}}>
                     <span style={{display:"block",fontWeight:700,fontSize:15}}>{m.short}</span>
@@ -8285,16 +8321,16 @@ function App() {
                   <span style={{color:"#525252",fontSize:20,fontWeight:300,flexShrink:0}}>›</span>
                 </button>
               ))}
-              <button type="button" className="ph-prof-row" onClick={()=>{ setLoginPick("admin"); setLoginEmail(CONTACT_ADMIN_EMAIL); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",background:"linear-gradient(180deg,#2a2210,#1a1508)",color:"#fdba74",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+              {loginCategory === "admin" && <button type="button" className="ph-prof-row" onClick={()=>{ setLoginPick("admin"); setLoginEmail(CONTACT_ADMIN_EMAIL); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",background:"linear-gradient(180deg,#2a2210,#1a1508)",color:"#fdba74",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                 <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0}} aria-hidden>🔐</span>
                 <span style={{flex:1,minWidth:0}}>
                   <span style={{display:"block",fontWeight:700,fontSize:15}}>Admin</span>
                   <span style={{display:"block",fontSize:11,opacity:0.9,marginTop:2,wordBreak:"break-all"}}>{CONTACT_ADMIN_EMAIL}</span>
                 </span>
                 <span style={{color:"#92400e",fontSize:20,fontWeight:300,flexShrink:0}}>›</span>
-              </button>
-              {COLLABORATOR_PROFILES.map(c=>(
-                <button key={c.id} type="button" className="ph-prof-row" onClick={()=>{ setLoginPick(c.id); setLoginEmail(COLLABORATOR_LOGIN_LABEL[c.id] || "Colaborator"); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderTop:"1px solid #262626",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+              </button>}
+              {loginCategory === "collaborator" && COLLABORATOR_PROFILES.map((c, idx)=>(
+                <button key={c.id} type="button" className="ph-prof-row" onClick={()=>{ setLoginPick(c.id); setLoginEmail(COLLABORATOR_LOGIN_LABEL[c.id] || "Colaborator"); setAuthErr(""); setLoginStep("signin"); }} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 14px",border:"none",borderBottom:idx===COLLABORATOR_PROFILES.length-1?"none":"1px solid #262626",background:"#141414",color:"#fff",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
                   <span style={{fontSize:22,width:36,textAlign:"center",flexShrink:0,lineHeight:1}} aria-hidden>{c.emoji}</span>
                   <span style={{flex:1,minWidth:0}}>
                     <span style={{display:"block",fontWeight:700,fontSize:15}}>{c.n}</span>
@@ -8368,6 +8404,14 @@ function App() {
           </button>)}
         </nav>
 
+        <div style={{padding:"8px 12px 0",borderTop:`1px solid ${th.sbb}`}}>
+          <button type="button" data-tour="nav-ai-assist" onClick={()=>setAiChatOpen(true)} title={sbMode==="mini"?"Asistent AI":undefined}
+            style={{display:"flex",alignItems:"center",gap:8,padding:sbMode==="full"?"8px 14px":"8px 0",justifyContent:sbMode==="mini"?"center":"flex-start",borderRadius:8,border:"none",background:"rgba(124,58,237,.12)",color:"#c4b5fd",fontSize:11,cursor:"pointer",width:"100%",transition:"all .2s"}}>
+            <span style={{fontSize:15}} aria-hidden>🤖</span>
+            {sbMode==="full"&&<span>Asistent AI</span>}
+          </button>
+        </div>
+
         {/* Theme toggle — Day / Night / Auto */}
         <div style={{padding:"10px 12px 0",borderTop:`1px solid ${th.sbb}`}}>
           <div style={{display:"flex",alignItems:"center",gap:4,padding:6,borderRadius:8,background:effectiveTheme==="light"?"rgba(0,0,0,.06)":"rgba(255,255,255,.06)",border:`1px solid ${th.sbb}`}} title="Tema: Auto (dispozitiv) / Zi / Noapte">
@@ -8405,10 +8449,10 @@ function App() {
       </div>
 
       {/* MOBILE MENU BUTTON — stânga jos */}
-      {mob && (
+      {mob && !mobileMoreOpen && (
         <button
           type="button"
-          onClick={()=>setMobileMoreOpen(v=>!v)}
+          onClick={()=>{ setAiChatOpen(false); setMobileMoreOpen(true); }}
           aria-label="Deschide meniul"
           style={{
             position:"fixed",
@@ -8434,8 +8478,8 @@ function App() {
         </button>
       )}
       {mob && mobileMoreOpen && (
-        <div onClick={()=>setMobileMoreOpen(false)} style={{position:"fixed",inset:0,zIndex:900,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"flex-end"}}>
-          <div onClick={e=>e.stopPropagation()} style={{width:"100%",background:th.c,borderTopLeftRadius:20,borderTopRightRadius:20,border:`1px solid ${th.b}`,borderBottom:"none",padding:"10px 14px calc(14px + env(safe-area-inset-bottom))",maxHeight:"74vh",overflow:"auto",boxShadow:"0 -18px 36px rgba(0,0,0,.35)"}}>
+        <div onClick={()=>setMobileMoreOpen(false)} style={{position:"fixed",inset:0,zIndex:10100,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"flex-end"}}>
+          <div onClick={e=>e.stopPropagation()} style={{width:"100%",background:th.c,borderTopLeftRadius:20,borderTopRightRadius:20,border:`1px solid ${th.b}`,borderBottom:"none",padding:"10px 14px calc(28px + env(safe-area-inset-bottom))",maxHeight:"74vh",overflow:"auto",boxShadow:"0 -18px 36px rgba(0,0,0,.35)"}}>
             <div style={{width:40,height:4,borderRadius:999,background:th.b,margin:"4px auto 10px"}}/>
             <div style={{fontSize:11,color:th.tm,fontWeight:700,letterSpacing:.6,textTransform:"uppercase",marginBottom:8}}>Meniu</div>
             {navItems.map(it=>(
@@ -8445,6 +8489,10 @@ function App() {
                 {it.badge>0&&<span style={{background:"#f59e0b",color:"#111",borderRadius:10,fontSize:10,fontWeight:700,padding:"1px 7px"}}>{it.badge}</span>}
               </button>
             ))}
+            <button type="button" onClick={()=>{ setMobileMoreOpen(false); setAiChatOpen(true); }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 10px",borderRadius:10,border:"none",background:"rgba(124,58,237,.12)",color:"#c4b5fd",cursor:"pointer",fontSize:14,marginTop:4}}>
+              <span style={{fontSize:18}} aria-hidden>🤖</span>
+              <span style={{flex:1,textAlign:"left",fontWeight:600}}>Asistent AI</span>
+            </button>
             <button onClick={()=>{ setMobileMoreOpen(false); doAuthLogout(); }} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 10px",borderRadius:10,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer",fontSize:14,marginTop:4}}>
               <IcOut s={18}/>
               <span>Ieșire</span>
@@ -11168,7 +11216,7 @@ function App() {
       />})()}
 
       {tourStep!==null&&<TourOverlay steps={TOUR_STEPS} step={tourStep} setStep={setTourStep} setTab={setTab}/>}
-      <AIChatWidget th={th} evs={evs} tasks={tasks} mob={mob} aiSettings={aiSettings} setAiSettings={setAiSettings}/>
+      <AIChatWidget open={aiChatOpen} onOpenChange={setAiChatOpen} th={th} evs={evs} tasks={tasks} mob={mob} aiSettings={aiSettings} setAiSettings={setAiSettings}/>
       <Toast message={toast.message} visible={toast.visible} variant={toast.variant}/>
     </div>
   );
