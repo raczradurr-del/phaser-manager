@@ -810,6 +810,37 @@ const TRANSPORT_FREE_RADIUS_KM = 25;
 const TRANSPORT_SURCHARGE_LEI_PER_KM_ROUNDTRIP = 3;
 /** +3 lei/km dus-întors dacă evenimentul include lumini + ecran LED + scenă/podium. */
 const TRANSPORT_SURCHARGE_HEAVY_EXTRA_LEI_PER_KM_ROUNDTRIP = 3;
+/** Distanțe aproximative față de TM (aceleași valori ca în căutarea de oraș din formular). */
+const RO_CITIES = [
+  {n:"Timișoara",km:0},{n:"Arad",km:54},{n:"Lugoj",km:60},{n:"Reșița",km:80},
+  {n:"Deva",km:120},{n:"Orăștie",km:150},{n:"Cluj-Napoca",km:140},{n:"Oradea",km:160},
+  {n:"Alba Iulia",km:180},{n:"Sibiu",km:210},{n:"Hunedoara",km:130},{n:"Caransebeș",km:85},
+  {n:"Lipova",km:65},{n:"Ineu",km:80},{n:"Sânnicolau Mare",km:45},{n:"Jimbolia",km:50},
+  {n:"Buziaș",km:35},{n:"Recaș",km:20},{n:"Dumbrăvița",km:8},{n:"Giroc",km:5},
+  {n:"Ghiroda",km:6},{n:"Moșnița",km:12},{n:"Bucovăț",km:15},{n:"Săcălaz",km:15},
+  {n:"Bucharest",km:550},{n:"București",km:550},{n:"Brașov",km:350},{n:"Constanța",km:680},
+  {n:"Iași",km:600},{n:"Craiova",km:350},{n:"Galați",km:620},{n:"Ploiești",km:500},
+  {n:"Brăila",km:600},{n:"Bacău",km:520},{n:"Pitești",km:450},{n:"Râmnicu Vâlcea",km:380},
+  {n:"Suceava",km:650},{n:"Baia Mare",km:280},{n:"Satu Mare",km:220},{n:"Bistrița",km:310},
+  {n:"Sfântu Gheorghe",km:400},{n:"Miercurea Ciuc",km:440},{n:"Târgu Mureș",km:290},
+  {n:"Focșani",km:560},{n:"Tulcea",km:710},{n:"Alexandria",km:520},{n:"Giurgiu",km:570},
+  {n:"Drobeta-Turnu Severin",km:260},{n:"Slobozia",km:600},{n:"Zalău",km:190},
+  {n:"Bihor",km:160},{n:"Târgoviște",km:480},{n:"Buzău",km:530},{n:"Slatina",km:400},
+  {n:"Turda",km:160},{n:"Câmpia Turzii",km:155},{n:"Mediaș",km:240},{n:"Sebeș",km:190},
+];
+const normalizeRoCityCompare = (s) =>
+  String(s || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+/** km sens unic TM→oraș când lipsește distanța salvată pe eveniment (ofertă / date vechi). */
+const lookupRoCityDistKmOneWay = (city) => {
+  const key = normalizeRoCityCompare(city);
+  if (!key) return null;
+  const hit = RO_CITIES.find((c) => normalizeRoCityCompare(c.n) === key);
+  return hit != null ? Number(hit.km) : null;
+};
 const haversineKm = (lat1, lon1, lat2, lon2) => {
   const R = 6371;
   const rad = (d) => (d * Math.PI) / 180;
@@ -834,6 +865,8 @@ const getTransportDistanceKmOneWay = (ev) => {
   }
   const d = Number(ev?.dist);
   if (Number.isFinite(d) && d > 0) return d;
+  const cityKm = lookupRoCityDistKmOneWay(ev?.city);
+  if (cityKm != null && Number.isFinite(cityKm) && cityKm > 0) return cityKm;
   return 0;
 };
 const computeTransportKmSurchargeLei = (ev) => {
@@ -4944,23 +4977,7 @@ function Row({ l, v }) {
 
 
 // ─── LOCATION SEARCH (OpenStreetMap Nominatim — gratuit, fără API key) ───
-const RO_CITIES = [
-  {n:"Timișoara",km:0},{n:"Arad",km:54},{n:"Lugoj",km:60},{n:"Reșița",km:80},
-  {n:"Deva",km:120},{n:"Orăștie",km:150},{n:"Cluj-Napoca",km:140},{n:"Oradea",km:160},
-  {n:"Alba Iulia",km:180},{n:"Sibiu",km:210},{n:"Hunedoara",km:130},{n:"Caransebeș",km:85},
-  {n:"Lipova",km:65},{n:"Ineu",km:80},{n:"Sânnicolau Mare",km:45},{n:"Jimbolia",km:50},
-  {n:"Buziaș",km:35},{n:"Recaș",km:20},{n:"Dumbrăvița",km:8},{n:"Giroc",km:5},
-  {n:"Ghiroda",km:6},{n:"Moșnița",km:12},{n:"Bucovăț",km:15},{n:"Săcălaz",km:15},
-  {n:"Bucharest",km:550},{n:"București",km:550},{n:"Brașov",km:350},{n:"Constanța",km:680},
-  {n:"Iași",km:600},{n:"Craiova",km:350},{n:"Galați",km:620},{n:"Ploiești",km:500},
-  {n:"Brăila",km:600},{n:"Bacău",km:520},{n:"Pitești",km:450},{n:"Râmnicu Vâlcea",km:380},
-  {n:"Suceava",km:650},{n:"Baia Mare",km:280},{n:"Satu Mare",km:220},{n:"Bistrița",km:310},
-  {n:"Sfântu Gheorghe",km:400},{n:"Miercurea Ciuc",km:440},{n:"Târgu Mureș",km:290},
-  {n:"Focșani",km:560},{n:"Tulcea",km:710},{n:"Alexandria",km:520},{n:"Giurgiu",km:570},
-  {n:"Drobeta-Turnu Severin",km:260},{n:"Slobozia",km:600},{n:"Zalău",km:190},
-  {n:"Bihor",km:160},{n:"Târgoviște",km:480},{n:"Buzău",km:530},{n:"Slatina",km:400},
-  {n:"Turda",km:160},{n:"Câmpia Turzii",km:155},{n:"Mediaș",km:240},{n:"Sebeș",km:190},
-];
+// RO_CITIES e definit lângă logica de transport (fallback distanță ofertă / fișă).
 
 // TimeInput — 24h format, datalist + tastare (id unic per instanță — altfel toate câmpurile împart același datalist și dropdown-ul „nu merge”)
 function TimeInput({ value, onChange, style, placeholder }) {
@@ -5518,6 +5535,17 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     durataRecital: mData?.durataRecital||"",
     publicShowMinutes: mData?.publicShowMinutes ?? 45,
     responsabilPrincipal: mData?.responsabilPrincipal||(user?.memberId?MEMBERS.find(m=>m.id===user.memberId)?.n||user.n:""),
+    responsabilPrincipalMemberId: (() => {
+      const raw = mData?.responsabilPrincipalMemberId;
+      if (raw && MEMBERS.some((m) => m.id === raw)) return raw;
+      const nm = (mData?.responsabilPrincipal || "").trim();
+      if (nm) {
+        const byName = MEMBERS.find((m) => m.n.trim().toLowerCase() === nm.toLowerCase());
+        if (byName) return byName.id;
+      }
+      if (!mData?.id && user?.memberId && MEMBERS.some((m) => m.id === user.memberId)) return user.memberId;
+      return "";
+    })(),
     responsabili: mData?.responsabili||[],
     fee: mData?.fee||(isP?PX.r[1]:PX.pub),
     valuta: mData?.valuta||"EUR",
@@ -5589,6 +5617,15 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
   };
   const svcT = isP ? Object.entries(fm.svcp).reduce((s,[k,v])=>s+(fm.svc[k]?v:0),0) : 0;
   const iStyle = {...sty.i, fontSize: mob?"16px":"14px"};
+  const respPreluareSelectValue = (() => {
+    const mid = fm.responsabilPrincipalMemberId;
+    if (mid && MEMBERS.some((m) => m.id === mid)) return mid;
+    const t = (fm.responsabilPrincipal || "").trim();
+    if (!t) return "";
+    const hit = MEMBERS.find((m) => m.n.trim().toLowerCase() === t.toLowerCase());
+    return hit ? hit.id : "__custom__";
+  })();
+  const respPreluareShowCustom = respPreluareSelectValue === "__custom__";
 
   const packDateForSave = () => {
     const k = fm.dateKind || "day";
@@ -5623,6 +5660,12 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
         t2: { ...DEFAULT_TECH_ASSIGN_T2(), ...(payload.techAssign.t2 || {}) },
       };
     }
+    const rMid = payload.responsabilPrincipalMemberId;
+    if (rMid) {
+      const mem = MEMBERS.find((m) => m.id === rMid);
+      if (mem) payload = { ...payload, responsabilPrincipal: mem.n };
+      else payload = { ...payload, responsabilPrincipalMemberId: "" };
+    }
     if (payload.cat !== "private") delete payload.contractBen;
     onSave(payload);
   };
@@ -5654,7 +5697,47 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
           <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
 
             {secTab==="detalii"&&<div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:12}}>
-              <div style={{gridColumn:"1/-1"}}><label style={sty.l}>Persoana care a preluat oferta</label><input value={fm.responsabilPrincipal||""} onChange={e=>u("responsabilPrincipal",e.target.value)} style={iStyle} placeholder="Numele persoanei care gestionează oferta"/></div>
+              <div style={{gridColumn:"1/-1"}}>
+                <label style={sty.l}>Persoana care a preluat oferta</label>
+                <select
+                  className="modernSel nativeSel"
+                  style={iStyle}
+                  value={respPreluareSelectValue}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v === "") {
+                      setFm((p) => ({ ...p, responsabilPrincipalMemberId: "", responsabilPrincipal: "" }));
+                      return;
+                    }
+                    if (v === "__custom__") {
+                      setFm((p) => ({
+                        ...p,
+                        responsabilPrincipalMemberId: "",
+                        responsabilPrincipal: MEMBERS.some((m) => m.id === p.responsabilPrincipalMemberId) ? "" : (p.responsabilPrincipal || ""),
+                      }));
+                      return;
+                    }
+                    const m = MEMBERS.find((x) => x.id === v);
+                    if (m) setFm((p) => ({ ...p, responsabilPrincipalMemberId: v, responsabilPrincipal: m.n }));
+                  }}
+                >
+                  <option value="">— Alege membru trupă —</option>
+                  {MEMBERS.map((mm) => (
+                    <option key={mm.id} value={mm.id}>
+                      {mm.n}{mm.r ? ` · ${mm.r}` : ""}
+                    </option>
+                  ))}
+                  <option value="__custom__">Alt nume (text liber)</option>
+                </select>
+                {respPreluareShowCustom && (
+                  <input
+                    value={fm.responsabilPrincipal || ""}
+                    onChange={(e) => setFm((p) => ({ ...p, responsabilPrincipal: e.target.value, responsabilPrincipalMemberId: "" }))}
+                    style={{ ...iStyle, marginTop: 8 }}
+                    placeholder="Numele persoanei care gestionează oferta"
+                  />
+                )}
+              </div>
               <div style={{gridColumn:"1/-1"}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                   <label style={sty.l}>Echipă / Persoane implicate (nume + rol)</label>
