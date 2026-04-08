@@ -659,7 +659,7 @@ const getSvcCostBreakdown = (ev, prices) => {
   if(svc.ecran){ const c=Math.round(ecranCost*100)/100; out.push({k:"ecran",label:SVC_COST_LABELS.ecran,cost:c}); }
   if(svc.scena){ const c=Math.round(scenaCost*100)/100; out.push({k:"scena",label:SVC_COST_LABELS.scena,cost:c}); }
   if(svc.dj&&djCost>0){ const c=Math.round(djCost*100)/100; out.push({k:"dj",label:"DJ",cost:c}); }
-  // Tehnic nr.1 = linia din cheltuiala tehnician (lei ÷ curs). Suplimentul (podium/lumini/LED) e tot la același beneficiar ca nr.1 — nu „alocat tehnic 2”.
+  // Tehnic nr.1 = bază logistică (lei÷curs), implicit oficiu Levi. Tehnic nr.2 = supliment € pentru servicii extra (podium/lumini/LED) — beneficiar separat (tot implicit Levi).
   const hasNonDjSvc = !!(svc.sunet || svc.lumini || svc.ecran || svc.scena);
   const techCount = hasNonDjSvc ? 2 : (svc.dj ? 1 : 0);
   const techBaseLei = Math.max(0, Number(p.fixedCostTechnician ?? DEFAULT_SERVICE_PRICES.fixedCostTechnician ?? 600) || 0);
@@ -667,6 +667,7 @@ const getSvcCostBreakdown = (ev, prices) => {
   const supplRaw = p.tehnicExtraPerService;
   const supplPer = supplRaw==null||supplRaw===""?40:Math.max(0,Number(supplRaw)||0);
   const nmT1 = techSlotPayeeLabel(normalizeTechSlot(ev, "t1"));
+  const nmT2 = techSlotPayeeLabel(normalizeTechSlot(ev, "t2"));
   if(hasNonDjSvc){
     out.push({k:"tehnic2Auto",label:`Tehnic nr.1 — ${nmT1}`,cost: tehnicAutoEur});
   }
@@ -680,7 +681,7 @@ const getSvcCostBreakdown = (ev, prices) => {
   if(techCount>0 && nSuppl>0 && supplPer>0){
     const c=Math.round(supplPer*nSuppl*100)/100;
     const nume=activeSuppl.map(x=>x.l).join(", ");
-    out.push({k:"tehnicSupplPlatouri",label:`Tehnic nr.1 — supliment (${nume}, ${nSuppl}×${supplPer}€) — ${nmT1}`,cost:c});
+    out.push({k:"tehnicSupplPlatouri",label:`Tehnic nr.2 — supliment servicii extra (${nume}, ${nSuppl}×${supplPer}€) — ${nmT2}`,cost:c});
   }
   return out;
 };
@@ -692,12 +693,13 @@ const getMemberTechPayoutLines = (ev, mId, servicePrices) => {
   const lines = [];
   let sum = 0;
   const t1 = normalizeTechSlot(ev, "t1");
+  const t2 = normalizeTechSlot(ev, "t2");
   if (byK.tehnic2Auto && t1.who === "member" && t1.memberId === mId) {
     const eur = Number(byK.tehnic2Auto.cost) || 0;
     lines.push({ label: byK.tehnic2Auto.label, eur });
     sum += eur;
   }
-  if (byK.tehnicSupplPlatouri && t1.who === "member" && t1.memberId === mId) {
+  if (byK.tehnicSupplPlatouri && t2.who === "member" && t2.memberId === mId) {
     const eur = Number(byK.tehnicSupplPlatouri.cost) || 0;
     lines.push({ label: byK.tehnicSupplPlatouri.label, eur });
     sum += eur;
@@ -822,10 +824,15 @@ const canonMemId = (id) => {
   return m ? m.id : null;
 };
 const DEFAULT_TECH_ASSIGN_SLOT = () => ({ who: "levi", memberId: "", name: "" });
-/** O singură atribuire: baza (lei÷curs) și suplimentul podium/lumini/LED merg la același beneficiar (implicit Levi). */
-const mergeEvTechAssign = (ev, patch) => {
-  const t1 = { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(ev.techAssign?.t1 || {}), ...patch };
-  return { techAssign: { t1 } };
+/** Atribuire separată: t1 = Tehnic nr.1 (bază logistică, implicit Levi oficiu); t2 = Tehnic nr.2 (supliment servicii extra). */
+const mergeEvTechAssign = (ev, slot, patch) => {
+  const s = slot === "t2" ? "t2" : "t1";
+  const cur = {
+    t1: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(ev.techAssign?.t1 || {}) },
+    t2: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(ev.techAssign?.t2 || {}) },
+  };
+  cur[s] = { ...DEFAULT_TECH_ASSIGN_SLOT(), ...cur[s], ...patch };
+  return { techAssign: cur };
 };
 /** Cine încasează linia Tehnic 1 / 2: implicit Levi (oficiu). member → apare în Finanțe pe membru; custom → persoană externă. */
 const normalizeTechSlot = (ev, slot) => {
@@ -1128,8 +1135,9 @@ const getCollaboratorCostLines = (ev, collaboratorKey, servicePrices) => {
     }
   } else if (collaboratorKey === "levi") {
     const t1 = normalizeTechSlot(ev, "t1");
+    const t2 = normalizeTechSlot(ev, "t2");
     if (byK.tehnic2Auto && t1.who === "levi") lines.push({ label: byK.tehnic2Auto.label, eur: Number(byK.tehnic2Auto.cost) || 0 });
-    if (byK.tehnicSupplPlatouri && t1.who === "levi") lines.push({ label: byK.tehnicSupplPlatouri.label, eur: Number(byK.tehnicSupplPlatouri.cost) || 0 });
+    if (byK.tehnicSupplPlatouri && t2.who === "levi") lines.push({ label: byK.tehnicSupplPlatouri.label, eur: Number(byK.tehnicSupplPlatouri.cost) || 0 });
     if (normalizeSoundAttribution(ev) === "levi") {
       const smLei = getSoundmanOutsourceLei(ev, spMerged);
       const smEur = smLei > 0 ? Math.round((smLei / curs) * 100) / 100 : 0;
@@ -1144,6 +1152,87 @@ const getCollaboratorCostLines = (ev, collaboratorKey, servicePrices) => {
   return { lines, total };
 };
 const computeCollaboratorPayout = (ev, collaboratorKey, servicePrices) => getCollaboratorCostLines(ev, collaboratorKey, servicePrices).total;
+
+/** Plăți către echipă — independent de `dp` / `restPaid` (încasare de la client în firmă). */
+const normalizePayoutStatus = (ev) => {
+  const p = ev?.payoutStatus;
+  if (!p || typeof p !== "object") return { members: {}, colab: {}, furnizori: false };
+  return {
+    members: p.members && typeof p.members === "object" ? { ...p.members } : {},
+    colab: p.colab && typeof p.colab === "object" ? { ...p.colab } : {},
+    furnizori: p.furnizori === true,
+  };
+};
+const isMemberPayoutReceived = (ev, mId) => normalizePayoutStatus(ev).members[mId] === true;
+const isColabPayoutReceived = (ev, key) => normalizePayoutStatus(ev).colab[key] === true;
+const isFurnizoriPayoutReceived = (ev) => normalizePayoutStatus(ev).furnizori === true;
+
+function PayoutStatusPanel({ ev, onPatch, th, readOnly, showToast, servicePrices }) {
+  const sp = servicePrices || {};
+  const memRows = MEMBERS.map((m) => {
+    const d = typeof computeMemberPayoutBreakdown === "function" ? computeMemberPayoutBreakdown(ev, m.id, sp) : { grandTotal: 0 };
+    if ((Number(d.grandTotal) || 0) <= 0.005) return null;
+    const got = isMemberPayoutReceived(ev, m.id);
+    return (
+      <div key={m.id} onClick={() => {
+        if (readOnly) return;
+        const cur = normalizePayoutStatus(ev);
+        const next = !got;
+        onPatch({ payoutStatus: { ...cur, members: { ...cur.members, [m.id]: next } } });
+        showToast?.(next ? `${m.short || m.n}: marcat plătit` : `${m.short || m.n}: marcat neprimit`);
+      }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${th.b}`, cursor: readOnly ? "default" : "pointer", background: got ? "rgba(34,197,94,.08)" : th.h, marginBottom: 6, gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{m.n}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: got ? "#22c55e" : "#94a3b8", flexShrink: 0 }}>{got ? "✅ primit" : "⛔ neprimit"}</span>
+      </div>
+    );
+  }).filter(Boolean);
+  const colabRows = COLLABORATOR_PROFILES.map((c) => {
+    const amt = typeof computeCollaboratorPayout === "function" ? computeCollaboratorPayout(ev, c.key, sp) : 0;
+    if (amt <= 0.005) return null;
+    const got = isColabPayoutReceived(ev, c.key);
+    return (
+      <div key={c.id} onClick={() => {
+        if (readOnly) return;
+        const cur = normalizePayoutStatus(ev);
+        const next = !got;
+        onPatch({ payoutStatus: { ...cur, colab: { ...cur.colab, [c.key]: next } } });
+        showToast?.(next ? `${c.n}: marcat plătit` : `${c.n}: marcat neprimit`);
+      }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${th.b}`, cursor: readOnly ? "default" : "pointer", background: got ? "rgba(34,197,94,.08)" : th.h, marginBottom: 6, gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600 }}>{c.emoji} {c.n}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: got ? "#22c55e" : "#94a3b8", flexShrink: 0 }}>{got ? "✅ primit" : "⛔ neprimit"}</span>
+      </div>
+    );
+  }).filter(Boolean);
+  const svcCost = typeof getSvcCost === "function" ? getSvcCost(ev, sp) : 0;
+  const showFu = svcCost > 0.005;
+  const fuGot = isFurnizoriPayoutReceived(ev);
+  return (
+    <div style={{ padding: "12px 0 4px", borderTop: `1px solid ${th.b}` }}>
+      <div style={{ fontSize: 9, color: th.tm, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Plăți făcute către echipă</div>
+      <p style={{ fontSize: 10, color: th.tm, marginBottom: 10, lineHeight: 1.45 }}>Separat de încasarea de la client (avans/rest). Aici marchezi dacă <strong>ai plătit efectiv</strong> membri, colaboratori sau furnizorii — poți bifa „primit” la om înainte să intre restul în firmă, sau păstrezi „neprimit” chiar dacă clientul a plătit.</p>
+      <div style={{ fontSize: 10, color: th.tm, fontWeight: 600, marginBottom: 6 }}>Membri (împărțire + plată tehnic dacă e cazul)</div>
+      {memRows.length === 0 ? <div style={{ fontSize: 11, color: th.tm, marginBottom: 8 }}>— fără sume pe acest eveniment</div> : memRows}
+      <div style={{ fontSize: 10, color: th.tm, fontWeight: 600, marginBottom: 6, marginTop: 10 }}>Colaboratori</div>
+      {colabRows.length === 0 ? <div style={{ fontSize: 11, color: th.tm, marginBottom: 8 }}>—</div> : colabRows}
+      {showFu && (
+        <>
+          <div style={{ fontSize: 10, color: th.tm, fontWeight: 600, marginBottom: 6, marginTop: 10 }}>Furnizori (cost servicii din fișă)</div>
+          <div onClick={() => {
+            if (readOnly) return;
+            const cur = normalizePayoutStatus(ev);
+            const next = !cur.furnizori;
+            onPatch({ payoutStatus: { ...cur, furnizori: next } });
+            showToast?.(next ? "Furnizori: marcați plătiți" : "Furnizori: marcați neplătiți");
+          }} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 10px", borderRadius: 8, border: `1px solid ${th.b}`, cursor: readOnly ? "default" : "pointer", background: fuGot ? "rgba(34,197,94,.08)" : th.h, gap: 8 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Cost furnizori / servicii ofertă</span>
+            <span style={{ fontSize: 11, fontWeight: 700, color: fuGot ? "#22c55e" : "#94a3b8", flexShrink: 0 }}>{fuGot ? "✅ plătit" : "⛔ neplătit"}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const calcFond7 = (ev) => {
   const CURS = ev.cursLei||CURS_DEFAULT;
   const fee = (ev.fee||0) + Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
@@ -5144,26 +5233,31 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
         {saFisa==="prezent" && "Prezent — sunetist"}
       </div>}
     </div>
-    {/* 5c. Tehnic — baza + supliment la același beneficiar (implicit Levi) */}
+    {/* 5c. Tehnic nr.1 / nr.2 — cine încasează (nr.1 = bază oficiu Levi implicit; nr.2 = supliment servicii extra) */}
     <div style={{padding:16,borderRadius:10,background:th.h,border:`1px solid ${th.b}`}}>
-      <div style={{fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tehnic (bază + supliment) — încasare</div>
+      <div style={{fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Tehnic nr.1 / nr.2 — încasare</div>
       {editable ? <div style={{display:"flex",flexDirection:"column",gap:12}}>
-        <div style={{fontSize:10,color:th.tm,lineHeight:1.45}}>Logistica tehnică (lei÷curs) și <strong>suplimentul</strong> pentru podium / lumini / LED merg la <strong>aceeași persoană</strong> — implicit <strong>Levi</strong>. Membru trupă → apare în Finanțe.</div>
-        {(()=>{const slot={...DEFAULT_TECH_ASSIGN_SLOT(),...(ev.techAssign?.t1||{})};return <div style={{padding:12,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
-            <select value={slot.who} onChange={e=>{const w=e.target.value;const prev={...slot};if(w==="levi")updEv&&updEv(mergeEvTechAssign(ev,{who:"levi",memberId:"",name:prev.name}));else if(w==="member")updEv&&updEv(mergeEvTechAssign(ev,{who:"member",memberId:prev.memberId||"",name:prev.name}));else updEv&&updEv(mergeEvTechAssign(ev,{who:"custom",memberId:"",name:prev.name}));}} className="modernSel" style={{...iStyle,maxWidth:380,marginBottom:6,paddingRight:28}}>
+        <div style={{fontSize:10,color:th.tm,lineHeight:1.45}}><strong>Tehnic nr.1</strong> = linia din cheltuiala logistică tehnică (lei÷curs), <strong>din oficiu implicit Levi</strong>. <strong>Tehnic nr.2</strong> = suplimentul € pentru podium / lumini / ecran din ofertă — poți aloca alt membru, altcineva sau tot Levi. Membru trupă → Finanțe.</div>
+        {["t1","t2"].map((slotKey)=>{
+          const slot={...DEFAULT_TECH_ASSIGN_SLOT(),...(ev.techAssign?.[slotKey]||{})};
+          const isSuppl = slotKey==="t2";
+          return <div key={slotKey} style={{padding:12,borderRadius:8,background:th.c,border:`1px solid ${th.b}`}}>
+            <div style={{fontSize:11,fontWeight:700,marginBottom:6,color:th.t}}>{isSuppl?"Tehnic nr.2 — supliment servicii extra (cine încasează)":"Tehnic nr.1 — logistică bază (implicit Levi oficiu)"}</div>
+            <select value={slot.who} onChange={e=>{const w=e.target.value;const prev={...slot};if(w==="levi")updEv&&updEv(mergeEvTechAssign(ev,slotKey,{who:"levi",memberId:"",name:prev.name}));else if(w==="member")updEv&&updEv(mergeEvTechAssign(ev,slotKey,{who:"member",memberId:prev.memberId||"",name:prev.name}));else updEv&&updEv(mergeEvTechAssign(ev,slotKey,{who:"custom",memberId:"",name:prev.name}));}} className="modernSel" style={{...iStyle,maxWidth:380,marginBottom:6,paddingRight:28}}>
               <option value="levi">Levi (implicit oficiu)</option>
               <option value="member">Membru trupă</option>
               <option value="custom">Alt nume (persoană externă / înlocuitor)</option>
             </select>
-            {slot.who==="member"&&<select value={slot.memberId||""} onChange={e=>updEv&&updEv(mergeEvTechAssign(ev,{memberId:e.target.value}))} className="modernSel" style={{...iStyle,maxWidth:380,marginBottom:6,paddingRight:28}}>
+            {slot.who==="member"&&<select value={slot.memberId||""} onChange={e=>updEv&&updEv(mergeEvTechAssign(ev,slotKey,{memberId:e.target.value}))} className="modernSel" style={{...iStyle,maxWidth:380,marginBottom:6,paddingRight:28}}>
               <option value="">— alege membru —</option>
               {MEMBERS.map(mm=><option key={mm.id} value={mm.id}>{mm.n}</option>)}
             </select>}
-            <input value={slot.name||""} onChange={e=>updEv&&updEv(mergeEvTechAssign(ev,{name:e.target.value}))} style={{...iStyle,fontSize:12}} placeholder="Nume afișat (opțional)"/>
-          </div>;})()}
-      </div> : <div style={{display:"flex",flexDirection:"column",gap:6,fontSize:13,color:th.ts}}>
-        <div><span style={{color:th.tm}}>Beneficiar:</span> {techSlotPayeeLabel(normalizeTechSlot(ev,"t1"))}</div>
-        <div style={{fontSize:10,color:th.tm,lineHeight:1.4}}>Include linia de bază și suplimentul (dacă există în ofertă).</div>
+            <input value={slot.name||""} onChange={e=>updEv&&updEv(mergeEvTechAssign(ev,slotKey,{name:e.target.value}))} style={{...iStyle,fontSize:12}} placeholder="Nume afișat (opțional)"/>
+          </div>;
+        })}
+      </div> : <div style={{display:"flex",flexDirection:"column",gap:8,fontSize:13,color:th.ts}}>
+        <div><span style={{color:th.tm}}>Tehnic nr.1:</span> {techSlotPayeeLabel(normalizeTechSlot(ev,"t1"))}</div>
+        <div><span style={{color:th.tm}}>Tehnic nr.2 (supliment):</span> {techSlotPayeeLabel(normalizeTechSlot(ev,"t2"))}</div>
       </div>}
     </div>
     {/* 6. Servicii — fără prețuri, cu ce aducem + nume furnizor */}
@@ -5279,7 +5373,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
       transport: Number(templates?.servicePrices?.fixedCostTransport ?? DEFAULT_SERVICE_PRICES.fixedCostTransport) || DEFAULT_SERVICE_PRICES.fixedCostTransport,
     },
     soundAttribution: normalizeSoundAttribution(mData || {}),
-    techAssign: (()=>{const t=mData?.techAssign;const slot=(x)=>({...DEFAULT_TECH_ASSIGN_SLOT(),...(x&&typeof x==="object"?x:{})});return{t1:slot(t?.t1)};})(),
+    techAssign: (()=>{const t=mData?.techAssign;const slot=(x)=>({...DEFAULT_TECH_ASSIGN_SLOT(),...(x&&typeof x==="object"?x:{})});return{t1:slot(t?.t1),t2:slot(t?.t2)};})(),
     ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu",cxCat:EX_FIN_CAT.tehnic},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu",cxCat:EX_FIN_CAT.furnizor},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu",cxCat:EX_FIN_CAT.alt}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"", fisaExtra: mData?.fisaExtra||"", fisaExtraItems: mData?.fisaExtraItems||[], svcInfo: mData?.svcInfo||{},
     impozitVenit: mData?.impozitVenit??1, plataAvansFirma: mData?.plataAvansFirma ?? (mData?.plataDirect===false), plataRestFirma: mData?.plataRestFirma ?? (mData?.plataDirect===false), sumaAvansLei: mData?.sumaAvansLei??0, sumaRestLei: mData?.sumaRestLei??0, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10, fondPct2: mData?.fondPct2??10,
     videos: mData?.videos||tplVideos, covers: mData?.covers||(tplCovers.map(c=>({...c,checked:true}))),
@@ -5309,11 +5403,16 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
   const [secTab, setSecTab] = useState("detalii");
   const [playlistSearch, setPlaylistSearch] = useState("");
   const u = (k,v) => setFm(p=>({...p,[k]:v}));
-  const setTechSlot = (patch) => {
-    setFm((p) => ({
-      ...p,
-      techAssign: { t1: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(p.techAssign?.t1 || {}), ...patch } },
-    }));
+  const setTechSlot = (slot, patch) => {
+    setFm((p) => {
+      const s = slot === "t2" ? "t2" : "t1";
+      const cur = {
+        t1: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(p.techAssign?.t1 || {}) },
+        t2: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(p.techAssign?.t2 || {}) },
+      };
+      cur[s] = { ...DEFAULT_TECH_ASSIGN_SLOT(), ...cur[s], ...patch };
+      return { ...p, techAssign: cur };
+    });
   };
   const svcT = isP ? Object.entries(fm.svcp).reduce((s,[k,v])=>s+(fm.svc[k]?v:0),0) : 0;
   const iStyle = {...sty.i, fontSize: mob?"16px":"14px"};
@@ -5340,7 +5439,12 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     const title = fm.cn ? (isP ? `${fm.type} ${fm.cn}` : `${fm.type} - ${fm.cn}`) : "Eveniment nou";
     const dp = packDateForSave();
     const payload = { ...fm, ...dp, title, ...extra };
-    if (payload.techAssign) payload.techAssign = { t1: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(payload.techAssign.t1 || {}) } };
+    if (payload.techAssign) {
+      payload.techAssign = {
+        t1: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(payload.techAssign.t1 || {}) },
+        t2: { ...DEFAULT_TECH_ASSIGN_SLOT(), ...(payload.techAssign.t2 || {}) },
+      };
+    }
     if (payload.cat !== "private") delete payload.contractBen;
     onSave(payload);
   };
@@ -5705,19 +5809,24 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
                   </select>
                 </div>
                 <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${th.b}`}}>
-                  <div style={{fontSize:10,color:th.tm,marginBottom:8,lineHeight:1.45}}><strong>Tehnic (bază + supliment)</strong> — aceeași persoană (implicit Levi). Suplimentul pentru podium / lumini / LED nu e „tehnic 2”, ci add-on la linia de tehnic. <strong>Membru trupă</strong> → plata apare în Finanțe.</div>
-                  {(()=>{const slot={...DEFAULT_TECH_ASSIGN_SLOT(),...(fm.techAssign?.t1||{})};return <div style={{marginBottom:4,padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
-                      <select value={slot.who} onChange={e=>{const w=e.target.value;const prev={...slot};if(w==="levi")setTechSlot({who:"levi",memberId:"",name:prev.name});else if(w==="member")setTechSlot({who:"member",memberId:prev.memberId||"",name:prev.name});else setTechSlot({who:"custom",memberId:"",name:prev.name});}} className="modernSel" style={{...iStyle,maxWidth:360,marginBottom:6,paddingRight:28}}>
+                  <div style={{fontSize:10,color:th.tm,marginBottom:8,lineHeight:1.45}}><strong>Tehnic nr.1</strong> = bază logistică (implicit Levi oficiu). <strong>Tehnic nr.2</strong> = cine încasează <strong>suplimentul</strong> pentru podium / lumini / ecran bifate în ofertă. Poți pune membri diferiți pe cele două linii.</div>
+                  {["t1","t2"].map((slotKey)=>{
+                    const slot={...DEFAULT_TECH_ASSIGN_SLOT(),...(fm.techAssign?.[slotKey]||{})};
+                    const isSuppl=slotKey==="t2";
+                    return <div key={slotKey} style={{marginBottom:10,padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                      <div style={{fontSize:11,fontWeight:700,marginBottom:6,color:th.t}}>{isSuppl?"Tehnic nr.2 — supliment servicii extra":"Tehnic nr.1 — logistică bază"}</div>
+                      <select value={slot.who} onChange={e=>{const w=e.target.value;const prev={...slot};if(w==="levi")setTechSlot(slotKey,{who:"levi",memberId:"",name:prev.name});else if(w==="member")setTechSlot(slotKey,{who:"member",memberId:prev.memberId||"",name:prev.name});else setTechSlot(slotKey,{who:"custom",memberId:"",name:prev.name});}} className="modernSel" style={{...iStyle,maxWidth:360,marginBottom:6,paddingRight:28}}>
                         <option value="levi">Levi (implicit oficiu)</option>
                         <option value="member">Membru trupă</option>
                         <option value="custom">Alt nume (persoană externă / înlocuitor)</option>
                       </select>
-                      {slot.who==="member"&&<select value={slot.memberId||""} onChange={e=>setTechSlot({memberId:e.target.value})} className="modernSel" style={{...iStyle,maxWidth:360,marginBottom:6,paddingRight:28}}>
+                      {slot.who==="member"&&<select value={slot.memberId||""} onChange={e=>setTechSlot(slotKey,{memberId:e.target.value})} className="modernSel" style={{...iStyle,maxWidth:360,marginBottom:6,paddingRight:28}}>
                         <option value="">— alege membru —</option>
                         {MEMBERS.map(mm=><option key={mm.id} value={mm.id}>{mm.n}</option>)}
                       </select>}
-                      <input value={slot.name||""} onChange={e=>setTechSlot({name:e.target.value})} style={{...iStyle,fontSize:12}} placeholder="Nume afișat (opțional — pe ofertă și linii cost)"/>
-                    </div>;})()}
+                      <input value={slot.name||""} onChange={e=>setTechSlot(slotKey,{name:e.target.value})} style={{...iStyle,fontSize:12}} placeholder="Nume afișat (opțional — pe ofertă și linii cost)"/>
+                    </div>;
+                  })}
                 </div>
               </div>
               {MEMBERS.map(m=><div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:6,marginBottom:4,background:th.h}}>
@@ -8781,12 +8890,14 @@ function App() {
                   <div style={{fontSize:14,fontWeight:700,marginBottom:10}}>Sumele mele pe eveniment</div>
                   {evs.filter(e=>["confirmat","plata_avans","asteptare"].includes(e.st)).sort((a,b)=>evSortKey(a)-evSortKey(b)).map(ev=>{
                     const amt = computeCollaboratorPayout(ev, collaboratorKey, templates?.servicePrices);
+                    const colGot = ev.st==="confirmat" && amt > 0.005 && isColabPayoutReceived(ev, collaboratorKey);
                     return <div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",padding:"9px 10px",borderRadius:8,cursor:"pointer",borderBottom:`1px solid ${th.bl}`}}>
-                      <div>
+                      <div style={{flex:1,minWidth:0}}>
                         <div style={{fontSize:12,fontWeight:600}}>{eventFriendlyLabel(ev)}</div>
                         <div style={{fontSize:10,color:th.tm}}>{ST[ev.st]?.l || ev.st}</div>
+                        {ev.st==="confirmat" && amt > 0.005 && <div style={{fontSize:10,fontWeight:600,color:colGot?"#22c55e":"#94a3b8",marginTop:3}}>{colGot?"✅ Ți s-a plătit":"⛔ Neprimit încă"}</div>}
                       </div>
-                      <div style={{fontSize:13,fontWeight:800,color:"#22c55e"}}>{f$(amt)}</div>
+                      <div style={{fontSize:13,fontWeight:800,color:"#22c55e",flexShrink:0}}>{f$(amt)}</div>
                     </div>;
                   })}
                 </div>
@@ -9827,7 +9938,9 @@ function App() {
                   return rn && (rn===meName || rn===meShort);
                 })) return true;
                 const t1 = normalizeTechSlot(ev, "t1");
+                const t2 = normalizeTechSlot(ev, "t2");
                 if (t1.who === "member" && t1.memberId === meId) return true;
+                if (t2.who === "member" && t2.memberId === meId) return true;
                 return false;
               };
 
@@ -9837,8 +9950,8 @@ function App() {
               const linkedConfirmed = evs.filter(ev=>ev.st==="confirmat" && isLinkedEv(ev));
               const memberDetail = (ev, mId) => computeMemberPayoutBreakdown(ev, mId, templates?.servicePrices);
 
-              const paid = linkedConfirmed.filter(ev=>ev.restPaid);
-              const waiting = linkedConfirmed.filter(ev=>!ev.restPaid);
+              const paid = linkedConfirmed.filter(ev=>isMemberPayoutReceived(ev,meId)&&(memberDetail(ev,meId).grandTotal>0.005));
+              const waiting = linkedConfirmed.filter(ev=>!isMemberPayoutReceived(ev,meId)&&(memberDetail(ev,meId).grandTotal>0.005));
               const totPaid = paid.reduce((s,ev)=>s+memberDetail(ev,meId).grandTotal,0);
               const totWait = waiting.reduce((s,ev)=>s+memberDetail(ev,meId).grandTotal,0);
 
@@ -9862,12 +9975,14 @@ function App() {
                   ) : (
                     <div style={{display:"flex",gap:10}}>
                       <div style={{flex:1,padding:"10px 12px",borderRadius:10,border:`1px solid rgba(34,197,94,.25)`,background:"rgba(34,197,94,.06)"}}>
-                        <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>Primite</div>
+                        <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>Ți s-a plătit</div>
                         <div style={{fontSize:20,fontWeight:800,color:"#22c55e"}}>{fmtMoney(totPaid)}</div>
+                        <div style={{fontSize:9,color:th.tm,marginTop:4,lineHeight:1.35}}>După bifa „primit” din Finanțe (nu doar dacă a plătit clientul).</div>
                       </div>
-                      <div style={{flex:1,padding:"10px 12px",borderRadius:10,border:`1px solid rgba(245,158,11,.25)`,background:"rgba(245,158,11,.06)"}}>
-                        <div style={{fontSize:10,color:"#f59e0b",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>În așteptare</div>
-                        <div style={{fontSize:20,fontWeight:800,color:"#f59e0b"}}>{fmtMoney(totWait)}</div>
+                      <div style={{flex:1,padding:"10px 12px",borderRadius:10,border:`1px solid rgba(148,163,184,.35)`,background:"rgba(148,163,184,.06)"}}>
+                        <div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,fontWeight:700,marginBottom:4}}>Neprimit încă</div>
+                        <div style={{fontSize:20,fontWeight:800,color:"#94a3b8"}}>{fmtMoney(totWait)}</div>
+                        <div style={{fontSize:9,color:th.tm,marginTop:4,lineHeight:1.35}}>Confirmate, suma ta estimată, dar încă fără plată efectivă către tine.</div>
                       </div>
                     </div>
                   )}
@@ -9984,8 +10099,8 @@ function App() {
               const m=MEMBERS.find(x=>x.id===finMember);
               if(!m) return null;
               const allEvs=evs.filter(e=>e.st==="confirmat").sort((a,b)=>evSortKey(b)-evSortKey(a));
-              const paid=allEvs.filter(e=>e.restPaid);
-              const waiting=allEvs.filter(e=>!e.restPaid);
+              const paid=allEvs.filter(e=>isMemberPayoutReceived(e,finMember)&&(memberDetail(e,finMember).grandTotal>0.005));
+              const waiting=allEvs.filter(e=>!isMemberPayoutReceived(e,finMember)&&(memberDetail(e,finMember).grandTotal>0.005));
               const totPaid=paid.reduce((s,e)=>s+memberDetail(e,finMember).grandTotal,0);
               const totWait=waiting.reduce((s,e)=>s+memberDetail(e,finMember).grandTotal,0);
               const totBase=paid.reduce((s,e)=>s+memberDetail(e,finMember).base,0);
@@ -10017,7 +10132,7 @@ function App() {
                   <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"hidden"}}>
                     <table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12,borderCollapse:"collapse"}}>
                       <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
-                        {["Data","Tipul","Rol (ca în fișă)","Suma","Status"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                        {["Data","Tipul","Rol (ca în fișă)","Suma","Plată / client"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                       </tr></thead>
                       <tbody>{evsForRole.map(ev=>{
                         const d=memberDetail(ev,finMember);
@@ -10029,7 +10144,10 @@ function App() {
                           <td style={{padding:"8px 10px"}}>{ev.type||"—"}</td>
                           <td style={{padding:"8px 10px",fontSize:11,color:th.tm,maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={desc}>{desc}</td>
                           <td style={{padding:"8px 10px",fontWeight:700,color:roleColor}}>{roundDisplay?fvEurInt(amt):fmt(amt)}</td>
-                          <td style={{padding:"8px 10px",fontSize:10,color:ev.restPaid?"#22c55e":"#f59e0b"}}>{ev.restPaid?"✅ primit":"⏳ în așteptare"}</td>
+                          <td style={{padding:"8px 10px",fontSize:10,lineHeight:1.35}}>
+                            <div style={{color:isMemberPayoutReceived(ev,finMember)?"#22c55e":"#94a3b8",fontWeight:600}}>{isMemberPayoutReceived(ev,finMember)?"✅ Ți s-a plătit":"⛔ Neprimit"}</div>
+                            <div style={{fontSize:9,color:th.tm,marginTop:2}}>Client rest: {ev.restPaid?"✓ încasat":"⏳ neîncasat"}</div>
+                          </td>
                         </tr>;
                       })}</tbody>
                     </table>
@@ -10047,14 +10165,14 @@ function App() {
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(3,1fr)",gap:10,marginBottom:16}}>
                   <div style={{...sty.cd,border:"1px solid rgba(34,197,94,.3)"}}>
-                    <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>✅ Încasat</div>
+                    <div style={{fontSize:10,color:"#22c55e",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>✅ Ți s-a plătit</div>
                     <div style={{fontSize:22,fontWeight:800,color:"#22c55e"}}>{fv2(totPaid)}</div>
-                    <div style={{fontSize:10,color:th.tm,marginTop:3}}>{paid.filter(e=>memberDetail(e,finMember).grandTotal>0).length} evenimente plătite</div>
+                    <div style={{fontSize:10,color:th.tm,marginTop:3}}>{paid.length} evenimente · plată efectivă (bifă admin)</div>
                   </div>
-                  <div style={{...sty.cd,border:"1px solid rgba(245,158,11,.3)"}}>
-                    <div style={{fontSize:10,color:"#f59e0b",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>⏳ Urmează</div>
-                    <div style={{fontSize:22,fontWeight:800,color:"#f59e0b"}}>{fv2(totWait)}</div>
-                    <div style={{fontSize:10,color:th.tm,marginTop:3}}>{waiting.filter(e=>memberDetail(e,finMember).grandTotal>0).length} evenimente confirmate</div>
+                  <div style={{...sty.cd,border:"1px solid rgba(148,163,184,.35)"}}>
+                    <div style={{fontSize:10,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>⛔ Neprimit</div>
+                    <div style={{fontSize:22,fontWeight:800,color:"#94a3b8"}}>{fv2(totWait)}</div>
+                    <div style={{fontSize:10,color:th.tm,marginTop:3}}>{waiting.length} evenimente confirmate, fără bifă plată</div>
                   </div>
                   <div style={{...sty.cd}}>
                     <div style={{fontSize:10,color:th.tm,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>💰 Total general</div>
@@ -10063,10 +10181,10 @@ function App() {
                   </div>
                 </div>
                 <div style={{fontSize:11,color:th.tm,lineHeight:1.55,marginBottom:14,padding:"10px 12px",borderRadius:10,background:th.h,border:`1px solid ${th.bl}`}}>
-                  <strong>Parte cantat</strong> și <strong>Bonus rol</strong> sunt <strong>aceleași numere</strong> ca în Fișa financiară la „Total per membru”. <strong>Tehnic (plată separată)</strong> se adaugă dacă pe eveniment ești setat ca membru la Tehnic 1 sau 2 — nu intră în pool-ul de împărțire, dar intră în totalul tău de mai sus.
+                  <strong>Parte cantat</strong> și <strong>Bonus rol</strong> sunt <strong>aceleași numere</strong> ca în Fișa financiară la „Total per membru”. <strong>Tehnic (plată separată)</strong> se adaugă dacă ești beneficiar tehnic pe eveniment. <strong>Status „primit / neprimit”</strong> = dacă ți s-a făcut efectiv plata (admin bifează în Finanțe eveniment), nu același lucru cu încasarea restului de la client în firmă.
                 </div>
                 {totPaid>0&&<div style={{...sty.cd,marginBottom:16}}>
-                  <div style={{fontSize:11,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Sumar sursă câștig (încasat)</div>
+                  <div style={{fontSize:11,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:10}}>Sumar — plătit efectiv către tine</div>
                   <div style={{display:"flex",flexWrap:"wrap",gap:8}}>
                     {totBase>0&&<div style={{padding:"8px 14px",borderRadius:10,background:"rgba(99,102,241,.1)",border:"1px solid rgba(99,102,241,.2)"}}>
                       <div style={{fontSize:9,color:"#a5b4fc",textTransform:"uppercase",letterSpacing:1}}>🎵 Parte cantat</div>
@@ -10099,7 +10217,7 @@ function App() {
                     <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"hidden"}}>
                       <table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12,borderCollapse:"collapse"}}>
                         <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
-                          {["Data","Tipul","Linii (ca în costuri)","Suma","Status"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
+                          {["Data","Tipul","Linii (ca în costuri)","Suma","Plată / client"].map(h=><th key={h} style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,fontWeight:600}}>{h}</th>)}
                         </tr></thead>
                         <tbody>{techEvs.map(ev=>{
                           const d=memberDetail(ev,finMember);
@@ -10109,7 +10227,10 @@ function App() {
                             <td style={{padding:"8px 10px"}}>{ev.type||"—"}</td>
                             <td style={{padding:"8px 10px",fontSize:11,color:th.tm,maxWidth:280,whiteSpace:"pre-wrap",lineHeight:1.35}} title={desc}>{desc}</td>
                             <td style={{padding:"8px 10px",fontWeight:700,color:"#38bdf8"}}>{fv2(d.techExtraEur)}</td>
-                            <td style={{padding:"8px 10px",fontSize:10,color:ev.restPaid?"#22c55e":"#f59e0b"}}>{ev.restPaid?"✅ primit":"⏳ în așteptare"}</td>
+                            <td style={{padding:"8px 10px",fontSize:10,lineHeight:1.35}}>
+                              <div style={{color:isMemberPayoutReceived(ev,finMember)?"#22c55e":"#94a3b8",fontWeight:600}}>{isMemberPayoutReceived(ev,finMember)?"✅ Ți s-a plătit":"⛔ Neprimit"}</div>
+                              <div style={{fontSize:9,color:th.tm,marginTop:2}}>Client rest: {ev.restPaid?"✓ încasat":"⏳ neîncasat"}</div>
+                            </td>
                           </tr>;
                         })}</tbody>
                       </table>
@@ -10142,14 +10263,15 @@ function App() {
                 <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>Split per membru</div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"repeat(2,1fr)":"repeat(5,1fr)",gap:8}}>
                   {MEMBERS.map(m=>{
-                    const primit=evs.filter(e=>e.st==="confirmat"&&e.restPaid).reduce((s,e)=>s+memberDetail(e,m.id).grandTotal,0);
-                    const asteptConf=evs.filter(e=>e.st==="confirmat"&&!e.restPaid).reduce((s,e)=>s+memberDetail(e,m.id).grandTotal,0);
+                    const primit=evs.filter(e=>e.st==="confirmat"&&isMemberPayoutReceived(e,m.id)).reduce((s,e)=>s+memberDetail(e,m.id).grandTotal,0);
+                    const sumaNeprim=evs.filter(e=>e.st==="confirmat"&&!isMemberPayoutReceived(e,m.id)).reduce((s,e)=>s+memberDetail(e,m.id).grandTotal,0);
                     return <div key={m.id} onClick={()=>setFinMember(m.id)} style={{padding:14,borderRadius:10,background:th.h,textAlign:"center",cursor:"pointer",border:`1px solid ${th.b}`,transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.border=`1px solid ${th.a}`;e.currentTarget.style.background=th.ab;}} onMouseLeave={e=>{e.currentTarget.style.border=`1px solid ${th.b}`;e.currentTarget.style.background=th.h;}}>
                       <div style={{width:38,height:38,borderRadius:"50%",background:"rgba(99,102,241,.25)",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:15,color:th.t,margin:"0 auto 8px"}}>{m.n[0]}</div>
                       <div style={{fontSize:13,fontWeight:600}}>{m.n}</div>
                       <div style={{fontSize:10,color:th.tm,marginBottom:6}}>{m.r}</div>
+                      <div style={{fontSize:11,color:th.tm,marginBottom:2}}>Plătit către membru</div>
                       <div style={{fontSize:17,fontWeight:800,color:"#22c55e"}}>{f$(primit)}</div>
-                      {asteptConf>0&&<div style={{fontSize:10,color:"#f59e0b",fontWeight:600,marginTop:3}}>⏳ {f$(asteptConf)}</div>}
+                      {sumaNeprim>0.005&&<div style={{fontSize:10,color:"#94a3b8",fontWeight:600,marginTop:3}}>⛔ Neprimit {f$(sumaNeprim)}</div>}
                       <div style={{fontSize:9,color:th.tm,marginTop:6,opacity:.7}}>Vezi detalii →</div>
                     </div>;
                   })}
@@ -10157,7 +10279,7 @@ function App() {
               </div>
               </> : <>
               <h1 style={{fontSize:22,fontWeight:700,marginBottom:8}}>Finanțele mele</h1>
-              <p style={{fontSize:12,color:th.tm,marginBottom:16,lineHeight:1.5,maxWidth:520}}>Vezi doar încasările tale din împărțirea pe evenimente confirmate. Totalurile trupei și split-ul complet sunt disponibile doar pentru admin.</p>
+              <p style={{fontSize:12,color:th.tm,marginBottom:16,lineHeight:1.5,maxWidth:520}}>Vezi sumele estimate din împărțire pe evenimente confirmate. <strong>„Ți s-a plătit”</strong> = adminul a bifat în Finanțe eveniment că ți-a intrat efectiv plata (poate fi înainte sau după ce restul e încasat în firmă). Totalurile agregate ale trupei doar pentru admin.</p>
               {user?.memberId ? renderFinancesForMember(user.memberId) : <div style={{...sty.cd,padding:16,border:`1px solid ${th.bl}`}}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Profil incomplet</div>
                 <div style={{fontSize:12,color:th.tm,lineHeight:1.5}}>Contul tău nu e legat de un membru din trupă. Cere adminului să verifice asocierea contului.</div>
@@ -10805,7 +10927,8 @@ function App() {
                         </div>
                       </div>
                       <div>
-                        <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Plăți primite</div>
+                        <div style={{fontSize:9,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Încasări client (firmă)</div>
+                        <div style={{fontSize:9,color:th.ts,marginBottom:6,lineHeight:1.35}}>Banii de la client. Plată către trupă = secțiunea de mai jos.</div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                           <div onClick={()=>{const nd=!ev.dp;updEv({dp:nd,...(nd&&ev.st==="plata_avans"?{st:"confirmat"}:{})});showToast(nd?(ev.st==="plata_avans"?"Avans încasat ✓ — confirmat":"Avans: încasat ✓"):"Avans: neîncasat");}} style={{padding:12,borderRadius:10,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":th.b}`,transition:"border-color .15s"}}>
                             <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Avans {ev.dp?"✓":""}</div>
@@ -10821,6 +10944,7 @@ function App() {
                           </div>
                         </div>
                         {ev.dp&&ev.restPaid&&<div style={{fontSize:10,color:"#22c55e",fontWeight:600,textAlign:"center",marginTop:6}}>✓ Eveniment plătit integral</div>}
+                        <PayoutStatusPanel ev={ev} onPatch={updEv} th={th} readOnly={isCollaborator} showToast={showToast} servicePrices={templates?.servicePrices}/>
                       </div>
                       <div style={{padding:"10px 12px",borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
                         <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
@@ -10849,6 +10973,7 @@ function App() {
                   {(()=>{
                     const { lines, total } = getCollaboratorCostLines(ev, collaboratorKey, templates?.servicePrices);
                     const v=ev.valuta||"EUR";
+                    const colPay = isColabPayoutReceived(ev, collaboratorKey);
                     return <div style={{marginBottom:14,padding:14,borderRadius:10,border:"1px solid rgba(124,58,237,.35)",background:"rgba(124,58,237,.06)"}}>
                       <div style={{fontSize:11,fontWeight:700,marginBottom:8,color:"#c4b5fd"}}>Ce îți revine din ofertă (doar liniile tale — estimativ)</div>
                       {lines.length===0 ? <div style={{fontSize:12,color:th.tm}}>Nicio linie aplicabilă pentru profilul tău pe acest eveniment.</div> : lines.map((ln,i)=>(
@@ -10861,6 +10986,7 @@ function App() {
                         <span>Total estimat</span>
                         <span>{fFmt(total,v)}</span>
                       </div>
+                      {total > 0.005 && <div style={{fontSize:11,marginTop:10,fontWeight:600,color:colPay?"#22c55e":"#94a3b8"}}>Plată către tine: {colPay?"✅ primit":"⛔ neprimit"} <span style={{fontSize:10,color:th.tm,fontWeight:400}}>· bifă din partea trupei în Finanțe</span></div>}
                     </div>;
                   })()}
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
@@ -11192,7 +11318,8 @@ function App() {
 
               {/* Plăți primite */}
               <div>
-                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Plăți primite</div>
+                <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:4}}>Încasări de la client (în firmă)</div>
+                <div style={{fontSize:10,color:th.ts,marginBottom:8,lineHeight:1.4}}>Avans + rest — nu înseamnă automat că membrii sau furnizorii au și încasat.</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                   <div onClick={()=>{const nd=!ev.dp;upd({dp:nd,...(nd&&ev.st==="plata_avans"?{st:"confirmat"}:{})});showToast(nd?(ev.st==="plata_avans"?"Avans încasat ✓ — confirmat":"Avans: încasat ✓"):"Avans: neîncasat");}} style={{padding:12,borderRadius:8,background:th.h,textAlign:"center",cursor:"pointer",border:`2px solid ${ev.dp?"#22c55e":th.b}`,transition:"border-color .15s"}}>
                     <div style={{fontSize:9,color:th.tm,textTransform:"uppercase",marginBottom:4}}>Avans {ev.dp?"✓":""}</div>
@@ -11206,6 +11333,7 @@ function App() {
                   </div>
                 </div>
                 {ev.dp&&ev.restPaid&&<div style={{fontSize:10,color:"#22c55e",fontWeight:600,textAlign:"center",marginTop:6}}>✓ Eveniment plătit integral — {fondDupCheltPct}% fond activ</div>}
+                <PayoutStatusPanel ev={ev} onPatch={upd} th={th} readOnly={false} showToast={showToast} servicePrices={templates?.servicePrices}/>
               </div>
 
               {/* Fond după cheltuieli — procent din net (după logistică), standard 7% */}
