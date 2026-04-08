@@ -938,8 +938,9 @@ const normalizeTechSlot = (ev, slot) => {
     w === "member" ? "member" : w === "custom" ? "custom" : w === "levi" ? "levi" : w === "unset" ? "unset" : isT2 ? "unset" : "levi";
   const memberId = who === "member" ? canonMemId(raw.memberId) : null;
   const name = String(raw.name || "").trim();
-  if (who === "member" && !memberId) return { ...fallback };
-  if (who === "custom" && !name) return { ...fallback };
+  /** Nu întoarce fallback la Levi când utilizatorul tocmai a ales „membru” / „custom” dar nu a completat încă — altfel dropdown-ul pare „blocat”. */
+  if (who === "member" && !memberId) return { who: "member", memberId: null, name: String(raw.name || "").trim() };
+  if (who === "custom" && !name) return { who: "custom", memberId: null, name: "" };
   if (who === "unset") return { who: "unset", memberId: null, name: "" };
   return { who, memberId, name };
 };
@@ -964,6 +965,7 @@ const techSlotPayeeLabel = (slotCfg) => {
   if (!slotCfg || slotCfg.who === "unset") return "— nealocat";
   if (slotCfg.name) return slotCfg.name;
   if (slotCfg.who === "member" && slotCfg.memberId) return MEMBERS.find((m) => m.id === slotCfg.memberId)?.short || slotCfg.memberId;
+  if (slotCfg.who === "member") return "— alege membru";
   if (slotCfg.who === "custom") return slotCfg.name || "Extern";
   return "Levi";
 };
