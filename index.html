@@ -366,6 +366,19 @@ const fEvDate = (ev) => {
   if (ev.date) return fD(ev.date);
   return "—";
 };
+const eventFriendlyLabel = (ev, opts = {}) => {
+  if (!ev) return "Eveniment";
+  const withDate = opts.withDate !== false;
+  const withContract = opts.withContract !== false;
+  const typeLabel = String(ev.type || "Eveniment").trim() || "Eveniment";
+  const dateLabel = String(fEvDate(ev) || "").trim();
+  const hasDate = dateLabel && dateLabel !== "—" && dateLabel.toLowerCase() !== "fără dată";
+  const contractLabel = withContract ? `C${ev.offerNr ?? "?"}` : "";
+  const parts = [typeLabel];
+  if (withDate && hasDate) parts.push(dateLabel);
+  if (contractLabel) parts.push(contractLabel);
+  return parts.join(" · ");
+};
 const evPeriodStartMs = (ev) => {
   if (!ev) return 0;
   const k = getEventDateKind(ev);
@@ -7697,10 +7710,14 @@ function App() {
     const exBy = { tehnic: [], furnizor: [], taxe_fisa: [], alt: [] };
     const sg = evs.filter((e) => e.st === "confirmat");
     for (const e of sg) {
-      const label = `O${e.offerNr ?? "?"} · ${e.cn || e.title || "—"}`;
+      const typeLabel = (e.type || "Eveniment").trim();
+      const dateLabelRaw = String(fEvDate(e) || "").trim();
+      const hasRealDateLabel = dateLabelRaw && dateLabelRaw !== "—" && dateLabelRaw.toLowerCase() !== "fără dată";
+      const contractLabel = `C${e.offerNr ?? "?"}`;
+      const label = hasRealDateLabel ? `${typeLabel} · ${dateLabelRaw} · ${contractLabel}` : `${typeLabel} · ${contractLabel}`;
       const curs = e.cursLei || CURS_DEFAULT;
       const toEur = (amt) => (e.valuta === "lei" ? (Number(amt) || 0) / curs : (Number(amt) || 0));
-      const dateStr = e.date || (e.dateOptions || [])[0] || (e.dateMonth ? `${e.dateMonth}-01` : "") || "—";
+      const dateStr = hasRealDateLabel ? dateLabelRaw : contractLabel;
       const br = typeof getSvcCostBreakdown === "function" ? getSvcCostBreakdown(e, sp) : [];
       for (const row of br) {
         const aEur = Math.round((Number(row.cost) || 0) * 100) / 100;
@@ -8383,7 +8400,7 @@ function App() {
               })()}
               {globalSearchResults.evs.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Cereri / Evenimente</div>}
               {globalSearchResults.evs.map(ev=><div key={ev.id} onClick={()=>{setGlobalSearch("");openModal("detail",ev.id);}} style={{padding:"10px 14px",cursor:"pointer",borderBottom:`1px solid ${th.bl}`,display:"flex",justifyContent:"space-between",alignItems:"center"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
-                <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.venue}</div></div>
+                <div><div style={{fontSize:13,fontWeight:600}}>{eventFriendlyLabel(ev)}</div><div style={{fontSize:11,color:th.tm}}>{ev.venue||"—"}</div></div>
                 <div onClick={e=>e.stopPropagation()}><BadgeStatusSelect s={ev.st} th={th} evId={ev.id} onStatusChange={updSt}/></div>
               </div>)}
               {globalSearchResults.tasks.length>0&&<div style={{padding:"8px 12px",fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1}}>Tasks</div>}
@@ -8419,7 +8436,7 @@ function App() {
               </div>
               {dashList.length===0&&<div style={{padding:16,textAlign:"center",color:th.tm,fontSize:12}}>Nicio ofertă sau eveniment în această zi</div>}
               {dashList.map(ev=><div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",borderRadius:7,marginBottom:4,cursor:"pointer",borderLeft:"3px solid "+(ST[ev.st]?.c||th.a)}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background="transparent"}>
-                <div><div style={{fontSize:13,fontWeight:600}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div><div style={{fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div></div>
+                <div><div style={{fontSize:13,fontWeight:600}}>{eventFriendlyLabel(ev)}</div><div style={{fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div></div>
                 <Badge s={ev.st} th={th}/>
               </div>)}
               {dashList.length>0&&<button onClick={()=>{setTab("calendar");setCalM(new Date(dashboardDateSearch));}} style={{...sty.bg,fontSize:11,marginTop:8,width:"100%"}}>Deschide în calendar</button>}
@@ -9344,7 +9361,7 @@ function App() {
                 {dayEvs.length===0?<div style={{fontSize:12,color:th.tm,marginBottom:12}}>Niciun eveniment în această zi</div>:dayEvs.map(ev=>(
                   <div key={ev.id} onClick={()=>{setCalSidebarDate(null);openModal("calEvPreview",ev.id);}} style={{padding:14,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,marginBottom:10,cursor:"pointer"}}>
                     <Badge s={ev.st} th={th}/>
-                    <div style={{fontSize:14,fontWeight:700,marginTop:8}}>{ev.offerNr?"O"+ev.offerNr:"???"} · {ev.type}</div>
+                    <div style={{fontSize:14,fontWeight:700,marginTop:8}}>{eventFriendlyLabel(ev)}</div>
                     <div style={{fontSize:12,marginTop:4}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
                     {ev.cn&&<div style={{fontSize:12,color:th.tm,marginTop:2}}>👤 {ev.cn}</div>}
                     <div style={{fontSize:15,fontWeight:700,marginTop:6,color:th.a}}>{f$(ev.fee)}</div>
@@ -9574,10 +9591,7 @@ function App() {
                         <div key={ev.id} onClick={()=>openModal("detail",ev.id)} style={{padding:"12px 14px",borderRadius:10,border:`1px solid ${th.b}`,background:th.h,cursor:"pointer"}} onMouseOver={e=>e.currentTarget.style.background=th.h} onMouseOut={e=>e.currentTarget.style.background=th.c}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}>
                             <Badge s={ev.st} th={th}/>
-                            <div style={{fontSize:13,fontWeight:800,color:th.t}}>
-                              {ev.st==="cerere" ? "📞 " : (ev.offerNr ? "O"+ev.offerNr+" · " : "")}
-                              {ev.type||"—"}
-                            </div>
+                            <div style={{fontSize:13,fontWeight:800,color:th.t}}>{eventFriendlyLabel(ev, { withDate: true, withContract: ev.st!=="cerere" })}</div>
                           </div>
                           <div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.cat==="private"?"Privat":"Public"}</div>
                         </div>
@@ -10057,7 +10071,7 @@ function App() {
               {dayEvs.length>0&&<>
                 <div style={{fontSize:11,fontWeight:700,color:th.tm,textTransform:"uppercase",letterSpacing:0.5}}>Cereri / evenimente</div>
                 {dayEvs.map(ev=><button key={ev.id} type="button" onClick={()=>go(()=>(ev.st==="confirmat"?openModal("detail",ev.id):openModal("oferta",ev.id)))} style={{textAlign:"left",padding:12,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,cursor:"pointer",width:"100%"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}><Badge s={ev.st} th={th}/><span style={{fontSize:13,fontWeight:700,color:th.t}}>{ev.offerNr!=null&&ev.offerNr!==""?"O"+ev.offerNr:"—"} · {ev.type}</span></div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6,flexWrap:"wrap"}}><Badge s={ev.st} th={th}/><span style={{fontSize:13,fontWeight:700,color:th.t}}>{eventFriendlyLabel(ev, { withDate: false, withContract: true })}</span></div>
                   <div style={{fontSize:11,color:th.tm}}>{ev.venue}{ev.city?", "+ev.city:""}</div>
                 </button>)}
               </>}
@@ -10189,7 +10203,7 @@ function App() {
                     <Badge s={ev.st} th={th}/>
                     <span style={{fontSize:11,color:th.tm,background:th.ab,padding:"2px 8px",borderRadius:10}}>{ev.cat==="private"?"Privat":"Public"}</span>
                   </div>
-                  <div style={{fontSize:18,fontWeight:700,lineHeight:1.2}}>{ev.offerNr?"O"+ev.offerNr+" · ":""}{ev.type||"Eveniment"}</div>
+                  <div style={{fontSize:18,fontWeight:700,lineHeight:1.2}}>{eventFriendlyLabel(ev)}</div>
                   <div style={{fontSize:13,color:th.tm,marginTop:4}}>{fTs(ev.date)}</div>
                 </div>
                 <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -10345,7 +10359,7 @@ function App() {
                     <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:th.ab,color:th.tm,fontWeight:600}}>{isP?"Privat (ZGV)":"Public (PHASER)"}</span>
                     {ev.type&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:th.ab,color:th.tm}}>{ev.type}</span>}
                   </div>
-                  <div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{isConfirmed?ev.type:ev.st==="cerere"?("📞 "+(ev.type||"Cerere")):((ev.offerNr?"O"+ev.offerNr:"???")+" · "+(ev.type||""))}</div>
+                  <div style={{fontSize:18,fontWeight:700,marginBottom:2}}>{isConfirmed ? eventFriendlyLabel(ev) : (ev.st==="cerere" ? ("📞 "+(ev.type||"Cerere")) : eventFriendlyLabel(ev))}</div>
                   <div style={{fontSize:11,color:th.tm}}>{fEvDate(ev)} · {ev.venue}{ev.city?", "+ev.city:""}</div>
                   {(ev.responsabilPrincipal||(ev.responsabili||[]).length>0)&&<div style={{fontSize:10,color:th.tm,marginTop:4}}>Preluat: {ev.responsabilPrincipal||"—"} {(ev.responsabili||[]).length>0&&` · ${(ev.responsabili||[]).filter(r=>r.nume||r.rol).map(r=>r.nume+(r.rol?" ("+r.rol+")":"")).join(", ")}`}</div>}
                 </div>
@@ -10729,7 +10743,7 @@ function App() {
               <div style={{flex:1,display:"flex",alignItems:"center",gap:10}}>
                 {fromDetail&&<button onClick={()=>{closeModal();setTimeout(()=>openModal("detail",ev.id),80);}} style={{display:"flex",alignItems:"center",gap:6,padding:"6px 12px",borderRadius:8,border:`1px solid ${th.b}`,background:"transparent",color:th.t,fontSize:12,cursor:"pointer",fontWeight:600}}>← Înapoi</button>}
                 <div>
-                  <div style={{fontSize:15,fontWeight:700}}>Fișa financiară · O{ev.offerNr||"?"}</div>
+                  <div style={{fontSize:15,fontWeight:700}}>Fișa financiară · {eventFriendlyLabel(ev, { withDate: false, withContract: true })}</div>
                   <div style={{fontSize:11,color:th.tm,marginTop:2}}>{isPrivate?"Privat":"Public"} · {fEvDate(ev)}</div>
                 </div>
               </div>
