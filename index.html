@@ -664,6 +664,8 @@ const getAppAccessPin = () => {
 };
 /** Rol admin în app + aliniere RLS pe member_profiles (dacă îl folosiți). */
 const PHASER_ADMIN_EMAILS = [CONTACT_ADMIN_EMAIL].map(e => e.trim().toLowerCase());
+/** Contul trupei (contact@phaser.ro) — nu e unul din cei 5 MEMBERS; fără memberId. */
+const BAND_ORG_USER = { id: "band", n: "Phaser Admin", rl: "admin", memberId: null };
 const sessionUserFromStorage = () => {
   try {
     const mid = localStorage.getItem(LS_SESSION_MEMBER);
@@ -683,9 +685,7 @@ async function resolveBandUserAfterAuth(session, sb) {
   const email = session?.user?.email?.trim().toLowerCase();
   if (!email || !sb) return { ok: false, gate: "unknown" };
   if (email === CONTACT_ADMIN_EMAIL.trim().toLowerCase()) {
-    const bridge = MEMBERS.find(x => x.id === "m2");
-    if (bridge) return { ok: true, user: buildBandUser(bridge, email, true) };
-    return { ok: false, gate: "unknown" };
+    return { ok: true, user: { ...BAND_ORG_USER } };
   }
   const mid = Object.keys(MEMBER_AUTH_EMAIL).find((id) => MEMBER_AUTH_EMAIL[id].trim().toLowerCase() === email);
   if (mid) {
@@ -788,6 +788,8 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
   let roundUnit = 10;
   let roundingAdjFond = 0;
   let roundingAdjLei = 0;
+  /** Privat + rest final **direct** (nu pe firmă): împărțirea pe membru la cel mai apropiat 50 (€ sau lei, după valuta evenimentului). Ex. 555→550, 575→600, 590→600, 574→550. Dacă restul e pe firmă sau eveniment public → pas 10 ca înainte. */
+  const privateRestDirect = isPrivate && !restFirma;
   const allocateSteps = (targetUnits, step, quotaFn) => {
     const alloc = {};
     MEMBERS.forEach(m => {
@@ -830,9 +832,9 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
     const roundedPoolTotalEur = MEMBERS.reduce((acc, m) => acc + (roundedShares[m.id] || 0), 0);
     roundingAdjFond = Math.round((pool - roundedPoolTotalEur) * 100) / 100;
   } else {
-    roundUnit = 10;
+    roundUnit = privateRestDirect ? 50 : 10;
     const targetCents = Math.round(pool * 100);
-    const stepCents = 1000;
+    const stepCents = privateRestDirect ? 5000 : 1000;
     const quotaC = (id) => (shareTotal <= 0 ? targetCents / MEMBERS.length : targetCents * ((shares[id] || 0) / shareTotal));
     const { alloc: centAlloc } = allocateSteps(targetCents, stepCents, quotaC);
     MEMBERS.forEach(m => { roundedShares[m.id] = Math.round(centAlloc[m.id] / 100 * 100) / 100; });
@@ -870,7 +872,7 @@ const computeFinanceDistribution = (ev, servicePrices) => {
     stageAmt: M.stageAmt,
   };
 };
-/** Bonus la același pas ca pool-ul (10€ sau 10 lei); parte cantat = total rotunjit − bonus. */
+/** Bonus la același pas ca pool-ul (50 sau 10 în moneda evenimentului pentru privat rest direct / rest cazuri); parte cantat = total rotunjit − bonus. */
 const snapMemberBonusToPoolStep = (total, bonusRaw, roundUnit) => {
   const step = Math.round((Number(roundUnit) > 0 ? roundUnit : 10) * 100);
   const tot = Math.round(Number(total) * 100);
@@ -959,6 +961,21 @@ const calcFond7 = (ev) => {
   const pct = Math.min(100, Math.max(0, Number(ev.fondDupCheltPct ?? 7)));
   return Math.round(netAfterFixed*pct/100*100)/100;
 };
+
+/** Categorii pentru liniile din tabul Cheltuieli ofertă — `taxe_fisa` nu scade din Profit net (doar urmărire până la plată reală / import bancă). */
+const EX_FIN_CAT = { alt: "alt", tehnic: "tehnic", furnizor: "furnizor", taxe_fisa: "taxe_fisa" };
+const SVC_KEYS_TEHNIC = new Set(["tehnic2Auto", "tehnicSupplPlatouri"]);
+const SVC_KEYS_FURNIZOR = new Set(["sunet", "lumini", "ecran", "scena", "dj"]);
+function getExFinanceCat(x) {
+  const c = x?.cxCat;
+  if (c === EX_FIN_CAT.tehnic || c === EX_FIN_CAT.furnizor || c === EX_FIN_CAT.taxe_fisa || c === EX_FIN_CAT.alt) return c;
+  const id = String(x?.id || "");
+  if (id === "ex_tehnicii") return EX_FIN_CAT.tehnic;
+  const n = String(x?.n || "").toLowerCase();
+  if (/\btehnic|soundman|sunetist\b/.test(n)) return EX_FIN_CAT.tehnic;
+  if (/backline|transport|podium|scen(ă|a)?|ecran|lumini|furnizor|dj\b/i.test(n)) return EX_FIN_CAT.furnizor;
+  return EX_FIN_CAT.alt;
+}
 
 const USERS = [
   {id:"u3",n:"Membru",rl:"membru"},
@@ -1078,7 +1095,7 @@ const RIDER_TEHNIC = {
 // STORAGE & SCHEMA
 // ═══════════════════════════════════════════════════════════════════════════════
 const PHASER_V = 3;
-const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", playlistVersions: "phaser_playlist_versions", creative: "phaser_creative", memberProfiles: "phaser_member_profiles", bandNotifications: "phaser_band_notifications", calBlocks: "phaser_cal_blocks", songs: "phaser_songs" };
+const LS_KEYS = { evs: "phaser_evs", tasks: "phaser_tasks", genExp: "phaser_genExp", bankExp: "phaser_bankExp", annualCosts: "phaser_annualCosts", gigsPerYear: "phaser_gigsPerYear", templates: "phaser_templates", riderVersions: "phaser_rider_versions", pressKitVersions: "phaser_presskit_versions", playlistVersions: "phaser_playlist_versions", creative: "phaser_creative", memberProfiles: "phaser_member_profiles", bandNotifications: "phaser_band_notifications", calBlocks: "phaser_cal_blocks", songs: "phaser_songs" };
 const SUPABASE_URL = "https://uhekoixrvyoascchdwrp.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_CZnkBOE7AnfAai9j-UVatQ_gKEPMurS";
 const SUPABASE_CFG = { url: SUPABASE_URL, key: SUPABASE_ANON_KEY };
@@ -1133,6 +1150,122 @@ const loadTasks = () => { try { const s = localStorage.getItem(LS_KEYS.tasks); i
 const loadCalBlocks = () => { try { const s = localStorage.getItem(LS_KEYS.calBlocks); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
 const loadBandNotifications = () => { try { const s = localStorage.getItem(LS_KEYS.bandNotifications); if (!s) return []; const d = JSON.parse(s); return Array.isArray(d) ? d : []; } catch(e){ return []; } };
 const loadGenExp = () => { try { const s = localStorage.getItem(LS_KEYS.genExp); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
+const loadBankExp = () => { try { const s = localStorage.getItem(LS_KEYS.bankExp); if (s) { const d = JSON.parse(s); return Array.isArray(d) ? d : []; } } catch(e){} return []; };
+
+function detectCsvDelimiter(sampleLine) {
+  let inQ = false, semi = 0, comma = 0;
+  for (let i = 0; i < sampleLine.length; i++) {
+    const c = sampleLine[i];
+    if (c === '"') {
+      if (inQ && sampleLine[i + 1] === '"') { i++; continue; }
+      inQ = !inQ;
+      continue;
+    }
+    if (!inQ) { if (c === ";") semi++; if (c === ",") comma++; }
+  }
+  return semi >= comma ? ";" : ",";
+}
+function splitCsvLine(line, delim) {
+  const out = []; let cur = ""; let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; continue; }
+      inQ = !inQ;
+      continue;
+    }
+    if (!inQ && c === delim) { out.push(cur.trim()); cur = ""; continue; }
+    cur += c;
+  }
+  out.push(cur.trim());
+  return out;
+}
+function roParseAmountCell(s) {
+  if (s == null || String(s).trim() === "") return NaN;
+  let t = String(s).trim().replace(/\s/g, "").replace(/€|eur|ron|lei/gi, "");
+  const neg = /^-/.test(t);
+  if (neg) t = t.slice(1);
+  if (/^\d{1,3}(\.\d{3})+,\d{2,}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
+  else if (/^\d+,\d{2,}$/.test(t)) t = t.replace(",", ".");
+  else t = t.replace(/,/g, "");
+  const n = Number(t);
+  if (Number.isNaN(n)) return NaN;
+  return neg ? -n : n;
+}
+const normCsvHead = (s) => String(s || "").normalize("NFD").replace(/\p{M}/gu, "").replace(/\s+/g, " ").trim().toLowerCase();
+
+/**
+ * Extrage rânduri de cheltuială din extras bancar CSV (ING RO / formate cu Încasări+Plăți sau o coloană Suma; sau ING NL Af/Bij).
+ * `cursRonPerEur` — conversie RON→EUR la import (implicit 5).
+ */
+function parseBankStatementCsv(text, cursRonPerEur = 5) {
+  const raw = String(text || "").replace(/^\uFEFF/, "").trim();
+  if (!raw) return { rows: [], error: "Fișier gol." };
+  const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+  if (lines.length < 2) return { rows: [], error: "Lipsește antetul sau liniile de date." };
+  const delim = detectCsvDelimiter(lines[0]);
+  const header = splitCsvLine(lines[0], delim).map(normCsvHead);
+  const idx = (pred) => header.findIndex((h) => pred(h));
+  const iDate = idx((h) => /^(data|booking|datum|date)/.test(h) || h.includes("data oper") || h.includes("data inreg") || h.includes("data tranz"));
+  const iDesc = idx((h) => h.includes("descri") || h.includes("detali") || h.includes("referin") || h.includes("beneficiar") || h.includes("counter") || h.includes("naam") || h.includes("mededel"));
+  const iPlati = idx((h) => h === "plati" || /\bplati\b/.test(h) || (h.includes("debit") && !h.includes("card")) || h === "iesiri");
+  const iInc = idx((h) => h.includes("incasar") || (h.includes("credit") && !h.includes("card")) || h.includes("intrari"));
+  const iSuma = idx((h) => h.includes("suma") || h.includes("valoare") || /^amount$/.test(h) || h.includes("bedrag"));
+  const iAfBij = idx((h) => h.replace(/\s/g, "").includes("afbij") || h === "af bij");
+  const iCur = idx((h) => h.includes("moned") || h.includes("currency") || h === "valuta");
+  const rows = [];
+  let mode = "unknown";
+  if (iAfBij >= 0 && iSuma >= 0) mode = "ing_nl";
+  else if (iPlati >= 0) mode = "ro_split";
+  else if (iSuma >= 0) mode = "suma";
+  if (mode === "unknown") {
+    return { rows: [], error: "Nu recunosc coloanele (caută: Data, Descriere, Încasări/Plăți sau Suma). Exportă CSV din ING sau ajustează antetul." };
+  }
+  for (let li = 1; li < lines.length; li++) {
+    const cells = splitCsvLine(lines[li], delim);
+    if (cells.length < 2 && cells.every((c) => !c)) continue;
+    const pad = (i) => (i >= 0 && i < cells.length ? cells[i] : "");
+    const dRaw = iDate >= 0 ? pad(iDate) : "";
+    const descParts = [];
+    if (iDesc >= 0) descParts.push(pad(iDesc));
+    const desc = descParts.join(" · ").trim() || "Tranzacție";
+    let amountOrig = NaN;
+    let cur = "RON";
+    if (mode === "ing_nl") {
+      const afb = normCsvHead(pad(iAfBij));
+      const amt = roParseAmountCell(pad(iSuma));
+      if (Number.isNaN(amt) || amt === 0) continue;
+      if (afb.startsWith("af") || afb === "debit") amountOrig = Math.abs(amt);
+      else continue;
+      cur = "EUR";
+    } else if (mode === "ro_split") {
+      const pl = iPlati >= 0 ? roParseAmountCell(pad(iPlati)) : NaN;
+      const inc = iInc >= 0 ? roParseAmountCell(pad(iInc)) : NaN;
+      if (!Number.isNaN(pl) && pl > 0) amountOrig = pl;
+      else continue;
+      if (iCur >= 0) {
+        const c = normCsvHead(pad(iCur));
+        if (c.includes("eur") || c === "€") cur = "EUR";
+      }
+    } else {
+      const v = roParseAmountCell(pad(iSuma));
+      if (Number.isNaN(v) || v >= 0) continue;
+      amountOrig = Math.abs(v);
+      if (iCur >= 0) {
+        const c = normCsvHead(pad(iCur));
+        if (c.includes("eur") || c === "€") cur = "EUR";
+      }
+    }
+    if (Number.isNaN(amountOrig) || amountOrig <= 0) continue;
+    const curs = Math.max(0.01, Number(cursRonPerEur) || 5);
+    const aEur = cur === "EUR" ? Math.round(amountOrig * 100) / 100 : Math.round((amountOrig / curs) * 100) / 100;
+    const d = dRaw.replace(/^"|"$/g, "").trim() || "—";
+    rows.push({ d, desc, a: aEur, origAmount: amountOrig, origCur: cur });
+  }
+  if (rows.length === 0) return { rows: [], error: "Nu am găsit plăți (ieșiri) în fișier. Verifică că exportul conține coloana Plăți sau sume negative." };
+  return { rows };
+}
+
 const DEFAULT_ANNUAL_COSTS = [{id:"ac1",n:"Contabilă",a:4200,v:"lei"},{id:"ac2",n:"Google Workspace",a:960,v:"eur"},{id:"ac3",n:"ING",a:480,v:"lei"},{id:"ac4",n:"Sala de repetiții",a:2160,v:"lei"},{id:"ac5",n:"Internet",a:360,v:"lei"}];
 const loadAnnualCosts = () => { try { const s = localStorage.getItem(LS_KEYS.annualCosts); if (s) { const d = JSON.parse(s); return Array.isArray(d) && d.length>0 ? d : [...DEFAULT_ANNUAL_COSTS]; } } catch(e){} return [...DEFAULT_ANNUAL_COSTS]; };
 const loadCreative = () => { try { const s=localStorage.getItem(LS_KEYS.creative); if(s) { const d=JSON.parse(s); return d&&typeof d==="object"?d:{}; } } catch(e){} return {ideas:[],songs:[],setlists:[]}; };
@@ -2824,6 +2957,11 @@ function getDefaultContractModelPrivate() {
     cap1Art12Title: "Art.1.2 Beneficiarul",
     cap1BeneficiarPartyLabel: "Persoană fizică:",
     cap1BeneficiarIdIntro: "cu următoarele date de identificare:",
+    cap1BeneficiarBlock: "",
+    cap1BenLblDomiciliu: "**Locul de domiciliu:**",
+    cap1BenLblCI: "**Cartea de identitate:**",
+    cap1BenLblEmail: "**Adresă mail:**",
+    cap1BenLblTel: "**Telefon:**",
     cap1BeneficiarClosing: "în calitate de BENEFICIAR, denumit în continuare în prezentul contract **Beneficiar**.",
     art21: "Art.2.1 Obiectul prezentului contract constă în îndeplinirea activității de interpretare artistică de către Prestator prin actul artistic „PHASER\" în cadrul unui eveniment privat organizat de Beneficiar.",
     art23Intro: "Art.2.3 Durata recitalului artistic este de aproximativ ",
@@ -2914,6 +3052,7 @@ function ContractView({ ev, th, contractFields, onContractChange, contractModel,
   const cap51Lines = String(m.cap51 || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const cap52Lines = String(m.cap52 || "").split("\n").map((s) => s.trim()).filter(Boolean);
   const cap1PrestatorLines = String(m.cap1PrestatorBlock ?? defaultCap1PrestatorBlock()).split("\n").map((s) => s.trim()).filter(Boolean);
+  const cap1BeneficiarExtraLines = String(m.cap1BeneficiarBlock || "").split("\n").map((s) => s.trim()).filter(Boolean);
 
   return (
     <div style={{ background: "#fff", color: "#111", padding: "32px 40px", fontFamily: "Georgia,serif", fontSize: 13, lineHeight: 1.85, maxWidth: 720, margin: "0 auto", boxSizing: "border-box" }}>
@@ -2943,10 +3082,17 @@ function ContractView({ ev, th, contractFields, onContractChange, contractModel,
         <p style={{ margin: "14px 0 8px", fontStyle: "italic" }}>{m.cap1Art12Title || "Art.1.2 Beneficiarul"}</p>
         <p><strong>{(m.cap1BeneficiarPartyLabel || (isP ? "Persoană fizică:" : "Beneficiar / organizator:")).replace(/:\s*$/, "")}:</strong> <Fi k="clientNume" w={200} placeholder={ev.cn || "Numele beneficiarului"} align="left" /></p>
         <p style={{ marginTop: 4 }}>{m.cap1BeneficiarIdIntro || "cu următoarele date de identificare:"}</p>
-        <p><strong>Locul de domiciliu:</strong> Jud. <Fi k="jud" w={100} placeholder="Județ" /> , Mun./Or. <Fi k="mun" w={120} placeholder="Municipiu" /> , Str. <Fi k="str" w={150} placeholder="Strada" align="left" /> , nr. <Fi k="nr2" w={50} placeholder="nr" /> , ap. <Fi k="ap" w={50} placeholder="ap" /></p>
-        <p><strong>Cartea de identitate:</strong> seria <Fi k="ciSeria" w={50} placeholder="XX" /> , nr. <Fi k="ciNr" w={80} placeholder="000000" /> , CNP: <Fi k="cnp" w={140} placeholder="0000000000000" /></p>
-        <p><strong>Adresă mail:</strong> <Fi k="clientEmail" w={200} placeholder={ev.ce || "email@..."} align="left" /></p>
-        <p><strong>Telefon:</strong> <Fi k="clientTel" w={150} placeholder={ev.cp || "+40..."} align="left" /></p>
+        {cap1BeneficiarExtraLines.map((line, i) => (
+          <p key={"benblk"+i} style={{ marginTop: i === 0 ? 4 : 0 }}>{formatContractCap1Inline(line)}</p>
+        ))}
+        <p style={{ marginTop: cap1BeneficiarExtraLines.length ? 6 : 4 }}>
+          {formatContractCap1Inline(m.cap1BenLblDomiciliu || "**Locul de domiciliu:**")}{" "}
+          Jud. <Fi k="jud" w={100} placeholder="Județ" /> , Mun./Or. <Fi k="mun" w={120} placeholder="Municipiu" /> , Str. <Fi k="str" w={150} placeholder="Strada" align="left" /> , nr. <Fi k="nr2" w={50} placeholder="nr" /> , ap. <Fi k="ap" w={50} placeholder="ap" /></p>
+        <p>
+          {formatContractCap1Inline(m.cap1BenLblCI || "**Cartea de identitate:**")}{" "}
+          seria <Fi k="ciSeria" w={50} placeholder="XX" /> , nr. <Fi k="ciNr" w={80} placeholder="000000" /> , CNP: <Fi k="cnp" w={140} placeholder="0000000000000" /></p>
+        <p>{formatContractCap1Inline(m.cap1BenLblEmail || "**Adresă mail:**")} <Fi k="clientEmail" w={200} placeholder={ev.ce || "email@..."} align="left" /></p>
+        <p>{formatContractCap1Inline(m.cap1BenLblTel || "**Telefon:**")} <Fi k="clientTel" w={150} placeholder={ev.cp || "+40..."} align="left" /></p>
         <p style={{ marginTop: 6 }}>{formatContractCap1Inline(m.cap1BeneficiarClosing || "în calitate de BENEFICIAR, denumit în continuare în prezentul contract **Beneficiar**.")}</p>
       </div>
 
@@ -4703,7 +4849,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
     valuta: mData?.valuta||"EUR",
     dep: (()=>{const tot=(mData?.fee||PX.r[1])+(isP?Object.entries(mData?.svcp||{}).reduce((s,[k,v])=>s+(mData?.svc?.[k]?v:0),0):0);return mData?.dep??Math.round(tot*0.1/10)*10;})(), dp: mData?.dp||false, zileRest: mData?.zileRest??5,
     sp: mData?.sp||{}, svc: mData?.svc||{}, svcp: mData?.svcp||{sunet:templates?.servicePrices?.sunet??350,lumini:templates?.servicePrices?.lumini??500,ecran:templates?.servicePrices?.ecran??600,scena:templates?.servicePrices?.scena??300,dj:templates?.servicePrices?.dj??600},
-    ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu"},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu"},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu"}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"", fisaExtra: mData?.fisaExtra||"", fisaExtraItems: mData?.fisaExtraItems||[], svcInfo: mData?.svcInfo||{},
+    ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu",cxCat:EX_FIN_CAT.tehnic},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu",cxCat:EX_FIN_CAT.furnizor},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu",cxCat:EX_FIN_CAT.alt}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"", fisaExtra: mData?.fisaExtra||"", fisaExtraItems: mData?.fisaExtraItems||[], svcInfo: mData?.svcInfo||{},
     impozitVenit: mData?.impozitVenit??1, plataAvansFirma: mData?.plataAvansFirma ?? (mData?.plataDirect===false), plataRestFirma: mData?.plataRestFirma ?? (mData?.plataDirect===false), sumaAvansLei: mData?.sumaAvansLei??0, sumaRestLei: mData?.sumaRestLei??0, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10, fondPct2: mData?.fondPct2??10,
     videos: mData?.videos||tplVideos, covers: mData?.covers||(tplCovers.map(c=>({...c,checked:true}))),
     desc: mData?.desc||"",
@@ -5039,22 +5185,31 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
             </div>}
 
             {secTab==="cheltuieli"&&<div>
-              <div style={{fontSize:11,color:th.tm,marginBottom:8}}>Pentru cheltuieli neprevăzute plătite direct (numerar): bifează „Plătit direct” — se aplică +16% dividende când plata evenimentului e prin firmă.</div>
-              <button onClick={()=>u("ex",[...fm.ex,{id:uid(),n:"",a:0,v:"",direct:false}])} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginBottom:10}}>+ Adaugă cheltuială</button>
-              {fm.ex.map((x,i)=>{const isNeprev=!/tehnic|backline|transport/i.test(x.n||"");return <div key={x.id} style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6,alignItems:"center"}}>
+              <div style={{fontSize:11,color:th.tm,marginBottom:8,lineHeight:1.45}}>Alege <strong>categoria</strong> pentru fiecare linie: <strong>Taxe/dividende (doar urmărire)</strong> nu scade din Profit net în Finanțe — acolo apăr ca cheltuială reală când imporți plata din bancă. Pentru cheltuieli neprevăzute plătite direct (numerar): bifează „Plătit direct” — +16% dividende când plata evenimentului e prin firmă.</div>
+              <button onClick={()=>u("ex",[...fm.ex,{id:uid(),n:"",a:0,v:"",direct:false,cxCat:EX_FIN_CAT.alt}])} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginBottom:10}}>+ Adaugă cheltuială</button>
+              {fm.ex.map((x,i)=>{const isNeprev=!/tehnic|backline|transport/i.test(x.n||"");const cat=x.cxCat||getExFinanceCat(x);return <div key={x.id} style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6,alignItems:"center"}}>
+                <select value={cat} onChange={e=>{const ex=[...fm.ex];ex[i]={...ex[i],cxCat:e.target.value};u("ex",ex);}} className="modernSel" style={{...iStyle,minWidth:mob?120:150,fontSize:11,padding:"6px 8px"}}>
+                  <option value={EX_FIN_CAT.alt}>Operațional / diverse</option>
+                  <option value={EX_FIN_CAT.tehnic}>Tehnici</option>
+                  <option value={EX_FIN_CAT.furnizor}>Furnizori</option>
+                  <option value={EX_FIN_CAT.taxe_fisa}>Taxe/dividende (doar urmărire)</option>
+                </select>
                 <input value={x.n} onChange={e=>{const ex=[...fm.ex];ex[i]={...ex[i],n:e.target.value};u("ex",ex);}} style={{...iStyle,flex:"1 1 120px",minWidth:80}} placeholder="Serviciu"/>
                 <input type="number" value={x.a} onChange={e=>{const ex=[...fm.ex];ex[i]={...ex[i],a:Number(e.target.value)};u("ex",ex);}} style={{...iStyle,width:mob?70:80}} placeholder="€"/>
                 {!mob&&<input value={x.v||""} onChange={e=>{const ex=[...fm.ex];ex[i]={...ex[i],v:e.target.value};u("ex",ex);}} style={{...iStyle,flex:"1 1 100px",minWidth:80}} placeholder="Furnizor"/>}
                 {isNeprev&&<label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,color:th.tm,cursor:"pointer",whiteSpace:"nowrap"}}><input type="checkbox" checked={!!x.direct} onChange={e=>{const ex=[...fm.ex];ex[i]={...ex[i],direct:e.target.checked};u("ex",ex);}}/>Plătit direct</label>}
                 <button onClick={()=>u("ex",fm.ex.filter((_,j)=>j!==i))} style={{padding:4,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button>
               </div>})}
-              {fm.ex.length>0&&<div style={{padding:10,borderRadius:6,background:th.h,fontSize:12,fontWeight:600,textAlign:"right"}}>Total: {f$(fm.ex.reduce((s,x)=>s+x.a,0))}</div>}
+              {fm.ex.length>0&&(()=>{const op=fm.ex.filter((x)=>getExFinanceCat(x)!==EX_FIN_CAT.taxe_fisa);const tx=fm.ex.filter((x)=>getExFinanceCat(x)===EX_FIN_CAT.taxe_fisa);return <div style={{padding:10,borderRadius:6,background:th.h,fontSize:12,fontWeight:600}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span>Total operațional (intră în Profit net)</span><span>{f$(op.reduce((s,x)=>s+x.a,0))}</span></div>
+                {tx.length>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:11,fontWeight:500,color:th.tm}}><span>Total urmărire taxe (nu scade Profit net)</span><span>{f$(tx.reduce((s,x)=>s+x.a,0))}</span></div>}
+              </div>;})()}
             </div>}
 
             {secTab==="membri"&&<div>
               <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-                <span style={{fontSize:12,color:th.ts}}>Disponibil: {f$(fm.fee-fm.ex.reduce((s,x)=>s+x.a,0))}</span>
-                <button onClick={()=>{const av=fm.fee-fm.ex.reduce((s,x)=>s+x.a,0);const per=Math.floor(av/MEMBERS.length);const nsp={};MEMBERS.forEach(m=>{nsp[m.id]=per});u("sp",nsp);}} style={{...sty.bg,fontSize:11,padding:"4px 10px"}}>Split egal</button>
+                <span style={{fontSize:12,color:th.ts}}>Disponibil: {f$(fm.fee-fm.ex.filter((x)=>getExFinanceCat(x)!==EX_FIN_CAT.taxe_fisa).reduce((s,x)=>s+x.a,0))}</span>
+                <button onClick={()=>{const av=fm.fee-fm.ex.filter((x)=>getExFinanceCat(x)!==EX_FIN_CAT.taxe_fisa).reduce((s,x)=>s+x.a,0);const per=Math.floor(av/MEMBERS.length);const nsp={};MEMBERS.forEach(m=>{nsp[m.id]=per});u("sp",nsp);}} style={{...sty.bg,fontSize:11,padding:"4px 10px"}}>Split egal</button>
               </div>
               {MEMBERS.map(m=><div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:6,marginBottom:4,background:th.h}}>
                 <div style={{width:28,height:28,borderRadius:"50%",background:th.a,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700,fontSize:11,color:th.bg,flexShrink:0}}>{m.n[0]}</div>
@@ -5651,7 +5806,7 @@ const TOUR_STEPS = [
   { id:"tasks",    target:"[data-tour='nav-tasks']",    tab:"tasks",    title:"✅ Task-uri", desc:"Asignează task-uri membrilor cu deadline, prioritate și subtask-uri. La atribuire, membrul primește notificare automată în aplicație." },
   { id:"music",    target:"[data-tour='nav-music']",    tab:"music",    title:"🎵 Muzică", desc:"Biblioteca de melodii a trupei: tonalitate, BPM, status (repertoriu / idee). Poți adăuga linkuri audio și YouTube." },
   { id:"docs",     target:"[data-tour='nav-docs']",     tab:"docs",     title:"📁 Docs", desc:"Rider tehnic, Press Kit și Playlist — template-uri editabile incluse în ofertă. Poți genera un link public sau descărca PDF." },
-  { id:"finances", target:"[data-tour='nav-finances']", tab:"finances", title:"💰 Finanțe", desc:"Urmărești cheltuielile generale ale trupei, costurile anuale fixe și proiecția de profit net în funcție de câte events ai pe an." },
+  { id:"finances", target:"[data-tour='nav-finances']", tab:"finances", title:"💰 Finanțe", desc:"Vezi cheltuielile din evenimente (ofertă + fișă), import CSV din bancă, alte cheltuieli manuale, costurile anuale fixe și profitul net." },
   { id:"contul",   target:"[data-tour='nav-contul']",   tab:"contul",   title:"👤 Contul meu", desc:"Două subsecțiuni: Activitate (finanțe, task-uri, gig-uri/oferte, notificări) și Setări & backup (parolă Supabase, PIN intrare, backup). Profilul apare în Activitate; datele din footer la oferte când ești delegat." },
   { id:"gcal",     target:"[data-tour='gcal-btn']",     tab:"contul",   title:"📅 Google Calendar", desc:"Conectează Google Calendar pentru a sincroniza automat evenimentele. Apar ca events All Day cu link direct la ofertă sau fișa evenimentului în descriere." },
   { id:"done",     target:null,             tab:null,        title:"Ești gata! 🚀", desc:"Asta e tot! Poți relua turul oricând din Contul meu → Tur aplicație. Succes cu Phaser!" },
@@ -5877,6 +6032,7 @@ function App() {
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [evs, setEvs]     = useLocalStorageState(LS_KEYS.evs, loadEvs);
   const [genExp, setGE]   = useLocalStorageState(LS_KEYS.genExp, loadGenExp);
+  const [bankExp, setBankExp] = useLocalStorageState(LS_KEYS.bankExp, loadBankExp);
   const [annualCosts, setAC] = useLocalStorageState(LS_KEYS.annualCosts, loadAnnualCosts);
   const [gigsPerYear, setGigsPerYear] = useLocalStorageState(LS_KEYS.gigsPerYear, ()=>12);
   const [tasks, setTasks] = useLocalStorageState(LS_KEYS.tasks, loadTasks);
@@ -5885,11 +6041,12 @@ function App() {
   const [bandNotifications, setBandNotifications] = useLocalStorageState(LS_KEYS.bandNotifications, loadBandNotifications);
   const [aiSettings, setAiSettings] = useState({llamaWorker:DEFAULT_AI_WORKER_URL,offerHtmlProxy:""});
   const htmlShareProxyBase = useMemo(() => offerHtmlProxyBaseFromSettings(aiSettings), [aiSettings.offerHtmlProxy]);
-  const [finMember, setFinMember] = useState(null);
   const [templates, setTemplates] = useState(loadTemplates);
+  const [finMember, setFinMember] = useState(null);
   const { modal, payload, openModal, closeModal } = useModal();
   const [detailTab, setDetailTab] = useState("fisa");
   useEffect(()=>{ if(modal==="detail") setDetailTab("fisa"); },[modal]);
+  useEffect(()=>{ if(tab!=="finances") setFinMember(null); },[tab]);
   const mData = useMemo(() => {
     if (!modal || payload == null) return null;
     if (modal === "detail") return typeof payload === "string" ? evs.find(e => e.id === payload) : payload;
@@ -5989,6 +6146,7 @@ function App() {
   const [syncStatus, setSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const [syncErrorMsg, setSyncErrorMsg] = useState("");
   const syncTimerRef = useRef(null);
+  const bankCsvInputRef = useRef(null);
   const initialSyncDoneRef = useRef(false);
   const canCloudSync = authReady && !!sbSession && authResolved && !authResolved.pending && authResolved.ok === true;
 
@@ -6039,7 +6197,10 @@ function App() {
       setAuthResolved(r);
       if (r.ok && r.user) {
         setUser(r.user);
-        try { localStorage.setItem(LS_SESSION_MEMBER, r.user.memberId); } catch (e) {}
+        try {
+          if (r.user.memberId) localStorage.setItem(LS_SESSION_MEMBER, r.user.memberId);
+          else localStorage.removeItem(LS_SESSION_MEMBER);
+        } catch (e) {}
       } else {
         setUser(null);
       }
@@ -6173,7 +6334,7 @@ function App() {
       const d = new Date(b.date+"T00:00:00");
       return d >= past3 && d <= future6;
     });
-    return { evs: filteredEvs, calBlocks: filteredBlocks, genExp, annualCosts, gigsPerYear, tasks, _backedAt: new Date().toISOString() };
+    return { evs: filteredEvs, calBlocks: filteredBlocks, genExp, bankExp, annualCosts, gigsPerYear, tasks, _backedAt: new Date().toISOString() };
   };
 
   // Creează backup dacă nu există deja unul pentru ziua de azi
@@ -6212,6 +6373,7 @@ function App() {
     if(Array.isArray(d.evs)) setEvs(d.evs);
     if(Array.isArray(d.calBlocks)) setCalBlocks(d.calBlocks);
     if(Array.isArray(d.genExp)) setGE(d.genExp);
+    if(Array.isArray(d.bankExp)) setBankExp(d.bankExp);
     if(Array.isArray(d.annualCosts)) setAC(d.annualCosts);
     if(typeof d.gigsPerYear==="number") setGigsPerYear(d.gigsPerYear);
     if(Array.isArray(d.tasks)) setTasks(d.tasks);
@@ -6261,6 +6423,7 @@ function App() {
         if(Array.isArray(remote.tasks)) setTasks(remote.tasks);
         if(Array.isArray(remote.songs)) setSongs(remote.songs);
         if(Array.isArray(remote.genExp)) setGE(remote.genExp);
+        if(Array.isArray(remote.bankExp)) setBankExp(remote.bankExp);
         if(Array.isArray(remote.annualCosts)) setAC(remote.annualCosts);
         if(typeof remote.gigsPerYear==="number") setGigsPerYear(remote.gigsPerYear);
         if(remote.templates) setTemplates(remote.templates);
@@ -6304,7 +6467,7 @@ function App() {
       if(!client) return;
       const ts=Date.now();
       const syncData={
-        evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,
+        evs,tasks,songs,calBlocks,genExp,bankExp,annualCosts,gigsPerYear,templates,
         riderVersions,pressKitVersions,playlistVersions,memberProfiles,
         bandNotifications,aiSettings,
         creative:loadCreative(),
@@ -6328,7 +6491,7 @@ function App() {
           setSyncStatus("error");
         });
     },2000);
-  },[canCloudSync,evs,tasks,songs,calBlocks,genExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications,aiSettings]);
+  },[canCloudSync,evs,tasks,songs,calBlocks,genExp,bankExp,annualCosts,gigsPerYear,templates,riderVersions,pressKitVersions,playlistVersions,memberProfiles,bandNotifications,aiSettings]);
 
   // Salvare imediată în Supabase (ocolește debounce-ul de 2s) — folosit la ștergere
   const saveNow = (overrides={}) => {
@@ -6336,7 +6499,7 @@ function App() {
     const client=getSbClient(); if(!client) return;
     if(syncTimerRef.current) clearTimeout(syncTimerRef.current); // anulează debounce pending
     const syncData={
-      evs, tasks, songs, calBlocks, genExp, annualCosts, gigsPerYear, templates,
+      evs, tasks, songs, calBlocks, genExp, bankExp, annualCosts, gigsPerYear, templates,
       riderVersions, pressKitVersions, playlistVersions, memberProfiles,
       bandNotifications, aiSettings,
       creative:loadCreative(),
@@ -7156,14 +7319,114 @@ function App() {
   const stats = useMemo(()=>{
     const sg = evs.filter(e=>e.st==="confirmat");
     const rev = sg.reduce((s,e)=>s+(e.fee||0)+Object.entries(e.svcp||{}).reduce((a,[k,v])=>a+(e.svc?.[k]?v:0),0),0);
-    const exp = sg.reduce((s,e)=>s+(e.ex||[]).reduce((a,x)=>a+x.a,0),0);
-    // Fond 7% din noul sistem de calcul
+    const sp = templates?.servicePrices || {};
+    const toEurEv = (e, amt) => {
+      const c = e.cursLei || CURS_DEFAULT;
+      return e.valuta === "lei" ? (Number(amt) || 0) / c : (Number(amt) || 0);
+    };
+    let expSvc = 0;
+    let expOps = 0;
+    let expTaxEx = 0;
+    for (const e of sg) {
+      try {
+        expSvc += typeof getSvcCost === "function" ? getSvcCost(e, sp) : 0;
+      } catch (err) { /* ignore */ }
+      for (const x of e.ex || []) {
+        const a = Number(x.a) || 0;
+        if (a <= 0) continue;
+        const cat = getExFinanceCat(x);
+        if (cat === EX_FIN_CAT.taxe_fisa) expTaxEx += toEurEv(e, a);
+        else expOps += toEurEv(e, a);
+      }
+    }
+    expSvc = Math.round(expSvc * 100) / 100;
+    expOps = Math.round(expOps * 100) / 100;
+    expTaxEx = Math.round(expTaxEx * 100) / 100;
+    const expEvenimenteOp = Math.round((expSvc + expOps) * 100) / 100;
     const fondTotal = sg.reduce((s,e)=>s+calcFond7(e),0);
     const ge  = genExp.reduce((s,e)=>s+e.a,0);
+    const bankGe = bankExp.reduce((s,e)=>s+(e.a||0),0);
     const pipe= evs.filter(e=>["cerere","oferta","asteptare"].includes(e.st)).reduce((s,e)=>s+(e.fee||0),0);
     const pd  = sg.filter(e=>!e.dp).reduce((s,e)=>s+(e.dep||0),0);
-    return {rev,exp,ge,fondTotal,net:rev-exp-ge-fondTotal,pipe,pd,sc:sg.length,tc:evs.length};
-  },[evs,genExp]);
+    /** Cheltuieli reale în finanțe generale (fără fond: fondul e evidență / parte din venit, nu se scade din profit net). */
+    const cheltFinanteGenerale = Math.round((expEvenimenteOp + bankGe + ge) * 100) / 100;
+    const net = Math.round((rev - cheltFinanteGenerale) * 100) / 100;
+    return {
+      rev,
+      cheltFinanteGenerale,
+      net,
+      exp: expEvenimenteOp,
+      expSvc,
+      expOps,
+      expTaxEx,
+      ge,
+      bankGe,
+      fondTotal,
+      pipe,
+      pd,
+      sc: sg.length,
+      tc: evs.length,
+    };
+  },[evs,genExp,bankExp,templates]);
+
+  const financeCostByCategory = useMemo(() => {
+    const sp = templates?.servicePrices || {};
+    const tehnic = [];
+    const furnizor = [];
+    const fond = [];
+    const fisaTaxes = [];
+    const exBy = { tehnic: [], furnizor: [], taxe_fisa: [], alt: [] };
+    const sg = evs.filter((e) => e.st === "confirmat");
+    for (const e of sg) {
+      const label = `O${e.offerNr ?? "?"} · ${e.cn || e.title || "—"}`;
+      const curs = e.cursLei || CURS_DEFAULT;
+      const toEur = (amt) => (e.valuta === "lei" ? (Number(amt) || 0) / curs : (Number(amt) || 0));
+      const dateStr = e.date || (e.dateOptions || [])[0] || (e.dateMonth ? `${e.dateMonth}-01` : "") || "—";
+      const br = typeof getSvcCostBreakdown === "function" ? getSvcCostBreakdown(e, sp) : [];
+      for (const row of br) {
+        const aEur = Math.round((Number(row.cost) || 0) * 100) / 100;
+        if (aEur <= 0) continue;
+        const base = { evId: e.id, evLabel: label, d: dateStr, desc: row.label || row.k, a: aEur };
+        if (SVC_KEYS_TEHNIC.has(row.k)) tehnic.push(base);
+        else if (SVC_KEYS_FURNIZOR.has(row.k)) furnizor.push(base);
+      }
+      for (const x of e.ex || []) {
+        const a = Number(x.a) || 0;
+        if (a <= 0) continue;
+        const cat = getExFinanceCat(x);
+        const aEur = Math.round(toEur(a) * 100) / 100;
+        const row = { evId: e.id, evLabel: label, d: x.v || dateStr, desc: x.n || "—", a: aEur };
+        if (exBy[cat]) exBy[cat].push(row);
+      }
+      let M;
+      try { M = buildFinanceFisaModel(e, sp); } catch (err) { M = null; }
+      if (M) {
+        if (M.impVenit > 0.005) fisaTaxes.push({ evId: e.id, evLabel: label, d: dateStr, desc: "Impozit venit / rețineri (simulare împărțire)", a: Math.round(toEur(M.impVenit) * 100) / 100 });
+        if (M.fcEurEffective > 0.005) fisaTaxes.push({ evId: e.id, evLabel: label, d: dateStr, desc: "Costuri fixe + dividende estimate (simulare împărțire)", a: Math.round(toEur(M.fcEurEffective) * 100) / 100 });
+        const f7card = calcFond7(e);
+        if (f7card > 0.005) fond.push({ evId: e.id, evLabel: label, d: dateStr, desc: "Contribuție fond % (evidență — nu e cheltuială în profit net)", a: Math.round(toEur(f7card) * 100) / 100 });
+      }
+      if (e.dp && (e.dep || 0) > 0) fond.push({ evId: e.id, evLabel: label, d: dateStr, desc: "Avans intrat la fond", a: Math.round(toEur(e.dep) * 100) / 100 });
+    }
+    const sum = (arr) => Math.round(arr.reduce((s, r) => s + (r.a || 0), 0) * 100) / 100;
+    const sExT = sum(exBy.tehnic);
+    const sExF = sum(exBy.furnizor);
+    const sExA = sum(exBy.alt);
+    const sExTax = sum(exBy.taxe_fisa);
+    const sT = sum(tehnic);
+    const sF = sum(furnizor);
+    const sFd = sum(fond);
+    const sFi = sum(fisaTaxes);
+    return {
+      tehnic, furnizor, fond, fisaTaxes, exBy,
+      sumSvcTehnic: sT, sumSvcFurnizor: sF, sumFondRows: sFd, sumFisaTaxes: sFi,
+      sumExTehnic: sExT, sumExFurnizor: sExF, sumExAlt: sExA, sumExTaxeFisa: sExTax,
+      totalTehnic: Math.round((sT + sExT) * 100) / 100,
+      totalFurnizor: Math.round((sF + sExF) * 100) / 100,
+      totalFondListed: sFd,
+      hasRows: tehnic.length + furnizor.length + fond.length + fisaTaxes.length + exBy.tehnic.length + exBy.furnizor.length + exBy.alt.length + exBy.taxe_fisa.length > 0,
+    };
+  }, [evs, templates]);
 
   const repStr = (d) => {
     if (!d) return "";
@@ -8009,13 +8272,19 @@ function App() {
                   <div style={{display:"flex",flexDirection:"column",gap:12}}>
                     <div style={{paddingBottom:12,borderBottom:`1px solid ${th.bl}`,marginBottom:4}}>
                       <div style={{fontSize:12,fontWeight:700,color:th.t,marginBottom:8}}>CAP. 1 — Părți (Prestator / Beneficiar)</div>
-                      <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5}}>Text separat pentru model <strong>{isPr ? "Privat" : "Public"}</strong>. Câte un rând pentru Prestator; folosește <code>**îngroșat**</code> în text. Câmpurile beneficiarului (nume, CI, adresă) rămân în ofertă.</p>
+                      <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5}}>Text separat pentru model <strong>{isPr ? "Privat" : "Public"}</strong>. <strong>Prestatorul</strong> e doar text static (bloc pe rânduri). <strong>Beneficiarul</strong> are același tip de bloc opțional + etichete editabile; valorile (nume, adresă, CI, mail, telefon) se completează în ofertă, ca până acum. Folosește <code>**îngroșat**</code> în text.</p>
                       <div><label style={sty.l}>Titlu capitol</label><input value={cm.cap1SectionTitle||""} onChange={e=>patchCm({ cap1SectionTitle: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Art. 1.1 (titlu)</label><input value={cm.cap1Art11Title||""} onChange={e=>patchCm({ cap1Art11Title: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Bloc Prestator — rânduri</label><textarea value={cm.cap1PrestatorBlock||""} onChange={e=>patchCm({ cap1PrestatorBlock: e.target.value })} style={{...sty.i,minHeight:160,resize:"vertical",fontSize:12}} placeholder={"Câte un rând...\n**Etichetă:** valoare"}/></div>
                       <div><label style={sty.l}>Art. 1.2 (titlu)</label><input value={cm.cap1Art12Title||""} onChange={e=>patchCm({ cap1Art12Title: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Etichetă înainte de nume beneficiar (ex. Persoană fizică)</label><input value={cm.cap1BeneficiarPartyLabel||""} onChange={e=>patchCm({ cap1BeneficiarPartyLabel: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Text «cu următoarele date...»</label><input value={cm.cap1BeneficiarIdIntro||""} onChange={e=>patchCm({ cap1BeneficiarIdIntro: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
+                      <div><label style={sty.l}>Bloc Beneficiar — rânduri (opțional, ca Prestatorul)</label><textarea value={cm.cap1BeneficiarBlock||""} onChange={e=>patchCm({ cap1BeneficiarBlock: e.target.value })} style={{...sty.i,minHeight:120,resize:"vertical",fontSize:12}} placeholder={"Câte un rând; afișate după intro, înainte de rândurile cu câmpuri din ofertă.\n**Exemplu:** mențiune legală…"}/></div>
+                      <div style={{fontSize:10,color:th.tm,marginBottom:6,marginTop:2}}>Etichete pentru rândurile cu date completate în ofertă (după blocul de mai sus):</div>
+                      <div><label style={sty.l}>Rând domiciliu (început)</label><input value={cm.cap1BenLblDomiciliu||""} onChange={e=>patchCm({ cap1BenLblDomiciliu: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}} placeholder={"**Locul de domiciliu:**"}/></div>
+                      <div><label style={sty.l}>Rând carte identitate (început)</label><input value={cm.cap1BenLblCI||""} onChange={e=>patchCm({ cap1BenLblCI: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
+                      <div><label style={sty.l}>Rând e-mail</label><input value={cm.cap1BenLblEmail||""} onChange={e=>patchCm({ cap1BenLblEmail: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
+                      <div><label style={sty.l}>Rând telefon</label><input value={cm.cap1BenLblTel||""} onChange={e=>patchCm({ cap1BenLblTel: e.target.value })} style={{...sty.i,width:"100%",fontSize:12}}/></div>
                       <div><label style={sty.l}>Încheiere Beneficiar (înainte de Cap. 2)</label><textarea value={cm.cap1BeneficiarClosing||""} onChange={e=>patchCm({ cap1BeneficiarClosing: e.target.value })} style={{...sty.i,minHeight:48,resize:"vertical",fontSize:12}} placeholder={"**Beneficiar** pentru îngroșat"}/></div>
                     </div>
                     {[{ k:"art21", l:"Art. 2.1 (obiect)" },{ k:"art31", l:"Art. 3.1" },{ k:"art42", l:"Art. 4.2 (plată RON)" },{ k:"art43Intro", l:"Art. 4.3 introducere" },{ k:"art43a", l:"Art. 4.3 a)" },{ k:"art43b", l:"Art. 4.3 b)" },{ k:"art44", l:"Art. 4.4 penalități" }].map(({k,l})=>(
@@ -8934,8 +9203,9 @@ function App() {
             const fD2=d=>d?new Date(d).toLocaleDateString("ro-RO",{day:"numeric",month:"short",year:"numeric"}):"";
             const memberDetail=(ev,mId)=>computeMemberPayoutBreakdown(ev,mId,templates?.servicePrices);
 
-            // ── MEMBER PROFILE PAGE ──
-            if(finMember){
+            const renderFinancesForMember=(finMember, opts)=>{
+              const showBack=opts?.showBack;
+              const onBack=opts?.onBack;
               const m=MEMBERS.find(x=>x.id===finMember);
               if(!m) return null;
               const allEvs=evs.filter(e=>e.st==="confirmat").sort((a,b)=>evSortKey(b)-evSortKey(a));
@@ -8993,7 +9263,7 @@ function App() {
               };
               return <div style={{animation:"su .3s ease"}}>
                 <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
-                  <button onClick={()=>setFinMember(null)} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,border:`1px solid ${th.b}`,background:"transparent",color:th.t,fontSize:12,cursor:"pointer",fontWeight:600}}>← Finanțe</button>
+                  {showBack&&<button type="button" onClick={onBack} style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",borderRadius:8,border:`1px solid ${th.b}`,background:"transparent",color:th.t,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0}}>← Finanțe</button>}
                   <div style={{width:44,height:44,borderRadius:"50%",background:th.a,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:18,color:th.bg,flexShrink:0}}>{m.n[0]}</div>
                   <div>
                     <div style={{fontSize:20,fontWeight:800}}>{m.n}</div>
@@ -9040,13 +9310,23 @@ function App() {
                 {ROLES.map(r=><RoleSection key={r.k} roleKey={r.k} roleLabel={r.l} roleColor={r.c} roleBg={r.bg} tot={{base:totBaseAll,bonusRol:totBonusAll,social:totSocialLeiAll}[r.k]} roundDisplay={r.round}/>)}
                 {allEvs.length===0&&<div style={{padding:40,textAlign:"center",color:th.tm,fontSize:13}}>Niciun eveniment confirmat încă</div>}
               </div>;
+            };
+
+            const financeAdmin=user?.rl==="admin";
+            if(financeAdmin&&finMember){
+              return <div style={{animation:"su .3s ease"}}>
+                {renderFinancesForMember(finMember,{showBack:true,onBack:()=>setFinMember(null)})}
+              </div>;
             }
 
             // ── OVERVIEW ──
             return <div style={{animation:"su .3s ease"}}>
-              <h1 style={{fontSize:22,fontWeight:700,marginBottom:16}}>Finanțe</h1>
-              <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:10,marginBottom:16}}>
-                {[{l:"Venituri confirmate",v:f$(stats.rev),ac:"#22c55e"},{l:"Profit net",v:f$(stats.net),ac:stats.net>=0?"#22c55e":"#ef4444"},{l:"În așteptare",v:f$(stats.pipe)},{l:"Avansuri restante",v:f$(stats.pd),ac:stats.pd>0?"#ef4444":"#22c55e"}].map((c,i)=>
+              {financeAdmin ? <>
+              <h1 style={{fontSize:22,fontWeight:700,marginBottom:8}}>Finanțe</h1>
+              <p style={{fontSize:12,color:th.tm,marginBottom:16,lineHeight:1.5,maxWidth:620}}><strong>Profit net</strong> = <strong>venituri confirmate</strong> minus <strong>cheltuielile reale</strong> din finanțe generale: servicii din fișă + cheltuieli operaționale din ofertă (fără „doar urmărire taxe”), import bancă, alte cheltuieli manuale. <strong>Fondul</strong> (7%, avansuri) e doar <strong>evidență</strong> a banilor strânși la evenimente — face parte din același „buget” ca profitul; când cheltuiți (ex. becuri sală), plata intră la <strong>bancă</strong> sau <strong>alte cheltuieli</strong>, nu se dublează cu fondul.</p>
+              <div style={{fontSize:11,fontWeight:700,marginBottom:10,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>Venituri generale · trupă</div>
+              <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(auto-fit,minmax(150px,1fr))",gap:10,marginBottom:16}}>
+                {[{l:"Venituri confirmate",v:f$(stats.rev),ac:"#22c55e"},{l:"Cheltuieli fin. generale",v:f$(stats.cheltFinanteGenerale),ac:"#ef4444"},{l:"Profit net",v:f$(stats.net),ac:stats.net>=0?"#22c55e":"#ef4444"},{l:"În așteptare",v:f$(stats.pipe)},{l:"Avansuri restante",v:f$(stats.pd),ac:stats.pd>0?"#ef4444":"#22c55e"}].map((c,i)=>
                   <div key={i} style={sty.cd}><div style={sty.l}>{c.l}</div><div style={{fontSize:mob?16:20,fontWeight:700,marginTop:5,color:c.ac||th.t}}>{c.v}</div></div>
                 )}
               </div>
@@ -9067,17 +9347,69 @@ function App() {
                   })}
                 </div>
               </div>
+              </> : <>
+              <h1 style={{fontSize:22,fontWeight:700,marginBottom:8}}>Finanțele mele</h1>
+              <p style={{fontSize:12,color:th.tm,marginBottom:16,lineHeight:1.5,maxWidth:520}}>Vezi doar încasările tale din împărțirea pe evenimente confirmate. Totalurile trupei și split-ul complet sunt disponibile doar pentru admin.</p>
+              {user?.memberId ? renderFinancesForMember(user.memberId) : <div style={{...sty.cd,padding:16,border:`1px solid ${th.bl}`}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:6}}>Profil incomplet</div>
+                <div style={{fontSize:12,color:th.tm,lineHeight:1.5}}>Contul tău nu e legat de un membru din trupă. Cere adminului să verifice asocierea contului.</div>
+              </div>}
+              </>}
 
-            {/* Cheltuieli generale — scad din profit net */}
+            {financeAdmin&&<>{/* Cheltuieli: categorii eveniment · bancă · altele — Profit net: servicii fișă + ofertă (fără taxe urmărire) + bancă + altele; fond = doar evidență */}
+            {(() => {
+              const fcc = financeCostByCategory;
+              const Tbl = ({ rows, pfx }) => rows.length === 0 ? null : <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"visible",marginBottom:10}}><table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12}}><thead><tr style={{borderBottom:`1px solid ${th.b}`}}><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Eveniment</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Sursă</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Ref.</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Descriere</th><th style={{padding:"6px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase"}}>€</th></tr></thead><tbody>{rows.map((r,i)=><tr key={pfx+"-"+i} style={{borderBottom:`1px solid ${th.bl}`}}><td style={{padding:"6px 8px",fontSize:11}}>{r.evLabel}</td><td style={{padding:"6px 8px",fontSize:10,color:th.tm}}>{r.src||"—"}</td><td style={{padding:"6px 8px",fontSize:10,color:th.tm}}>{r.d||"—"}</td><td style={{padding:"6px 8px",color:th.tm}}>{r.desc}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#ef4444"}}>-{f$(r.a)}</td></tr>)}</tbody></table></div>;
+              const FondTbl = ({ rows, pfx }) => rows.length === 0 ? null : <div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"visible",marginBottom:10}}><table style={{width:"100%",minWidth:mob?480:undefined,fontSize:12}}><thead><tr style={{borderBottom:`1px solid ${th.b}`}}><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Eveniment</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Sursă</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Ref.</th><th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Descriere</th><th style={{padding:"6px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Strâns €</th></tr></thead><tbody>{rows.map((r,i)=><tr key={pfx+"-"+i} style={{borderBottom:`1px solid ${th.bl}`}}><td style={{padding:"6px 8px",fontSize:11}}>{r.evLabel}</td><td style={{padding:"6px 8px",fontSize:10,color:th.tm}}>{r.src||"—"}</td><td style={{padding:"6px 8px",fontSize:10,color:th.tm}}>{r.d||"—"}</td><td style={{padding:"6px 8px",color:th.tm}}>{r.desc}</td><td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#818cf8"}}>{f$(r.a)}</td></tr>)}</tbody></table></div>;
+              const mergeSrc = (rows, src) => rows.map((r) => ({ ...r, src }));
+              const thRows = [...mergeSrc(fcc.tehnic, "Fișă servicii"), ...mergeSrc(fcc.exBy.tehnic, "Ofertă")];
+              const fuRows = [...mergeSrc(fcc.furnizor, "Fișă servicii"), ...mergeSrc(fcc.exBy.furnizor, "Ofertă")];
+              const fdRows = [...mergeSrc(fcc.fond, "Fișă / ofertă")];
+              const altRows = mergeSrc(fcc.exBy.alt, "Ofertă");
+              const taxRows = [...mergeSrc(fcc.fisaTaxes, "Simulare fișă"), ...mergeSrc(fcc.exBy.taxe_fisa, "Ofertă (urmărire)")];
+              return <div style={{...sty.cd,marginTop:16,border:fcc.hasRows?`1px solid rgba(239,68,68,.2)`:"none"}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Cheltuieli din evenimente (pe categorii)</div>
+                <p style={{fontSize:11,color:th.tm,marginBottom:10,lineHeight:1.45}}><strong>Tehnici</strong> și <strong>furnizori</strong> = costuri operaționale (fișă + ofertă). <strong>Fond</strong> mai jos = cât s-a <strong>strâns</strong> la fiecare eveniment (avans + %); <strong>nu</strong> e scăzut din Profit net — e aceeași „masă” de bani din care trăiți; cheltuiala reală (becuri sală etc.) o pui la <strong>bancă</strong> sau <strong>alte cheltuieli</strong>. <strong>Taxe / simulări</strong> doar pentru împărțire în fișă — nu scad din Profit net până nu sunt plătite (ex. CSV bancă).</p>
+                <div style={{fontSize:11,color:th.tm,marginBottom:12,lineHeight:1.5,padding:"8px 10px",borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}><strong>Cheltuieli finanțe generale</strong> (scăzute din profit): <strong>{f$(stats.cheltFinanteGenerale)}</strong> = {f$(stats.expSvc)} servicii fișă + {f$(stats.expOps)} ofertă operațională + {f$(stats.bankGe)} bancă + {f$(stats.ge)} altele. <strong>Fond strâns (evidență):</strong> {f$(stats.fondTotal)} — nu se mai scade încă o dată.<br/><span style={{opacity:.9}}><strong>Profit net</strong> = {f$(stats.rev)} − {f$(stats.cheltFinanteGenerale)} = {f$(stats.net)}. Fără urmărire taxe {f$(stats.expTaxEx)} și fără simulările din secțiunea de jos până apar în bancă.</span></div>
+                {!fcc.hasRows ? <div style={{padding:18,textAlign:"center",color:th.tm,fontSize:11}}>Nicio cheltuială înregistrată pe evenimente confirmate</div> : <div style={{maxHeight:520,overflowY:"auto"}}>
+                  <div style={{fontSize:12,fontWeight:700,margin:"12px 0 6px",color:th.t}}>Tehnici <span style={{fontWeight:600,color:"#ef4444"}}>−{f$(fcc.totalTehnic)}</span></div>
+                  {thRows.length ? <Tbl rows={thRows} pfx="th"/> : <div style={{fontSize:11,color:th.tm,marginBottom:8}}>—</div>}
+                  <div style={{fontSize:12,fontWeight:700,margin:"12px 0 6px",color:th.t}}>Furnizori <span style={{fontWeight:600,color:"#ef4444"}}>−{f$(fcc.totalFurnizor)}</span></div>
+                  {fuRows.length ? <Tbl rows={fuRows} pfx="fu"/> : <div style={{fontSize:11,color:th.tm,marginBottom:8}}>—</div>}
+                  <div style={{fontSize:12,fontWeight:700,margin:"12px 0 6px",color:th.t}}>Contribuții fond (evidență strâns) <span style={{fontWeight:600,color:"#818cf8"}}>{f$(fcc.totalFondListed)}</span></div>
+                  <p style={{fontSize:10,color:th.tm,marginBottom:6}}>Parte din venituri, nu linie de cheltuială în Profit net. Vezi și cardul „Fond trupă” mai jos.</p>
+                  {fdRows.length ? <FondTbl rows={fdRows} pfx="fd"/> : <div style={{fontSize:11,color:th.tm,marginBottom:8}}>—</div>}
+                  {altRows.length>0&&<><div style={{fontSize:12,fontWeight:700,margin:"12px 0 6px",color:th.t}}>Alte cheltuieli (ofertă) <span style={{fontWeight:600,color:"#ef4444"}}>−{f$(fcc.sumExAlt)}</span></div><Tbl rows={altRows} pfx="al"/></>}
+                  <div style={{fontSize:12,fontWeight:700,margin:"14px 0 6px",color:th.tm}}>Impozite, dividende, simulări (doar împărțire — nu în Profit net) <span style={{color:th.t}}>−{f$(fcc.sumFisaTaxes + fcc.sumExTaxeFisa)}</span></div>
+                  <p style={{fontSize:10,color:th.tm,marginBottom:6}}>Când plătești la stat sau dividende prin ING, adaugă plata în <strong>import CSV</strong> ca să intre în contul real al cheltuielilor.</p>
+                  {taxRows.length ? <Tbl rows={taxRows} pfx="tx"/> : <div style={{fontSize:11,color:th.tm}}>—</div>}
+                </div>}
+              </div>;
+            })()}
+
+            <div style={{...sty.cd,marginTop:16,border:bankExp.length>0?`1px solid rgba(239,68,68,.25)`:"none"}}>
+              <div style={{marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
+                <div style={{fontSize:13,fontWeight:600}}>Cheltuieli din contul bancii</div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <input ref={bankCsvInputRef} type="file" accept=".csv,text/csv" style={{display:"none"}} onChange={(e)=>{const f=e.target.files?.[0];e.target.value="";if(!f)return;const reader=new FileReader();reader.onload=()=>{const text=String(reader.result||"");const parsed=parseBankStatementCsv(text,5);if(parsed.error){showToast(parsed.error,"error");return;}const add=parsed.rows.map(row=>({id:uid(),d:row.d,desc:row.desc,a:row.a,origAmount:row.origAmount,origCur:row.origCur,src:"bank-csv"}));setBankExp(be=>[...be,...add]);showToast(`Importate ${add.length} plăți din CSV`);};reader.readAsText(f,"UTF-8");}}/>
+                  <button type="button" onClick={()=>bankCsvInputRef.current?.click()} style={{...sty.bg,fontSize:11,padding:"5px 12px"}}>Importă CSV (ING / similar)</button>
+                  {bankExp.length>0&&<button type="button" onClick={()=>{if(window.confirm("Ștergi toate înregistrările importate din bancă?")){setBankExp([]);showToast("Lista bancară golită");}}} style={{padding:"5px 12px",fontSize:11,borderRadius:7,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer",fontWeight:600}}>Golește import</button>}
+                </div>
+              </div>
+              <p style={{fontSize:11,color:th.tm,marginBottom:10,lineHeight:1.45}}>Încarcă extrasul lunar CSV de la ING (sau un fișier cu coloane echivalente: <strong>Data</strong>, <strong>Descriere</strong>, <strong>Plăți</strong> / <strong>Încasări</strong>, sau <strong>Sumă</strong> cu minus la ieșiri). RON → EUR la curs <strong>5</strong> la import.</p>
+              <p style={{fontSize:10,color:th.tm,marginBottom:10,lineHeight:1.5,padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}><strong>De ce nu e „legată” banca direct:</strong> în UE, accesul la cont (PSD2) se face prin furnizori autorizați (TPP) sau acorduri API cu banca — OAuth pentru clienți, certificate, uneori costuri și proces de aprobare ING. Pentru o aplicație internă de trupă, costul și mentenanța (token-uri expirate, conformitate GDPR) depășesc de obicei un import CSV lunar. Dacă vrei totuși API: variante tip <strong>Nordigen</strong> / <strong>TrueLayer</strong> / agregatori licențiați + backend propriu care să nu expună secretul în browser.</p>
+              {bankExp.length===0 ? <div style={{padding:18,textAlign:"center",color:th.tm,fontSize:11}}>Niciun import bancar încă</div> : <><div style={{fontSize:11,color:th.tm,marginBottom:8}}>Total import bancă (în cheltuieli fin. generale): <strong style={{color:th.t}}>{f$(stats.bankGe)}</strong></div><div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"visible"}}><table style={{width:"100%",minWidth:mob?400:undefined,fontSize:12}}><thead><tr style={{borderBottom:`1px solid ${th.b}`}}><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Dată</th><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Descriere</th><th style={{padding:"8px 10px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Sumă €</th><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Original</th><th style={{width:40}}/></tr></thead><tbody>{bankExp.map((g)=><tr key={g.id} style={{borderBottom:`1px solid ${th.bl}`}}><td style={{padding:"8px 10px"}}>{g.d||"—"}</td><td style={{padding:"8px 10px",color:th.tm}}>{g.desc||"—"}</td><td style={{padding:"8px 10px",textAlign:"right",fontWeight:600,color:"#ef4444"}}>-{f$(g.a||0)}</td><td style={{padding:"8px 10px",fontSize:10,color:th.tm}}>{g.origCur&&g.origAmount!=null?`${g.origAmount} ${g.origCur}`:"—"}</td><td style={{padding:"4px"}}><button type="button" onClick={()=>{setBankExp((be)=>be.filter(x=>x.id!==g.id));showToast("Înregistrare ștearsă");}} style={{padding:mob?8:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button></td></tr>)}</tbody></table></div></>}
+            </div>
+
             <div style={{...sty.cd,marginTop:16,border:genExp.length>0?`1px solid rgba(239,68,68,.3)`:"none"}}>
               <div style={{marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-                <div style={{fontSize:13,fontWeight:600}}>Cheltuieli generale</div>
-                {genExp.length>0&&<button onClick={()=>{if(window.confirm("Ștergi toate cheltuielile generale? Profitul net va fi recalculat.")){setGE([]);showToast("Cheltuieli generale șterse");}}} style={{padding:"5px 12px",fontSize:11,borderRadius:7,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer",fontWeight:600}}>Șterge toate</button>}
+                <div style={{fontSize:13,fontWeight:600}}>Alte cheltuieli</div>
+                {genExp.length>0&&<button type="button" onClick={()=>{if(window.confirm("Ștergi toate cheltuielile din «Alte cheltuieli»? Profitul net va fi recalculat.")){setGE([]);showToast("Alte cheltuieli șterse");}}} style={{padding:"5px 12px",fontSize:11,borderRadius:7,border:"1px solid #ef4444",background:"transparent",color:"#ef4444",cursor:"pointer",fontWeight:600}}>Șterge toate</button>}
               </div>
-              <p style={{fontSize:11,color:th.tm,marginBottom:10}}>Cheltuieli neprevăzute (asigurări, etc.) — scad din Profit net</p>
-              {genExp.length===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Nicio cheltuială generală</div>}
-              {genExp.length>0&&<div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"visible"}}><table style={{width:"100%",minWidth:mob?400:undefined,fontSize:12}}><thead><tr style={{borderBottom:`1px solid ${th.b}`}}><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Perioadă</th><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Descriere</th><th style={{padding:"8px 10px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Sumă</th><th style={{width:36}}/></tr></thead><tbody>{genExp.map((g,i)=><tr key={g.id||i} style={{borderBottom:`1px solid ${th.bl}`}}><td style={{padding:"8px 10px"}}>{g.d||"—"}</td><td style={{padding:"8px 10px",color:th.tm}}>{g.desc||"—"}</td><td style={{padding:"8px 10px",textAlign:"right",fontWeight:600,color:"#ef4444"}}>-{f$((g.a||0))}</td><td style={{padding:"4px"}}><button onClick={()=>{setGE(genExp.filter((_,j)=>j!==i));showToast("Cheltuială ștearsă");}} style={{padding:mob?8:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button></td></tr>)}</tbody></table></div>}
-              <button onClick={()=>{const d=prompt("Perioadă (ex: 2025-01 sau descriere):");const desc=prompt("Descriere:");const a=Number(prompt("Sumă €:")||0);if(d!==null&&a)setGE([...genExp,{id:uid(),d,desc:desc||"",a}]);}} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginTop:10}}>+ Adaugă</button>
+              <p style={{fontSize:11,color:th.tm,marginBottom:10}}>Orice cheltuială pe care o treci manual aici (nu e legată de un eveniment și nu vine din CSV) — intră în <strong>cheltuielile finanțe generale</strong> și scade din profitul net.</p>
+              {genExp.length===0&&<div style={{padding:20,textAlign:"center",color:th.tm,fontSize:11}}>Nicio cheltuială în această categorie</div>}
+              {genExp.length>0&&<div className={mob?"table-scroll-mob":""} style={{overflow:mob?"auto":"visible"}}><table style={{width:"100%",minWidth:mob?400:undefined,fontSize:12}}><thead><tr style={{borderBottom:`1px solid ${th.b}`}}><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Perioadă / ref.</th><th style={{padding:"8px 10px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Descriere</th><th style={{padding:"8px 10px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase"}}>Sumă €</th><th style={{width:36}}/></tr></thead><tbody>{genExp.map((g,i)=><tr key={g.id||i} style={{borderBottom:`1px solid ${th.bl}`}}><td style={{padding:"8px 10px"}}>{g.d||"—"}</td><td style={{padding:"8px 10px",color:th.tm}}>{g.desc||"—"}</td><td style={{padding:"8px 10px",textAlign:"right",fontWeight:600,color:"#ef4444"}}>-{f$((g.a||0))}</td><td style={{padding:"4px"}}><button type="button" onClick={()=>{setGE(genExp.filter((_,j)=>j!==i));showToast("Cheltuială ștearsă");}} style={{padding:mob?8:4,minWidth:mob?44:undefined,minHeight:mob?44:undefined,border:"none",background:"transparent",color:"#ef4444",cursor:"pointer"}}>✕</button></td></tr>)}</tbody></table></div>}
+              <button type="button" onClick={()=>{const d=prompt("Perioadă sau referință (ex: 2025-04):");const desc=prompt("Descriere:");const a=Number(prompt("Sumă €:")||0);if(d!==null&&a)setGE([...genExp,{id:uid(),d,desc:desc||"",a}]);}} style={{...sty.bg,fontSize:11,padding:"5px 10px",marginTop:10}}>+ Adaugă cheltuială manuală</button>
             </div>
 
             <div style={{...sty.cd,marginTop:16}}>
@@ -9125,7 +9457,8 @@ function App() {
               const pctIntrat=totAnualEur>0?Math.min(100,Math.round(fondIntrat/totAnualEur*100)):100;
               const pctCuUrmeaza=totAnualEur>0?Math.min(100,Math.round((fondIntrat+fondUrmeaza)/totAnualEur*100)):100;
               return <div style={{...sty.cd,marginTop:16,border:`1px solid rgba(99,102,241,.3)`}}>
-                <div style={{fontSize:13,fontWeight:600,marginBottom:12,color:"#a5b4fc"}}>💰 Fond trupă</div>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:8,color:"#a5b4fc"}}>💰 Fond trupă</div>
+                <p style={{fontSize:10,color:th.tm,marginBottom:12,lineHeight:1.45}}>Evidență cât s-a strâns din evenimente spre cheltuieli anuale. <strong>Nu e scăzut din Profit net</strong> — banii fac parte din același total; cheltuielile concrete le înregistrezi la bancă sau la „Alte cheltuieli”.</p>
                 {/* Rânduri fond intrat / urmează */}
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
                   <div style={{padding:"10px 12px",borderRadius:8,background:th.h,border:`1px solid ${fondIntrat>0?"rgba(99,102,241,.3)":th.b}`}}>
@@ -9165,6 +9498,7 @@ function App() {
                 </div>
               </div>;
             })()}
+            </>}
 
             </div>;
           })()}
