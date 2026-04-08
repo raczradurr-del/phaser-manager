@@ -483,8 +483,12 @@ const TIME_OPTIONS = (() => {
 })();
 // Tipuri pentru Extra fișă — alți participanți / furnizori externi
 // Generează HTML standalone pentru fișa evenimentului (PDF, link partajabil)
-const buildFisaHtml = (ev) => {
+const buildFisaHtml = (ev, servicePrices) => {
   const esc = (s)=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  const spHtml = { ...DEFAULT_SERVICE_PRICES, ...(servicePrices || {}) };
+  const saH = normalizeSoundAttribution(ev);
+  const slH = getSoundmanOutsourceLei(ev, spHtml);
+  const soundLine = saH === "band" ? "Trupa — fără outsourcing sunetist (banii rămân în împărțire)." : saH === "levi" ? `Levi — sunetist outsourcing (${slH} lei).` : `Prezent — sunetist outsourcing (${slH} lei).`;
   const hosp = ev.hosp&&!Array.isArray(ev.hosp)?ev.hosp:{};
   const c=hosp.camere??0,m=hosp.meniuri??0;
   const hospStr = (c>0?`${c} camere`:"")+(c>0&&m>0?" · ":"")+(m>0?`${m} meniuri`:"")||"—";
@@ -508,6 +512,7 @@ const buildFisaHtml = (ev) => {
 ${ev.cat==="private"?`<div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Ospitalitate</div><div style="font-size:12px;color:#666">${esc(hospStr)}</div></div>`:""}
 <div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Timing — Load in · Soundcheck · Show start · Load out</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${timingHtml}</div></div>
 <div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Timing show</div><div style="padding:10px;border-radius:8px;background:#f8f8f8;border:1px solid #e5e5e5">${repHtml}</div></div>
+<div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Sunet — cine face sunetul</div><div style="font-size:12px;color:#333">${esc(soundLine)}</div></div>
 ${svcHtml?`<div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Servicii</div><div style="display:flex;flex-direction:column;gap:6px">${svcHtml}</div></div>`:""}
 <div style="margin-bottom:16px"><div style="font-size:9px;color:#888;font-weight:600;text-transform:uppercase;margin-bottom:6px">Alți participanți / furnizori externi</div>${extraHtml||"<div style='font-size:12px;color:#999'>—</div>"}${ev.fisaExtra?`<div style="margin-top:8px;padding:8px;border-radius:6px;background:#f8f8f8;font-size:12px;color:#666;white-space:pre-wrap">${esc(ev.fisaExtra)}</div>`:""}</div>
 <div style="font-size:10px;color:#999;margin-top:24px;text-align:center">PHASER · Fișa evenimentului · O${ev.offerNr||"?"} · ${esc(fEvDate(ev))}</div>
@@ -606,7 +611,7 @@ const rewriteBackgroundImageUrlsInClone = (root, base) => {
   });
 };
 
-const getFisaBodyHtmlForWorker = (ev) => { const full = buildFisaHtml(ev); const m = full.match(/<body[^>]*>([\s\S]*?)<\/body>/i); return m ? m[1] : full; };
+const getFisaBodyHtmlForWorker = (ev, servicePrices) => { const full = buildFisaHtml(ev, servicePrices); const m = full.match(/<body[^>]*>([\s\S]*?)<\/body>/i); return m ? m[1] : full; };
 
 const FISA_EXTRA_TYPES = [
   {k:"canta_altcineva",l:"Cântă altcineva (alt artist/trupă)"},
@@ -658,11 +663,12 @@ const getSvcCostBreakdown = (ev, prices) => {
   // Tehnici: non-DJ → 2 pers.; Supliment: DOAR pentru podium (scenă), lumini, ecran LED — câte servicii bifate × tarif € × nr. tehnicieni (sunetul NU intră aici)
   const hasNonDjSvc = !!(svc.sunet || svc.lumini || svc.ecran || svc.scena);
   const techCount = hasNonDjSvc ? 2 : (svc.dj ? 1 : 0);
-  const tehnicRate = Math.max(0,Number(p.tehnicPerService ?? 120)||0);
+  const techBaseLei = Math.max(0, Number(p.fixedCostTechnician ?? DEFAULT_SERVICE_PRICES.fixedCostTechnician ?? 600) || 0);
+  const tehnicAutoEur = hasNonDjSvc ? Math.round((techBaseLei / CURS) * 100) / 100 : 0;
   const supplRaw = p.tehnicExtraPerService;
   const supplPer = supplRaw==null||supplRaw===""?40:Math.max(0,Number(supplRaw)||0);
   if(hasNonDjSvc){
-    out.push({k:"tehnic2Auto",label:"Tehnic nr.2 (automat)",cost:Math.round(tehnicRate*100)/100});
+    out.push({k:"tehnic2Auto",label:`Tehnic nr.2 (automat) — ${techBaseLei} lei ÷ curs`,cost: tehnicAutoEur});
   }
   const TEHNIC_SUPPL_SVC = [
     {k:"scena",l:"Podium"},
@@ -672,9 +678,9 @@ const getSvcCostBreakdown = (ev, prices) => {
   const activeSuppl = TEHNIC_SUPPL_SVC.filter(({k})=>svc[k]);
   const nSuppl = activeSuppl.length;
   if(techCount>0 && nSuppl>0 && supplPer>0){
-    const c=Math.round(supplPer*nSuppl*techCount*100)/100;
+    const c=Math.round(supplPer*nSuppl*100)/100;
     const nume=activeSuppl.map(x=>x.l).join(", ");
-    out.push({k:"tehnicSupplPlatouri",label:`Supliment tehnic: ${nume} — ${nSuppl} serv. × ${supplPer}€ × ${techCount} pers.`,cost:c});
+    out.push({k:"tehnicSupplPlatouri",label:`Supliment tehnic: ${nume} — ${nSuppl} × ${supplPer}€`,cost:c});
   }
   return out;
 };
@@ -766,14 +772,28 @@ function formatSbPasswordLoginError(error) {
   }
   return raw;
 }
-const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei
+const DEFAULT_FIXED_COSTS = {technician:600,equipment:1000,soundman:400,transport:100}; // lei — soundman în obiect e legacy; suma efectivă pentru finanțe = getSoundmanOutsourceLei
 const CURS_DEFAULT = 5; // 1€ = 5 lei
 const DEFAULT_SERVICE_PRICES = {
   sunet:350, sunetCost:150, lumini:500, luminiCost:520, ecran:600, ecranCost:560, scena:300, scenaCost:260, dj:600, djCost:0,
   tehnicPerService:120, tehnicExtraPerService:40,
   splitM1:24, splitM2:19, splitM3:19, splitM4:19, splitM5:19,
   bonusLeadPrivatePct:2, bonusLeadPublicPct:1, bonusAdminPct:2, bonusSocialPct:2, bonusStagePct:2,
-  fixedCostTechnician:600, fixedCostEquipment:1000, fixedCostSoundman:400, fixedCostTransport:100,
+  fixedCostTechnician:600, fixedCostEquipment:1000, fixedCostSoundman:400, fixedCostSoundmanLevi:200, fixedCostTransport:100,
+};
+/** Cine realizează sunetul (outsourcing): trupa = fără plată sunetist din cheltuieli fixe (banii rămân în pool). */
+const normalizeSoundAttribution = (ev) => {
+  const v = ev?.soundAttribution;
+  if (v === "levi" || v === "prezent" || v === "band") return v;
+  return "prezent";
+};
+/** Lei scoși din logistică fixă pentru sunetist externalizat (după atribuire). */
+const getSoundmanOutsourceLei = (ev, spCfg) => {
+  const sp = spCfg || {};
+  const att = normalizeSoundAttribution(ev);
+  if (att === "band") return 0;
+  if (att === "levi") return Math.max(0, Number(sp.fixedCostSoundmanLevi ?? DEFAULT_SERVICE_PRICES.fixedCostSoundmanLevi) || 200);
+  return Math.max(0, Number(sp.fixedCostSoundman ?? DEFAULT_FIXED_COSTS.soundman) || DEFAULT_FIXED_COSTS.soundman);
 };
 /** Aliniază id membru din eveniment la cheia din MEMBERS (ex. alt tip sau typo). */
 const canonMemId = (id) => {
@@ -809,7 +829,8 @@ const buildFinanceFisaModel = (ev, servicePrices) => {
     transport: Number(spCfg.fixedCostTransport ?? DEFAULT_FIXED_COSTS.transport) || DEFAULT_FIXED_COSTS.transport,
   };
   const fc = { ...fcDefaults, ...(ev.fixedCosts || {}) };
-  const fcLeiTotal = (fc.technician || 0) + (fc.equipment || 0) + (fc.soundman || 0) + (fc.transport || 0);
+  const soundOutLei = getSoundmanOutsourceLei(ev, spCfg);
+  const fcLeiTotal = (fc.technician || 0) + (fc.equipment || 0) + soundOutLei + (fc.transport || 0);
   const fcEur = fcLeiTotal / CURS;
   const fcBase = isLei ? fcLeiTotal : fcEur;
   const fc16 = restFirma ? Math.round(fcBase * 0.16 * 100) / 100 : 0;
@@ -1047,14 +1068,22 @@ const getCollaboratorCostLines = (ev, collaboratorKey, servicePrices) => {
   const curs = Number(ev.cursLei) > 0 ? Number(ev.cursLei) : CURS_DEFAULT;
   const fixed = { ...DEFAULT_FIXED_COSTS, ...(ev.fixedCosts || {}) };
   const lines = [];
+  const spMerged = { ...DEFAULT_SERVICE_PRICES, ...sp };
   if (collaboratorKey === "prezent") {
     if (ev.svc?.sunet && byK.sunet) lines.push({ label: byK.sunet.label || "Sistem sunet", eur: Number(byK.sunet.cost) || 0 });
     lines.push({ label: "Echipament logistic (fix)", eur: (Number(fixed.equipment) || 0) / curs });
+    if (normalizeSoundAttribution(ev) === "prezent") {
+      const smLei = getSoundmanOutsourceLei(ev, spMerged);
+      if (smLei > 0) lines.push({ label: "Sunetist (Prezent)", eur: Math.round((smLei / curs) * 100) / 100 });
+    }
   } else if (collaboratorKey === "levi") {
     if (byK.tehnic2Auto) lines.push({ label: byK.tehnic2Auto.label, eur: Number(byK.tehnic2Auto.cost) || 0 });
     if (byK.tehnicSupplPlatouri) lines.push({ label: byK.tehnicSupplPlatouri.label, eur: Number(byK.tehnicSupplPlatouri.cost) || 0 });
-    const smEur = (Number(fixed.soundman) || 0) / curs;
-    if (smEur > 0) lines.push({ label: "Sunetist (fix)", eur: smEur });
+    if (normalizeSoundAttribution(ev) === "levi") {
+      const smLei = getSoundmanOutsourceLei(ev, spMerged);
+      const smEur = smLei > 0 ? Math.round((smLei / curs) * 100) / 100 : 0;
+      if (smEur > 0) lines.push({ label: "Sunetist (Levi)", eur: smEur });
+    }
   } else if (collaboratorKey === "flavius") {
     ["lumini", "ecran", "dj"].forEach((k) => {
       if (ev.svc?.[k] && byK[k]) lines.push({ label: byK[k].label || k, eur: Number(byK[k].cost) || 0 });
@@ -1070,7 +1099,8 @@ const calcFond7 = (ev) => {
   const onFirma = ev.payType==="firma";
   const taxVenit = onFirma ? fee*0.01 : 0;
   const fc = ev.fixedCosts||DEFAULT_FIXED_COSTS;
-  const fcEur = ((fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0))/CURS;
+  const soundLei = getSoundmanOutsourceLei(ev, DEFAULT_SERVICE_PRICES);
+  const fcEur = ((fc.technician||0)+(fc.equipment||0)+soundLei+(fc.transport||0))/CURS;
   const netAfterFixed = Math.max(0, fee - taxVenit - fcEur);
   const pct = Math.min(100, Math.max(0, Number(ev.fondDupCheltPct ?? 7)));
   return Math.round(netAfterFixed*pct/100*100)/100;
@@ -4178,7 +4208,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               {pdfLoading?"⏳":"⬇"} Descarcă PDF
             </button>
             {tab==="fisa"
-              ? <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={pdfLoading} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} htmlProxyBase={htmlProxyBase}/>
+              ? <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={pdfLoading} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} htmlProxyBase={htmlProxyBase} servicePrices={templates?.servicePrices}/>
               : <div style={{position:"relative",display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
                   <button type="button" onClick={handleOfferSharePublicLink} disabled={pdfLoading||offerLinkBusy||(tab==="contract"&&contractLocked)} title={tab==="contract"&&contractLocked?"Contract înghețat (trimis sau trecut) — nu se reîncarcă pagina":"Creează / actualizează pagina pe internet și îți arată linkul (URL), nu HTML"} style={{padding:"8px 14px",borderRadius:8,border:"none",background:"#3b82f6",color:"#fff",fontWeight:700,fontSize:12,cursor:(pdfLoading||offerLinkBusy||(tab==="contract"&&contractLocked))?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,opacity:(pdfLoading||offerLinkBusy||(tab==="contract"&&contractLocked))?0.55:1}}>
                     {offerLinkBusy?"⏳":"🔗"} {offerLinkUrl?"Actualizează link":"Link public"}
@@ -4572,6 +4602,7 @@ function OfferPreview({ ev, evStatus, onStatusChange, onOfferUpdate, th, mob, on
               </div>
             </div>
             <div style={{marginBottom:16}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Timing show</div><div style={{padding:10,borderRadius:8,background:"#f8f8f8",border:"1px solid #e5e5e5"}}>{(ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45)).map((d,i)=>{const st=(ev.repStarts||[])[i];return <span key={i} style={{padding:"4px 10px",borderRadius:6,background:"rgba(0,0,0,.06)",fontSize:11,fontWeight:600,marginRight:6,marginBottom:4,display:"inline-block"}}>R{i+1}: {st?st+" ":""}{d} min</span>})}</div></div>
+            {(()=>{const spO={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};const sa=normalizeSoundAttribution(ev);const sl=getSoundmanOutsourceLei(ev,spO);const txt=sa==="band"?"Trupa — fără outsourcing sunetist (banii rămân în împărțire).":sa==="levi"?`Levi — sunetist outsourcing (${sl} lei).`:`Prezent — sunetist outsourcing (${sl} lei).`;return <div style={{marginBottom:16}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Sunet — cine face sunetul</div><div style={{fontSize:12,color:"#333"}}>{txt}</div></div>;})()}
             {ev.svc&&Object.keys(ev.svc).some(k=>ev.svc[k])&&<div style={{marginBottom:16}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",letterSpacing:1,marginBottom:6}}>Servicii</div><div style={{display:"flex",flexDirection:"column",gap:6}}>{["sunet","lumini","ecran","scena","dj"].filter(k=>ev.svc?.[k]).map(k=><div key={k} style={{padding:10,borderRadius:8,background:"#f8f8f8",border:"1px solid #e5e5e5",fontSize:12,fontWeight:600}}>{({sunet:"Sistem sunet",lumini:"Sistem lumini",ecran:"Ecran LED",scena:"Scenă/Podium",dj:"DJ"})[k]||k}</div>)}</div></div>}
             <div style={{marginBottom:0}}><div style={{fontSize:9,color:"#888",fontWeight:600,textTransform:"uppercase",marginBottom:6}}>Alți participanți / furnizori externi</div>{(ev.fisaExtraItems||[]).length>0?(ev.fisaExtraItems||[]).map((x,i)=><div key={x.id} style={{padding:8,borderRadius:6,background:"#f8f8f8",border:"1px solid #e5e5e5",marginBottom:6,fontSize:12}}><div style={{fontWeight:600,color:"#333"}}>{FISA_EXTRA_TYPES.find(t=>t.k===x.type)?.l||x.type}</div>{x.desc&&<div style={{color:"#666",marginTop:2}}>{x.desc}</div>}{(x.nume||x.tel)&&<div style={{fontSize:11,color:"#888",marginTop:2}}>{x.nume||"—"} {x.tel&&<>· 📞 {x.tel}</>}</div>}</div>):<div style={{fontSize:12,color:"#999"}}>—</div>}{ev.fisaExtra&&<div style={{marginTop:8,padding:8,borderRadius:6,background:"#f8f8f8",fontSize:12,color:"#666",whiteSpace:"pre-wrap"}}>{ev.fisaExtra}</div>}</div>
           </div>
@@ -4679,16 +4710,16 @@ function DateTimeInput({ value, evDate, onChange, style, iStyle }) {
 }
 
 // FisaPdfButton — descarcă PDF doar fișa evenimentului
-function FisaPdfButton({ ev, showToast }) {
+function FisaPdfButton({ ev, showToast, servicePrices }) {
   const [loading, setLoading] = useState(false);
   const handleDownload = async () => {
     setLoading(true);
     try {
       let blob = null;
-      try { blob = await generatePdfFromHtml(getFisaBodyHtmlForWorker(ev)); } catch (e) { blob = null; }
+      try { blob = await generatePdfFromHtml(getFisaBodyHtmlForWorker(ev, servicePrices)); } catch (e) { blob = null; }
       if (!blob && typeof html2pdf !== "undefined") {
         const div = document.createElement("div");
-        div.innerHTML = getFisaBodyHtmlForWorker(ev);
+        div.innerHTML = getFisaBodyHtmlForWorker(ev, servicePrices);
         div.style.cssText = "position:absolute;left:-9999px;top:0;width:560px;background:#fff;padding:20px";
         document.body.appendChild(div);
         blob = await html2pdf().set({ margin: 12, filename: `Fisa-O${ev.offerNr||"?"}-${fisaPdfDateSlug(ev)}.pdf`, image: { type: "jpeg", quality: 0.98 }, html2canvas: { scale: 2 }, jsPDF: { unit: "mm", format: "a4", orientation: "portrait" } }).from(div).outputPdf("blob");
@@ -4710,7 +4741,7 @@ function FisaPdfButton({ ev, showToast }) {
 
 // FisaLinkButton — generează link partajabil pentru fișa evenimentului (Supabase Storage)
 // Fișier deterministic: fisa-{ev.id}.html — același fișier, actualizat la re-upload
-function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv, htmlProxyBase }) {
+function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv, htmlProxyBase, servicePrices }) {
   const [loading, setLoading] = useState(false);
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -4724,7 +4755,7 @@ function FisaLinkButton({ ev, showToast, pdfLoading, getSbClient, updEv, htmlPro
     if (!sb) { showToast?.("Link partajabil necesita Supabase configurat."); return; }
     setLoading(true);
     try {
-      const rawHtml = buildFisaHtml(ev);
+      const rawHtml = buildFisaHtml(ev, servicePrices);
       const html = encodeHtmlCodePoints(rawHtml);
       const path = `fisa-${ev.id}.html`;
       const blob = new Blob([html], { type: "text/html; charset=utf-8" });
@@ -4963,8 +4994,11 @@ function LocationSearch({ venue, city, dist, onUpdate, sty, th, mob }) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // ─── FIȘA EVENIMENTULUI (tab în modal detalii) ───
 // Ordine: Tip eveniment, Locație (tel+adresă), Client, Ospitalitate, Timing, Servicii, Extra
-function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob, showPaymentCards, showToast }) {
+function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob, showPaymentCards, showToast, servicePrices }) {
   const iStyle = {...sty.i, fontSize: mob?"16px":"14px"};
+  const spFisa = { ...DEFAULT_SERVICE_PRICES, ...(servicePrices || {}) };
+  const saFisa = normalizeSoundAttribution(ev);
+  const soundLeiFisa = getSoundmanOutsourceLei(ev, spFisa);
   const hosp = ev.hosp && !Array.isArray(ev.hosp) ? ev.hosp : {camere:0,meniuri:6,micDejun:false,pranz:false,extra:[],protocolOverride:""};
   const svc = Object.entries(ev.svcp||{}).reduce((s,[k,v])=>s+(ev.svc?.[k]?v:0),0);
   const u = (k,v) => editable && updEv && updEv({[k]:v});
@@ -5043,6 +5077,22 @@ function FisaEveniment({ ev, updEv, th, SVC_LABELS, fFmt, fD, editable, sty, mob
           {(ev.repDurs&&ev.repDurs.length>0 ? ev.repDurs : Array(ev.rep||1).fill(ev.repDur||45)).map((d,i)=>{const st=(ev.repStarts||[])[i];return <span key={i} style={{padding:"4px 10px",borderRadius:6,background:th.ab,fontSize:11,fontWeight:600,marginRight:6,marginBottom:4,display:"inline-block"}}>R{i+1}: {st?st+" ":""}{d} min</span>})}
         </div>}
       </div>
+    </div>
+    {/* 5b. Sunet — cine operează (finanțe + colaboratori) */}
+    <div style={{padding:16,borderRadius:10,background:th.h,border:`1px solid ${th.b}`}}>
+      <div style={{fontSize:10,color:th.tm,fontWeight:700,textTransform:"uppercase",letterSpacing:1,marginBottom:8}}>Sunet — cine face sunetul</div>
+      {editable ? <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        <select value={saFisa} onChange={e=>updEv&&updEv({soundAttribution:e.target.value})} className="modernSel" style={{...iStyle,maxWidth:380,paddingRight:28}}>
+          <option value="band">Trupa (fără outsourcing sunetist — suma rămâne în împărțire)</option>
+          <option value="levi">Levi — sunetist ({Number(spFisa.fixedCostSoundmanLevi ?? DEFAULT_SERVICE_PRICES.fixedCostSoundmanLevi) || 200} lei)</option>
+          <option value="prezent">Prezent — sunetist ({Number(spFisa.fixedCostSoundman ?? DEFAULT_SERVICE_PRICES.fixedCostSoundman) || 400} lei)</option>
+        </select>
+        <div style={{fontSize:10,color:th.tm,lineHeight:1.45}}>La „Trupa”, nu se scade sunetist din cheltuieli fixe pentru distribută. Alegeți pentru fiecare eveniment.</div>
+      </div> : <div style={{fontSize:13,color:th.ts}}>
+        {saFisa==="band" && "Trupa — fără plată outsourcing sunetist (bani în împărțire)."}
+        {saFisa==="levi" && `Levi — sunetist outsourcing (${soundLeiFisa} lei).`}
+        {saFisa==="prezent" && `Prezent — sunetist outsourcing (${soundLeiFisa} lei).`}
+      </div>}
     </div>
     {/* 6. Servicii — fără prețuri, cu ce aducem + nume furnizor */}
     {ev.svc&&Object.keys(ev.svc).some(k=>ev.svc[k])&&<div style={{padding:16,borderRadius:10,background:th.h,border:`1px solid ${th.b}`}}>
@@ -5156,6 +5206,7 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
       soundman: Number(templates?.servicePrices?.fixedCostSoundman ?? DEFAULT_SERVICE_PRICES.fixedCostSoundman) || DEFAULT_SERVICE_PRICES.fixedCostSoundman,
       transport: Number(templates?.servicePrices?.fixedCostTransport ?? DEFAULT_SERVICE_PRICES.fixedCostTransport) || DEFAULT_SERVICE_PRICES.fixedCostTransport,
     },
+    soundAttribution: normalizeSoundAttribution(mData || {}),
     ex: (()=>{const existing=mData?.ex||[];const oficiu=[{id:"ex_tehnicii",n:"Tehnicii",a:200,v:"Oficiu",cxCat:EX_FIN_CAT.tehnic},{id:"ex_backline",n:"Backline",a:250,v:"Oficiu",cxCat:EX_FIN_CAT.furnizor},{id:"ex_transport",n:"Transport",a:10,v:"Oficiu",cxCat:EX_FIN_CAT.alt}];const others=existing.filter(x=>!/tehnic/i.test(x.n||"")&&!/backline/i.test(x.n||"")&&!/transport/i.test(x.n||""));return[...oficiu,...others];})(), ven: mData?.ven||[], notes: mData?.notes||"", fisaExtra: mData?.fisaExtra||"", fisaExtraItems: mData?.fisaExtraItems||[], svcInfo: mData?.svcInfo||{},
     impozitVenit: mData?.impozitVenit??1, plataAvansFirma: mData?.plataAvansFirma ?? (mData?.plataDirect===false), plataRestFirma: mData?.plataRestFirma ?? (mData?.plataDirect===false), sumaAvansLei: mData?.sumaAvansLei??0, sumaRestLei: mData?.sumaRestLei??0, modalitatePlataAvans: mData?.modalitatePlataAvans||"", modalitatePlataRest: mData?.modalitatePlataRest||"", dividende: mData?.dividende??16, cuFond: mData?.cuFond??true, fondPct: mData?.fondPct??10, fondPct2: mData?.fondPct2??10,
     videos: mData?.videos||tplVideos, covers: mData?.covers||(tplCovers.map(c=>({...c,checked:true}))),
@@ -5557,13 +5608,21 @@ function EventForm({ th, sty, isE, isP, mData, user, onSave, onClose, mob, templ
               <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`,marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:700,marginBottom:8}}>Cheltuieli fixe logistică (lei)</div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:8}}>
-                  {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Scule"},{k:"soundman",l:"Sunetist"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                  {[{k:"technician",l:"Tehnician"},{k:"equipment",l:"Scule"},{k:"transport",l:"Transport"}].map(({k,l})=>(
                     <label key={k} style={{display:"flex",alignItems:"center",gap:6,fontSize:11}}>
                       <span style={{flex:1,color:th.tm}}>{l}</span>
                       <input type="number" min={0} step={10} value={Number(fm.fixedCosts?.[k] ?? 0) || 0} onChange={e=>u("fixedCosts",{...(fm.fixedCosts||{}),[k]:Math.max(0,Number(e.target.value)||0)})} style={{...iStyle,width:90,padding:"6px 8px",textAlign:"right"}}/>
                       <span style={{color:th.tm}}>lei</span>
                     </label>
                   ))}
+                </div>
+                <div style={{marginTop:12,paddingTop:10,borderTop:`1px solid ${th.b}`}}>
+                  <div style={{fontSize:10,color:th.tm,marginBottom:6}}>Sunetist — cine îl plătim (afectează finanțele și colaboratorii)</div>
+                  <select value={normalizeSoundAttribution(fm)} onChange={e=>u("soundAttribution",e.target.value)} className="modernSel" style={{...iStyle,maxWidth:400,paddingRight:28,fontSize:12}}>
+                    <option value="band">Trupa — fără outsourcing (banii rămân în împărțire)</option>
+                    <option value="levi">Levi — {Number(templates?.servicePrices?.fixedCostSoundmanLevi ?? DEFAULT_SERVICE_PRICES.fixedCostSoundmanLevi) || 200} lei</option>
+                    <option value="prezent">Prezent — {Number(templates?.servicePrices?.fixedCostSoundman ?? DEFAULT_SERVICE_PRICES.fixedCostSoundman) || 400} lei</option>
+                  </select>
                 </div>
               </div>
               {MEMBERS.map(m=><div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",borderRadius:6,marginBottom:4,background:th.h}}>
@@ -8923,7 +8982,7 @@ function App() {
                     {k:"ecran",l:"Ecran LED (client €)",def:600},{k:"ecranCost",l:"Ecran LED (cost furnizor €)",def:560},
                     {k:"scena",l:"Scenă/Podium (client €)",def:300},{k:"scenaCost",l:"Scenă/Podium (cost furnizor €)",def:260},
                     {k:"dj",l:"DJ (client €)",def:600},{k:"djCost",l:"DJ (cost furnizor €)",def:0},
-                    {k:"tehnicPerService",l:"Tehnic nr.2 automat / pers. (€)",def:120},{k:"tehnicExtraPerService",l:"Supliment tehnic podium·lumini·LED (€/serv./pers.)",def:40},
+                    {k:"tehnicPerService",l:"[Legacy] Tehnic auto € — acum din «Cheltuială tehnician (lei)» ÷ curs",def:120},{k:"tehnicExtraPerService",l:"Supliment tehnic podium·lumini·LED (€ per serviciu bifat)",def:40},
                   ];
                   const splitFields = MEMBERS.map(m=>({k:`split${String(m.id||"").replace(/^m/i,"M")}`,l:`Split ${m.short||m.n} (%)`,def:Number(DEFAULT_SERVICE_PRICES[`split${String(m.id||"").replace(/^m/i,"M")}`] ?? 0) || 0}));
                   const bonusFields = [
@@ -8934,9 +8993,10 @@ function App() {
                     {k:"bonusStagePct",l:"Bonus stage manager (%)",def:2},
                   ];
                   const fixedFields = [
-                    {k:"fixedCostTechnician",l:"Cheltuială logistică tehnician (lei)",def:600},
+                    {k:"fixedCostTechnician",l:"Cheltuială logistică tehnician (lei) — baza «tehnic auto» în € = această sumă ÷ curs",def:600},
                     {k:"fixedCostEquipment",l:"Cheltuială logistică scule (lei)",def:1000},
-                    {k:"fixedCostSoundman",l:"Cheltuială logistică sunetist (lei)",def:400},
+                    {k:"fixedCostSoundman",l:"Sunetist outsourcing Prezent (lei) — când atribuirea e Prezent",def:400},
+                    {k:"fixedCostSoundmanLevi",l:"Sunetist outsourcing Levi (lei) — când atribuirea e Levi",def:200},
                     {k:"fixedCostTransport",l:"Cheltuială logistică transport (lei)",def:100},
                   ];
                   const Section = ({title, help, fields}) => <div style={{padding:12,borderRadius:10,border:`1px solid ${th.b}`,background:th.h,marginBottom:12}}>
@@ -8953,7 +9013,7 @@ function App() {
                     <Section title="1) Servicii extra (preț client + cost furnizor)" fields={svcFields}/>
                     <Section title="2) Split pe membri (evenimente private)" help="Procentele trebuie să însumeze 100%." fields={splitFields}/>
                     <Section title="3) Bonusuri pe rol" fields={bonusFields}/>
-                    <Section title="4) Cheltuieli fixe logistică" help="Aceste valori pornesc implicit pe evenimente noi (pot fi modificate pe eveniment)." fields={fixedFields}/>
+                    <Section title="4) Cheltuieli fixe logistică" help="Valorile pornesc implicit pe evenimente noi. Cine plătește sunetistul (trupa / Levi / Prezent) se alege pe fiecare eveniment — în Fișă sau tab Membri." fields={fixedFields}/>
                   </div>;
                 })()}
                 <button onClick={()=>{
@@ -10592,10 +10652,10 @@ function App() {
                   </div>
                   {detailTab==="fisa"&&<>
                     <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                      <FisaPdfButton ev={ev} showToast={showToast}/>
-                      <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} updEv={updEv} htmlProxyBase={htmlShareProxyBase}/>
+                      <FisaPdfButton ev={ev} showToast={showToast} servicePrices={templates?.servicePrices}/>
+                      <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} updEv={updEv} htmlProxyBase={htmlShareProxyBase} servicePrices={templates?.servicePrices}/>
                     </div>
-                    <FisaEveniment ev={ev} updEv={updEv} th={th} SVC_LABELS={SVC_LABELS} fFmt={fFmt} fD={fD} editable={true} sty={sty} mob={mob} showPaymentCards={false} showToast={showToast}/>
+                    <FisaEveniment ev={ev} updEv={updEv} th={th} SVC_LABELS={SVC_LABELS} fFmt={fFmt} fD={fD} editable={true} sty={sty} mob={mob} showPaymentCards={false} showToast={showToast} servicePrices={templates?.servicePrices}/>
                   </>}
                   {detailTab==="finante"&&(()=>{
                     const tot=(ev.fee??0)+svc;
@@ -10605,7 +10665,7 @@ function App() {
                     const avFirma=ev.avFirma??(ev.payType==="firma");
                     const restFirma=ev.restFirma??(ev.payType==="firma");
                     const svcCost=typeof getSvcCost==="function"?getSvcCost(ev,templates?.servicePrices):0;
-                    const fond7Val=(()=>{try{const C=ev.cursLei||5;const impV=Math.round(((avFirma?dep:0)+(restFirma?rest:0))*0.01*100)/100;const fc={technician:600,equipment:1000,soundman:400,transport:100,...(ev.fixedCosts||{})};const fcL=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);const fcE=fcL/C;const fc16r=restFirma?Math.round(fcE*0.16*100)/100:0;const net=Math.max(0,tot-impV-svcCost-fcE-fc16r);const pct=Math.min(100,Math.max(0,Number(ev.fondDupCheltPct??7)));return Math.round(net*pct/100*100)/100;}catch(e){return 0;}})();
+                    const fond7Val=(()=>{try{const C=ev.cursLei||5;const spL={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};const impV=Math.round(((avFirma?dep:0)+(restFirma?rest:0))*0.01*100)/100;const fc={technician:600,equipment:1000,soundman:400,transport:100,...(ev.fixedCosts||{})};const soundL=getSoundmanOutsourceLei(ev,spL);const fcL=(fc.technician||0)+(fc.equipment||0)+soundL+(fc.transport||0);const fcE=fcL/C;const fc16r=restFirma?Math.round(fcE*0.16*100)/100:0;const net=Math.max(0,tot-impV-svcCost-fcE-fc16r);const pct=Math.min(100,Math.max(0,Number(ev.fondDupCheltPct??7)));return Math.round(net*pct/100*100)/100;}catch(e){return 0;}})();
                     const totalFond=dep+fond7Val;
                     return <div style={{display:"flex",flexDirection:"column",gap:10}}>
                       <div>
@@ -10677,10 +10737,10 @@ function App() {
                     </div>;
                   })()}
                   <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
-                    <FisaPdfButton ev={ev} showToast={showToast}/>
-                    <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} updEv={updEv} htmlProxyBase={htmlShareProxyBase}/>
+                    <FisaPdfButton ev={ev} showToast={showToast} servicePrices={templates?.servicePrices}/>
+                    <FisaLinkButton ev={ev} showToast={showToast} pdfLoading={false} getSbClient={typeof getSbClient==="function"?getSbClient:()=>null} updEv={updEv} htmlProxyBase={htmlShareProxyBase} servicePrices={templates?.servicePrices}/>
                   </div>
-                  <FisaEveniment ev={ev} updEv={updEv} th={th} SVC_LABELS={SVC_LABELS} fFmt={fFmt} fD={fD} editable={false} sty={sty} mob={mob} showPaymentCards={false} showToast={showToast}/>
+                  <FisaEveniment ev={ev} updEv={updEv} th={th} SVC_LABELS={SVC_LABELS} fFmt={fFmt} fD={fD} editable={false} sty={sty} mob={mob} showPaymentCards={false} showToast={showToast} servicePrices={templates?.servicePrices}/>
                 </>}
               </>}
 
@@ -10860,6 +10920,7 @@ function App() {
         const fromDetail=mData._from==="detail";
         const ev={...mData};
         delete ev._from;
+        const spCfgFinance={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};
         // Auto-calculates shares on every update — no "Aplică" needed
         const calcShares=(e)=>{
           const spCfg={...DEFAULT_SERVICE_PRICES,...(templates?.servicePrices||{})};
@@ -10870,7 +10931,8 @@ function App() {
           const impV=Math.round(((avF?d:0)+(rF?r:0))*0.01*100)/100;
           const fcDefaults={technician:Number(spCfg.fixedCostTechnician??DEFAULT_FIXED_COSTS.technician)||DEFAULT_FIXED_COSTS.technician,equipment:Number(spCfg.fixedCostEquipment??DEFAULT_FIXED_COSTS.equipment)||DEFAULT_FIXED_COSTS.equipment,soundman:Number(spCfg.fixedCostSoundman??DEFAULT_FIXED_COSTS.soundman)||DEFAULT_FIXED_COSTS.soundman,transport:Number(spCfg.fixedCostTransport??DEFAULT_FIXED_COSTS.transport)||DEFAULT_FIXED_COSTS.transport};
           const fc={...fcDefaults,...(e.fixedCosts||{})};
-          const fcL=(fc.technician||0)+(fc.equipment||0)+(fc.soundman||0)+(fc.transport||0);
+          const soundL=getSoundmanOutsourceLei(e,spCfg);
+          const fcL=(fc.technician||0)+(fc.equipment||0)+soundL+(fc.transport||0);
           const fcE=fcL/C;const fc16=rF?Math.round(fcE*0.16*100)/100:0;
           const net=Math.max(0,tot-impV-fcE-fc16);
           const f5=Math.round(net*0.05*100)/100;const dF=net-f5;
@@ -11034,9 +11096,9 @@ function App() {
               <div>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{fontSize:10,color:th.tm,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Cheltuieli fixe logistică</div>
-                  <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS}})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
+                  <button onClick={()=>upd({fixedCosts:{...DEFAULT_FIXED_COSTS},soundAttribution:"prezent"})} style={{...sty.bg,fontSize:9,padding:"2px 8px"}}>Reset</button>
                 </div>
-                {[{k:"technician",l:"Tehnician (bază)"},{k:"equipment",l:"Scule"},{k:"soundman",l:"Sunetist"},{k:"transport",l:"Transport"}].map(({k,l})=>(
+                {[{k:"technician",l:"Tehnician (bază)"},{k:"equipment",l:"Scule"},{k:"transport",l:"Transport"}].map(({k,l})=>(
                   <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
                     <span style={{fontSize:12,flex:1}}>{l}</span>
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -11046,6 +11108,18 @@ function App() {
                     </div>
                   </div>
                 ))}
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                  <span style={{fontSize:12,flex:1}}>Sunet (outsourcing)</span>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <select value={normalizeSoundAttribution(ev)} onChange={e=>upd({soundAttribution:e.target.value})} className="modernSel" style={{...sty.i,minWidth:130,maxWidth:200,padding:4,fontSize:11}}>
+                      <option value="band">Trupa (0 lei)</option>
+                      <option value="levi">Levi</option>
+                      <option value="prezent">Prezent</option>
+                    </select>
+                    <span style={{fontSize:11,color:th.tm,fontWeight:600,minWidth:52,textAlign:"right"}}>{getSoundmanOutsourceLei(ev,spCfgFinance)} lei</span>
+                    {!isLei&&<span style={{fontSize:11,color:th.tm,width:36}}>{fv(getSoundmanOutsourceLei(ev,spCfgFinance)/CURS)}</span>}
+                  </div>
+                </div>
                 <div style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderTop:`1px solid ${th.b}`,marginTop:4}}>
                   <span style={{fontSize:12,fontWeight:600}}>Total logistică</span>
                   <span style={{fontSize:12,fontWeight:700,color:"#ef4444"}}>{isLei?fv(fcBase):`${fvl(fcLeiTotal)} / ${fv(fcEur)}`}{onFirma?<span style={{fontSize:10,color:th.tm}}> (+16% div. = {fv(fcBase*1.16)})</span>:null}</span>
