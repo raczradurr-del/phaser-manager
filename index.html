@@ -3791,7 +3791,7 @@ function parseIdCardJsonFromAiResponseText(raw) {
     .replace(/\s*```$/i, "")
     .trim();
   if (/^\[object Object\]$/i.test(s)) {
-    throw new Error("Răspuns AI corupt de la Worker — redeploy phaser-ai-worker sau folosește OpenAI în setări.");
+    throw new Error("Răspuns AI corupt de la Worker — redeploy phaser-ai-worker (versiunea curentă din repo).");
   }
   const tryParse = (str) => JSON.parse(str);
   let parsed;
@@ -3834,63 +3834,20 @@ function parseIdCardJsonFromAiResponseText(raw) {
   return parsed;
 }
 
-/**
- * Extrage câmpuri din poză CI/buletin (OpenAI vision). `apiKey` obligatoriu.
- * Imaginea pleacă către OpenAI — folosește doar dacă ai acordul persoanei.
- */
-async function extractRomanianIdCardFieldsOpenAI(imageDataUrl, apiKey) {
-  const key = String(apiKey || "").trim();
-  if (!key) throw new Error("Adaugă cheia OpenAI în ⚙️ din chat AI → setări (câmp OpenAI API Key).");
-  let url = await downscaleDataUrlIfLarge(imageDataUrl);
-  url = await dataUrlToJpegMaxSide(url, 1600, 0.85);
-  const sys =
-    "Ești expert în citirea cărții de identitate românești (buletin/CI). " +
-    "Răspunde DOAR cu JSON valid, fără markdown, cu cheile exact: " +
-    "clientNume (nume complet cum apare pe act, MAJUSCULE), cnp (13 cifre), " +
-    "ciSeria (2 litere), ciNr (număr serie, cifre), " +
-    "jud (județ DOAR din zona DOMICILIU / «Loc domiciliu» — ex. CS, TM; " +
-    "NU folosi niciodată date din LOCUL NAȘTERII / L-N / «Loc naștere» pentru jud, localitate sau adresaDomiciliu), " +
-    "localitate (municipiu/oraș/comună/sat DOAR din DOMICILIU — nu localitatea de naștere; NU «România» ca localitate), " +
-    "adresaDomiciliu (DOAR adresa de domiciliu tipărită — stradă, JUD., MUN., nr., bloc; " +
-    "NU amesteca sau copia adresa/localitatea de naștere). " +
-    "Pentru câmpuri nelizibile folosește string gol.";
-  const oaCtrl = new AbortController();
-  const oaTo = setTimeout(() => oaCtrl.abort(), 120000);
-  let res;
-  try {
-    res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
-      signal: oaCtrl.signal,
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 600,
-        temperature: 0.05,
-        messages: [
-          { role: "system", content: sys },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: "jud, localitate, adresaDomiciliu: STRICT din blocul DOMICILIU pe buletin. Ignoră complet «Loc naștere», L-N, locul nașterii. Nume, CNP, serie CI din câmpurile de identitate.",
-              },
-              { type: "image_url", image_url: { url: url } },
-            ],
-          },
-        ],
-      }),
-    });
-  } catch (e) {
-    if (e?.name === "AbortError") throw new Error("OpenAI: timeout (120s).");
-    throw e;
-  } finally {
-    clearTimeout(oaTo);
-  }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data?.error?.message || "OpenAI: " + res.status);
-  const raw = data?.choices?.[0]?.message?.content?.trim() || "";
-  return parseIdCardJsonFromAiResponseText(raw);
+/** Are câmpuri mapabile după normalizare (nu totul gol). */
+function idCardExtractHasAnyMappedField(rawObj) {
+  const d = idCardAiResultToContractDraft(rawObj);
+  return Object.keys(d).some((k) => String(d[k] || "").trim());
+}
+
+/** Răspuns Llama în proză („nu pot citi”) — nu e JSON. */
+function idCardVisionRawLooksLikeRefusal(s) {
+  const t = String(s || "").slice(0, 400).toLowerCase();
+  if (!t.trim()) return false;
+  if (/\{/.test(t) && /\}/.test(t)) return false;
+  return /cannot read|can't read|unable to read|not possible|i don't|i am not able|i'm not able|refus|can't assist|nu pot citi|nu este posibil/i.test(
+    t
+  );
 }
 
 /** Llama 3.2 11B Vision pe Worker-ul Phaser (același URL ca chat-ul Llama). */
@@ -3915,7 +3872,7 @@ async function extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerB
     clearTimeout(to);
     if (e?.name === "AbortError") {
       throw new Error(
-        "Worker vision: timeout (~95s) — imaginea e prea mare sau modelul e lent. Încearcă poză mai mică sau cheie OpenAI ca rezervă."
+        "Worker vision: timeout (~95s) — imagine mai mică (JPEG) sau reîncearcă; verifică că Worker-ul e deploy-at cu ultima versiune."
       );
     }
     throw e;
@@ -3926,7 +3883,8 @@ async function extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerB
     throw new Error(data?.error || `Worker vision (${res.status})`);
   }
   if (data.parsed && typeof data.parsed === "object" && !Array.isArray(data.parsed)) {
-    return data.parsed;
+    if (idCardExtractHasAnyMappedField(data.parsed)) return data.parsed;
+    throw new Error("Cloudflare vision: modelul a răspuns fără date utile în câmpuri.");
   }
   const raw =
     data.raw != null
@@ -3934,30 +3892,27 @@ async function extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerB
       : typeof data.response === "string"
         ? data.response.trim()
         : "";
+  if (idCardVisionRawLooksLikeRefusal(raw)) {
+    throw new Error(
+      "Modelul Cloudflare a răspuns cu text în loc de date — redeploy phaser-ai-worker (retry-uri îmbunătățite) sau altă poză."
+    );
+  }
   return parseIdCardJsonFromAiResponseText(raw);
 }
 
 /**
- * Buletin: încearcă Cloudflare Llama 3.2 Vision; dacă eșuează, OpenAI dacă există cheie.
+ * Buletin: doar Llama 3.2 Vision pe Worker (retry-uri pe server, fără OpenAI).
  */
 async function extractRomanianIdCardFields(imageDataUrl, aiSettings) {
   const workerUrl =
     phaserWorkersMigrateUrl(String(aiSettings?.llamaWorker || "").trim()) || DEFAULT_AI_WORKER_URL;
-  const openaiKey = String(aiSettings?.openai || "").trim();
-  let cfErr;
-  try {
-    return await extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerUrl);
-  } catch (e) {
-    cfErr = e;
+  const out = await extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerUrl);
+  if (!idCardExtractHasAnyMappedField(out)) {
+    throw new Error(
+      "Cloudflare: nicio câmp mapat din răspuns. Încearcă altă poză sau redeploy phaser-ai-worker."
+    );
   }
-  if (openaiKey) {
-    try {
-      return await extractRomanianIdCardFieldsOpenAI(imageDataUrl, openaiKey);
-    } catch (e2) {
-      throw new Error(String(e2?.message || e2) + "\n(Cloudflare: " + String(cfErr?.message || cfErr) + ")");
-    }
-  }
-  throw cfErr;
+  return out;
 }
 
 /** Normalizează text pentru comparare (fără diacritice). */
@@ -4190,7 +4145,7 @@ function IdCardScanModal({ open, onClose, th, sty, mob, ev, aiSettings, showToas
           <button type="button" onClick={onClose} style={{ border: "none", background: "transparent", color: th.tm, cursor: "pointer", fontSize: 18 }}>×</button>
         </div>
         <div style={{ padding: 16, fontSize: 11, color: th.tm, lineHeight: 1.5 }}>
-          Încarcă o poză clară cu CI-ul. Pentru <strong>județ, localitate și adresă</strong> se folosesc doar liniile de <strong>domiciliu</strong>, nu locul nașterii. Se folosește mai întâi <strong>Llama 3.2 Vision</strong> (Worker); dacă eșuează, <strong>OpenAI</strong> dacă ai cheie. Prima dată pe cont Meta: POST <code style={{fontSize:10}}>{`{"metaVisionAgree":true}`}</code>. Verifică totul înainte de salvare.
+          Încarcă o poză clară cu CI-ul (lumină uniformă, tot actul în cadru). Pentru <strong>județ, localitate și adresă</strong> se folosesc doar liniile de <strong>domiciliu</strong>, nu locul nașterii. Citirea e cu <strong>Llama 3.2 Vision</strong> pe Worker (mai multe încercări automate pe server). Prima dată pe cont Cloudflare: POST <code style={{fontSize:10}}>{`{"metaVisionAgree":true}`}</code>. Verifică câmpurile înainte de salvare.
         </div>
         <div style={{ padding: "0 16px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
           <input
@@ -4256,18 +4211,14 @@ function IdCardScanModal({ open, onClose, th, sty, mob, ev, aiSettings, showToas
               try {
                 let filled = await runOnce();
                 if (filled === 0) {
-                  await new Promise((r) => setTimeout(r, 450));
-                  filled = await runOnce();
-                }
-                if (filled === 0) {
-                  await new Promise((r) => setTimeout(r, 650));
+                  await new Promise((r) => setTimeout(r, 600));
                   filled = await runOnce();
                 }
                 if (filled > 0) {
                   showToast?.("Text extras — verifică câmpurile înainte de a salva.");
                 } else {
                   showToast?.(
-                    "Modelul nu a putut citi câmpuri — încearcă poză mai clară, alt unghi sau OpenAI în setări.",
+                    "Nu s-au putut citi câmpuri — poză mai clară / alt unghi, sau redeploy Worker (versiunea cu retry-uri).",
                     "error"
                   );
                 }
@@ -7405,8 +7356,8 @@ function SettingsAI(props) {
       React.createElement("input",{type:"text",value:keys.offerHtmlProxy,onChange:function(e){setKeys(function(k){return Object.assign({},k,{offerHtmlProxy:e.target.value});});},placeholder:"Lasă gol = link direct Supabase",title:FISA_PUBLIC_BASE_HINT,style:{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid "+th.b,background:th.h,color:th.t,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"ui-monospace,monospace"}})
     ),
     React.createElement("div",{style:{marginBottom:18}},
-      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:6}},"OpenAI API key (opțional — fallback citire buletin dacă Worker vision eșuează)"),
-      React.createElement("div",{style:{fontSize:10,color:th.tm,marginBottom:6,lineHeight:1.45}},"Se salvează în profil (cloud). Implicit extragerea CI folosește Llama 3.2 Vision pe Worker; OpenAI doar ca rezervă."),
+      React.createElement("label",{style:{fontSize:11,color:th.tm,fontWeight:600,display:"block",marginBottom:6}},"OpenAI API key (opțional — doar pentru chat pe OpenAI)"),
+      React.createElement("div",{style:{fontSize:10,color:th.tm,marginBottom:6,lineHeight:1.45}},"Citirea buletinului folosește Llama 3.2 Vision pe Worker (fără cost OpenAI). Cheia OpenAI e utilă dacă alegi modul chat cu GPT în widget; poți lăsa gol."),
       React.createElement("input",{type:"password",value:keys.openai,onChange:function(e){setKeys(function(k){return Object.assign({},k,{openai:e.target.value});});},placeholder:"sk-...",autoComplete:"off",style:{width:"100%",padding:"9px 10px",borderRadius:8,border:"1px solid rgba(34,197,94,.35)",background:th.h,color:th.t,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"ui-monospace,monospace"}})
     ),
     React.createElement("div",{style:{display:"flex",gap:8}},
