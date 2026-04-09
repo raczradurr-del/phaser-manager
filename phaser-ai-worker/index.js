@@ -61,30 +61,81 @@ export default {
           'Use empty string "" for unreadable or missing fields.';
 
         const userText =
-          "Extract identity fields. Output one JSON object with keys: clientNume, cnp, ciSeria, ciNr, jud, localitate, adresaDomiciliu. No other text.";
+          "Read this Romanian ID card image and fill every JSON field from what is printed on the card. Use \"\" only if truly unreadable.";
 
+        /** Imaginea trebuie în mesaj (documentație CF: `image` la rădăcină e depreciat). */
         const messages = [
           { role: "system", content: sys },
-          { role: "user", content: userText },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: userText },
+              { type: "image_url", image_url: { url: imageDataUrl } },
+            ],
+          },
         ];
 
-        const aiRes = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
-          messages,
-          image: imageDataUrl,
-          max_tokens: 512,
-        });
+        const idCardJsonSchema = {
+          type: "object",
+          properties: {
+            clientNume: { type: "string" },
+            cnp: { type: "string" },
+            ciSeria: { type: "string" },
+            ciNr: { type: "string" },
+            jud: { type: "string" },
+            localitate: { type: "string" },
+            adresaDomiciliu: { type: "string" },
+          },
+          required: ["clientNume", "cnp", "ciSeria", "ciNr", "jud", "localitate", "adresaDomiciliu"],
+        };
 
+        const baseOpts = { messages, max_tokens: 768 };
+
+        let aiRes;
+        try {
+          aiRes = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", {
+            ...baseOpts,
+            response_format: {
+              type: "json_schema",
+              json_schema: idCardJsonSchema,
+            },
+          });
+        } catch (e) {
+          const msg = String(e && e.message ? e.message : e);
+          if (/JSON Mode|json schema|couldn'?t be met|json_schema/i.test(msg)) {
+            aiRes = await env.AI.run("@cf/meta/llama-3.2-11b-vision-instruct", baseOpts);
+          } else {
+            throw e;
+          }
+        }
+
+        let parsedOut = null;
         let text = "";
         if (aiRes && typeof aiRes === "object") {
-          text = String(aiRes.response ?? aiRes.result ?? aiRes.text ?? "").trim();
-          if (!text && Array.isArray(aiRes.data)) {
+          const r = aiRes.response;
+          if (r && typeof r === "object" && !Array.isArray(r)) {
+            parsedOut = r;
+          } else if (typeof r === "string") {
+            text = r.trim();
+          } else {
+            text = String(r ?? aiRes.result ?? aiRes.text ?? "").trim();
+          }
+          if (!parsedOut && !text && Array.isArray(aiRes.data)) {
             const first = aiRes.data[0];
             if (first && typeof first === "object") {
-              text = String(first.response ?? first.result ?? first.text ?? "").trim();
+              const rr = first.response ?? first.result;
+              if (rr && typeof rr === "object" && !Array.isArray(rr)) parsedOut = rr;
+              else text = (typeof rr === "string" ? rr : String(rr ?? first.text ?? "")).trim();
             }
           }
         } else {
           text = String(aiRes || "").trim();
+        }
+
+        if (parsedOut) {
+          return new Response(JSON.stringify({ parsed: parsedOut }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
         }
 
         if (!text) {

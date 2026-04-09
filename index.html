@@ -3790,6 +3790,9 @@ function parseIdCardJsonFromAiResponseText(raw) {
     .replace(/^```(?:json)?\s*/i, "")
     .replace(/\s*```$/i, "")
     .trim();
+  if (/^\[object Object\]$/i.test(s)) {
+    throw new Error("Răspuns AI corupt de la Worker — redeploy phaser-ai-worker sau folosește OpenAI în setări.");
+  }
   const tryParse = (str) => JSON.parse(str);
   let parsed;
   try {
@@ -3805,6 +3808,26 @@ function parseIdCardJsonFromAiResponseText(raw) {
       }
     } else {
       throw new Error("Răspuns AI invalid — încearcă o poză mai clară.");
+    }
+  }
+  if (Array.isArray(parsed) && parsed.length && typeof parsed[0] === "object" && parsed[0] !== null && !Array.isArray(parsed[0])) {
+    parsed = parsed[0];
+  }
+  if (typeof parsed === "string") {
+    const t = parsed.trim();
+    if (t.startsWith("{")) {
+      try {
+        parsed = JSON.parse(t);
+      } catch {
+        /* păstrăm stringul; va eșua mai jos */
+      }
+    }
+  }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const nest = parsed.data ?? parsed.fields ?? parsed.extracted;
+    if (nest && typeof nest === "object" && !Array.isArray(nest)) {
+      const hasTop = ["clientNume", "cnp", "localitate", "adresaDomiciliu"].some((k) => String(parsed[k] ?? "").trim());
+      if (!hasTop) parsed = nest;
     }
   }
   if (!(parsed && typeof parsed === "object")) throw new Error("Date extrase goale.");
@@ -3899,7 +3922,15 @@ async function extractRomanianIdCardFieldsCloudflareVision(imageDataUrl, workerB
   if (!res.ok) {
     throw new Error(data?.error || `Worker vision (${res.status})`);
   }
-  const raw = String(data.raw ?? data.response ?? "").trim();
+  if (data.parsed && typeof data.parsed === "object" && !Array.isArray(data.parsed)) {
+    return data.parsed;
+  }
+  const raw =
+    data.raw != null
+      ? String(data.raw).trim()
+      : typeof data.response === "string"
+        ? data.response.trim()
+        : "";
   return parseIdCardJsonFromAiResponseText(raw);
 }
 
