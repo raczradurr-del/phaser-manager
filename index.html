@@ -8030,6 +8030,32 @@ function AIChatWidget(props) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // DOCS — Tarifare: input-uri numerice cu draft local (fără reset la ștergere / fără ||def care strică 0)
 // ═══════════════════════════════════════════════════════════════════════════════
+/** Nu defini ca componentă în interiorul părintelui — altfel la fiecare re-render React vede tip nou și remontează <input>, pierzând focusul. */
+function DocsTarifareFieldsSection({ title, help, fields, getValue, onDraftChange, onCommit, th, sty, mob }) {
+  return (
+    <div style={{ padding: 12, borderRadius: 10, border: `1px solid ${th.b}`, background: th.h, marginBottom: 12 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: th.t, marginBottom: 4 }}>{title}</div>
+      {help && <div style={{ fontSize: 10, color: th.tm, marginBottom: 10, lineHeight: 1.45 }}>{help}</div>}
+      <div style={{ display: "grid", gridTemplateColumns: mob ? "1fr" : "1fr 1fr", gap: 10 }}>
+        {fields.map(({ k, l, def }) => (
+          <div key={k}>
+            <label style={{ ...sty.l, fontSize: 10 }}>{l}</label>
+            <input
+              type="number"
+              inputMode="decimal"
+              value={getValue(k, def)}
+              onChange={(e) => onDraftChange(k, e.target.value)}
+              onBlur={() => onCommit(k, def)}
+              style={sty.i}
+              placeholder={String(def)}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DocsServicePricesEditor({ templates, saveTemplates, MEMBERS, DEFAULT_SERVICE_PRICES, th, sty, mob, setEvs, showToast }) {
   const [drafts, setDrafts] = useState({});
   const sp = templates.servicePrices || {};
@@ -8083,37 +8109,16 @@ function DocsServicePricesEditor({ templates, saveTemplates, MEMBERS, DEFAULT_SE
     });
   };
 
-  const Section = ({ title, help, fields }) => (
-    <div style={{ padding: 12, borderRadius: 10, border: `1px solid ${th.b}`, background: th.h, marginBottom: 12 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: th.t, marginBottom: 4 }}>{title}</div>
-      {help && <div style={{ fontSize: 10, color: th.tm, marginBottom: 10, lineHeight: 1.45 }}>{help}</div>}
-      <div style={{ display: "grid", gridTemplateColumns: mob ? "1fr" : "1fr 1fr", gap: 10 }}>
-        {fields.map(({ k, l, def }) => (
-          <div key={k}>
-            <label style={{ ...sty.l, fontSize: 10 }}>{l}</label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={displayVal(k, def)}
-              onChange={(e) => setDrafts((d) => ({ ...d, [k]: e.target.value }))}
-              onBlur={() => commitKey(k, def)}
-              style={sty.i}
-              placeholder={String(def)}
-            />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+  const sectionProps = { getValue: displayVal, onDraftChange: (k, v) => setDrafts((d) => ({ ...d, [k]: v })), onCommit: commitKey, th, sty, mob };
 
   return (
     <div>
       <label style={sty.l}>Tarifare, split și bonusuri — valori implicite</label>
       <p style={{ fontSize: 11, color: th.tm, marginBottom: 14 }}>Valorile de aici se aplică implicit la evenimente noi și pot fi ajustate separat pe fiecare eveniment în tab-ul „membri”.</p>
-      <Section title="1) Servicii extra (preț client + cost furnizor)" fields={svcFields} />
-      <Section title="2) Split pe membri (evenimente private)" help="Procentele trebuie să însumeze 100%." fields={splitFields} />
-      <Section title="3) Bonusuri pe rol" fields={bonusFields} />
-      <Section title="4) Cheltuieli fixe logistică" help="Valorile pornesc implicit pe evenimente noi. Cine plătește sunetistul (trupa / Levi / Prezent) se alege pe fiecare eveniment — în Fișă sau tab Membri." fields={fixedFields} />
+      <DocsTarifareFieldsSection title="1) Servicii extra (preț client + cost furnizor)" fields={svcFields} {...sectionProps} />
+      <DocsTarifareFieldsSection title="2) Split pe membri (evenimente private)" help="Procentele trebuie să însumeze 100%." fields={splitFields} {...sectionProps} />
+      <DocsTarifareFieldsSection title="3) Bonusuri pe rol" fields={bonusFields} {...sectionProps} />
+      <DocsTarifareFieldsSection title="4) Cheltuieli fixe logistică" help="Valorile pornesc implicit pe evenimente noi. Cine plătește sunetistul (trupa / Levi / Prezent) se alege pe fiecare eveniment — în Fișă sau tab Membri." fields={fixedFields} {...sectionProps} />
       <button
         onClick={() => {
           let mergedSp = { ...DEFAULT_SERVICE_PRICES, ...templates.servicePrices };
