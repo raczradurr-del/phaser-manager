@@ -1993,6 +1993,7 @@ const IcClock = Ic(<><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 1
 const IcSun  = Ic(<><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></>);
 const IcMoon = Ic(<><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></>);
 const IcMicro = Ic(<><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></>);
+const IcChart = Ic(<><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/><line x1="2" y1="20" x2="22" y2="20"/></>);
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // COMPONENTS — UI building blocks
@@ -10119,6 +10120,7 @@ function App() {
     {id:"music",    Ic:IcMicro, l:"Muzică",   badge:songs.filter(s=>s.status==="idee").length||undefined},
     {id:"calendar", Ic:IcCal,   l:"Calendar", ml:"Cal."},
     ...(p.f?[{id:"finances", Ic:IcMoney, l:"Finanțe", ml:"Fin."}]:[]),
+    {id:"statistici", Ic:IcChart, l:"Statistici", ml:"Stats"},
     ...(user?.memberId?[{id:"contul", Ic:IcUser, l:"Contul meu", ml:"Cont", badge: unreadNotifCount}]:[]),
   ];
   const mobileBaseNavIds = ["acasa", "events", "offers", "calendar"];
@@ -11865,14 +11867,7 @@ function App() {
 
             // ── OVERVIEW ──
             return <div style={{animation:"su .3s ease"}}>
-              {financeAdmin&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-                <div style={{display:"flex",gap:4,background:th.h,borderRadius:8,padding:3}}>
-                  {[{id:"curent",l:"📈 Curent"},{id:"arhiva",l:"🗂 Arhivă"},{id:"rapoarte",l:"📊 Rapoarte"}].map(ft=>(
-                    <button key={ft.id} onClick={()=>setFinTab(ft.id)} style={{padding:"5px 12px",borderRadius:6,border:"none",fontSize:11,fontWeight:finTab===ft.id?700:400,cursor:"pointer",background:finTab===ft.id?th.a:"transparent",color:finTab===ft.id?th.bg:th.tm,transition:"all .15s"}}>{ft.l}</button>
-                  ))}
-                </div>
-              </div>}
-              {(finTab==="curent"||!financeAdmin)&&<>
+              <>
               {financeAdmin ? <>
               <h1 style={{fontSize:22,fontWeight:700,marginBottom:8}}>Finanțe</h1>
               <p style={{fontSize:12,color:th.tm,marginBottom:16,lineHeight:1.5,maxWidth:620}}><strong>Profit net</strong> = <strong>venituri confirmate</strong> minus <strong>cheltuielile reale</strong> din finanțe generale: servicii din fișă + cheltuieli operaționale din ofertă (fără „doar urmărire taxe”), import bancă, alte cheltuieli manuale. <strong>Fondul</strong> (7%, avansuri) e doar <strong>evidență</strong> a banilor strânși la evenimente — face parte din același „buget” ca profitul; când cheltuiți (ex. becuri sală), plata intră la <strong>bancă</strong> sau <strong>alte cheltuieli</strong>, nu se dublează cu fondul.</p>
@@ -12052,204 +12047,152 @@ function App() {
               </div>;
             })()}
             </>}
-            </>}
+            </>
 
-            {financeAdmin&&finTab!=="curent"&&(()=>{
-              const catLabel = {concerte:"Concerte",nunti:"Nunți",botezuri:"Botezuri",corporate:"Corporate",scena_mare:"Scenă mare",festivaluri:"Festivaluri",privat:"Party privat",extra:"Extra"};
-              const catColors = {concerte:"#6366f1",nunti:"#ec4899",botezuri:"#f59e0b",corporate:"#0ea5e9",scena_mare:"#8b5cf6",festivaluri:"#10b981",privat:"#f97316",extra:"#64748b"};
-              const catKeys = ["concerte","nunti","corporate","scena_mare","festivaluri","privat","botezuri","extra"];
-              const catCols = ["concerte","nunti","botezuri","corporate","scena_mare","festivaluri","privat","extra"];
-              const fv = v => v!=null ? `€${v.toLocaleString("ro-RO")}` : "—";
-              const pctChange = (a,b)=>b?Math.round(((a-b)/b)*100):null;
 
-              if(finTab==="arhiva") return <>
-                <div style={sty.cd}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showArh?16:0}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:600}}>📊 Arhivă Istorică Evenimente</div>
-                      <div style={{fontSize:10,color:th.tm,marginTop:2}}>2007 – prezent · {allHistoric.length} ani înregistrați</div>
-                    </div>
-                    <button onClick={()=>setShowArh(p=>!p)} style={{...sty.bg,fontSize:11,padding:"5px 12px"}}>{showArh?"▲ Ascunde":"▼ Deschide"}</button>
-                  </div>
-                  {showArh&&(()=>{
-                    const an1d=allHistoric.find(d=>d.an===arhAn1);
-                    const an2d=allHistoric.find(d=>d.an===arhAn2);
-                    const aniiDisp=allHistoric.map(d=>d.an);
-                    return <>
-                      <div style={{background:th.h,borderRadius:10,padding:"16px",marginBottom:16}}>
-                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:th.tm,marginBottom:12}}>⚖️ Comparator ani</div>
-                        <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:16}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:11,color:th.tm}}>An A:</span>
-                            <select value={arhAn1} onChange={e=>setArhAn1(Number(e.target.value))} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${th.b}`,background:th.bg,color:th.t,fontSize:12,fontWeight:700}}>
-                              {aniiDisp.map(a=><option key={a} value={a}>{a}</option>)}
-                            </select>
-                          </div>
-                          <span style={{fontSize:16,color:th.tm}}>vs</span>
-                          <div style={{display:"flex",alignItems:"center",gap:8}}>
-                            <span style={{fontSize:11,color:th.tm}}>An B:</span>
-                            <select value={arhAn2} onChange={e=>setArhAn2(Number(e.target.value))} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${th.b}`,background:th.bg,color:th.t,fontSize:12,fontWeight:700}}>
-                              {aniiDisp.map(a=><option key={a} value={a}>{a}</option>)}
-                            </select>
-                          </div>
-                        </div>
-                        {an1d&&an2d&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                          {[{l:"Total evenimente",k:"total",icon:"🎪"},{l:"Concerte",k:"concerte",icon:"🎸"},{l:"Nunți",k:"nunti",icon:"💍"},{l:"Corporate",k:"corporate",icon:"🏢"},{l:"Scenă mare",k:"scena_mare",icon:"🎤"},{l:"Party privat",k:"privat",icon:"🥂"}].map(({l,k,icon})=>{
-                            const va=an1d[k]||0,vb=an2d[k]||0,pct=vb?Math.round(((va-vb)/vb)*100):null,pos=pct!=null&&pct>=0;
-                            return <div key={k} style={{padding:"10px 12px",borderRadius:8,background:th.bg,border:`1px solid ${th.b}`}}>
-                              <div style={{fontSize:10,color:th.tm,marginBottom:4}}>{icon} {l}</div>
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
-                                <span style={{fontSize:15,fontWeight:700}}>{va||"—"}</span>
-                                <span style={{fontSize:10,color:th.tm}}>vs {vb||"—"}</span>
-                              </div>
-                              {pct!=null&&<div style={{marginTop:4,fontSize:10,fontWeight:700,color:pos?"#22c55e":"#ef4444"}}>{pos?"+":""}{pct}% față de {arhAn2}</div>}
-                            </div>;
-                          })}
-                        </div>}
-                        {an1d&&an2d&&(()=>{
-                          const v1=an1d.venit||(an1d.venit_min?Math.round((an1d.venit_min+an1d.venit_max)/2):null);
-                          const v2=an2d.venit||(an2d.venit_min?Math.round((an2d.venit_min+an2d.venit_max)/2):null);
-                          const pct=v1&&v2?Math.round(((v1-v2)/v2)*100):null,pos=pct!=null&&pct>=0;
-                          return v1||v2?<div style={{marginTop:10,padding:"12px 14px",borderRadius:8,background:pos?"rgba(34,197,94,.08)":"rgba(239,68,68,.08)",border:`1px solid ${pos?"#22c55e":"#ef4444"}30`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <div>
-                              <div style={{fontSize:10,color:th.tm,marginBottom:2}}>💰 Venit per membru</div>
-                              <div style={{display:"flex",gap:16,alignItems:"baseline"}}>
-                                <span style={{fontSize:16,fontWeight:700}}>{v1?fv(v1):"n/a"}</span>
-                                <span style={{fontSize:11,color:th.tm}}>vs {v2?fv(v2):"n/a"} în {arhAn2}</span>
-                              </div>
-                            </div>
-                            {pct!=null&&<span style={{fontSize:14,fontWeight:800,color:pos?"#22c55e":"#ef4444"}}>{pos?"+":""}{pct}%</span>}
-                          </div>:null;
-                        })()}
-                      </div>
-                      <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:th.tm,marginBottom:10}}>📋 Toate datele</div>
-                      <div style={{overflowX:"auto"}}>
-                        <table style={{width:"100%",fontSize:11}}>
-                          <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
-                            <th style={{padding:"7px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>An</th>
-                            <th style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>Total</th>
-                            {catCols.map(c=><th key={c} style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>{catLabel[c]}</th>)}
-                            <th style={{padding:"7px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>€/Membru</th>
-                          </tr></thead>
-                          <tbody>
-                            {[...allHistoric].reverse().map((d)=>{
-                              const isHl=d.an===arhAn1||d.an===arhAn2;
-                              const vStr=d.venit?fv(d.venit):d.venit_min?`~${fv(d.venit_min)}–${fv(d.venit_max)}`:"—";
-                              return <tr key={d.an} style={{borderBottom:`1px solid ${th.bl}`,background:isHl?`${th.a}18`:"transparent"}}>
-                                <td style={{padding:"7px 8px",fontWeight:isHl?700:600,fontSize:isHl?13:11}}>{d.an}{d.live&&<span style={{fontSize:8,marginLeft:4,color:"#22c55e",fontWeight:700}}>●</span>}{isHl&&<span style={{fontSize:8,marginLeft:4,color:th.a,fontWeight:700}}>{d.an===arhAn1?"▶A":"▶B"}</span>}</td>
-                                <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700}}>{d.total}</td>
-                                {catCols.map(c=><td key={c} style={{padding:"7px 8px",textAlign:"center",color:d[c]?th.t:th.b}}>{d[c]||"·"}</td>)}
-                                <td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.venit||d.venit_min?"#22c55e":th.tm,fontSize:10}}>{vStr}</td>
-                              </tr>;
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                      <div style={{marginTop:16}}>
-                        <div style={{fontSize:11,fontWeight:700,textTransform:"uppercase",letterSpacing:1,color:th.tm,marginBottom:10}}>📈 Trend total evenimente</div>
-                        <div style={{display:"flex",alignItems:"flex-end",gap:3,height:80}}>
-                          {allHistoric.map(d=>{
-                            const maxT=Math.max(...allHistoric.map(x=>x.total));
-                            const h=Math.round((d.total/maxT)*72),isHl=d.an===arhAn1||d.an===arhAn2;
-                            return <div key={d.an} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                              <div title={`${d.an}: ${d.total} ev.`} style={{width:"100%",height:h,borderRadius:"3px 3px 0 0",background:isHl?th.a:th.b,cursor:"default"}}/>
-                              <div style={{fontSize:8,color:th.tm,transform:"rotate(-45deg)",transformOrigin:"top center",whiteSpace:"nowrap"}}>{d.an}</div>
-                            </div>;
-                          })}
-                        </div>
-                      </div>
-                    </>;
-                  })()}
-                </div>
-              </>;
+            </div>;
+          })()}
 
-              const linReg=(pts)=>{const n=pts.length;if(!n)return()=>0;const sx=pts.reduce((s,p)=>s+p.x,0),sy=pts.reduce((s,p)=>s+p.y,0),sxy=pts.reduce((s,p)=>s+p.x*p.y,0),sx2=pts.reduce((s,p)=>s+p.x*p.x,0);const m=(n*sxy-sx*sy)/(n*sx2-sx*sx||1),b=(sy-m*sx)/n;return x=>Math.max(0,Math.round(m*x+b));};
-              const dtFit=allHistoric.filter(d=>d.an!==2020&&d.an>=2014);
-              const predTotal=linReg(dtFit.map(d=>({x:d.an,y:d.total})));
-              const predVenit=linReg(dtFit.filter(d=>d.venit).map(d=>({x:d.an,y:d.venit})));
-              const predCat=k=>linReg(dtFit.filter(d=>d[k]).map(d=>({x:d.an,y:d[k]||0})));
-              const predYears=[2026,2027,2028].filter(y=>!allHistoric.find(d=>d.an===y));
-              const rapD=allHistoric.find(d=>d.an===rapAn);
-              const prevYears2=allHistoric.filter(x=>x.an<rapAn);
-              const rapPrev=prevYears2.length?allHistoric.find(d=>d.an===Math.max(...prevYears2.map(x=>x.an))):null;
-              const SvgBars=({data,color,maxV,height=60})=>{const max=maxV||Math.max(...data.map(d=>d.v||0),1);return <svg width="100%" height={height+20} style={{overflow:"visible"}}>{data.map((d,i)=>{const bw=Math.floor(100/data.length),bh=Math.round(((d.v||0)/max)*height),x=i*(bw+1);return <g key={i}><rect x={`${x}%`} y={height-bh} width={`${bw-1}%`} height={bh} fill={d.color||color||"#6366f1"} rx={2} opacity={d.dim?.8:1}/>{d.v>0&&<text x={`${x+bw/2}%`} y={height-bh-3} textAnchor="middle" fontSize={7} fill={th.tm}>{d.v}</text>}<text x={`${x+bw/2}%`} y={height+14} textAnchor="middle" fontSize={7} fill={th.tm} transform={`rotate(-30,${x+bw/2}%,${height+14})`}>{d.l}</text></g>;})}</svg>;};
-              const maxTotal=Math.max(...allHistoric.map(d=>d.total),...predYears.map(y=>predTotal(y)));
+          {tab==="statistici"&&(()=>{
+            const catLabel = {concerte:"Concerte",nunti:"Nunți",botezuri:"Botezuri",corporate:"Corporate",scena_mare:"Scenă mare",festivaluri:"Festivaluri",privat:"Party privat",extra:"Extra"};
+            const catColors = {concerte:"#6366f1",nunti:"#ec4899",botezuri:"#f59e0b",corporate:"#0ea5e9",scena_mare:"#8b5cf6",festivaluri:"#10b981",privat:"#f97316",extra:"#64748b"};
+            const catCols = ["concerte","nunti","botezuri","corporate","scena_mare","festivaluri","privat","extra"];
+            const fv = v => v!=null ? `€${v.toLocaleString("ro-RO")}` : "—";
+            const pctChange = (a,b)=>b?Math.round(((a-b)/b)*100):null;
+            const linReg=(pts)=>{const n=pts.length;if(!n)return()=>0;const sx=pts.reduce((s,p)=>s+p.x,0),sy=pts.reduce((s,p)=>s+p.y,0),sxy=pts.reduce((s,p)=>s+p.x*p.y,0),sx2=pts.reduce((s,p)=>s+p.x*p.x,0);const m=(n*sxy-sx*sy)/(n*sx2-sx*sx||1),b=(sy-m*sx)/n;return x=>Math.max(0,Math.round(m*x+b));};
+            const dtFit=allHistoric.filter(d=>d.an!==2020&&d.an>=2014);
+            const predTotal=linReg(dtFit.map(d=>({x:d.an,y:d.total})));
+            const predVenit=linReg(dtFit.filter(d=>d.venit).map(d=>({x:d.an,y:d.venit})));
+            const predYears=[2026,2027,2028].filter(y=>!allHistoric.find(d=>d.an===y));
+            const maxTotal=Math.max(...allHistoric.map(d=>d.total),...predYears.map(y=>predTotal(y)));
+            const an1d=allHistoric.find(d=>d.an===arhAn1);
+            const an2d=allHistoric.find(d=>d.an===arhAn2);
+            const aniiDisp=allHistoric.map(d=>d.an);
+            return <div style={{animation:"su .3s ease"}}>
+              <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>Statistici</h1>
+              <p style={{fontSize:11,color:th.tm,marginBottom:16}}>Arhivă completă 2007–prezent · date live din 2026</p>
 
-              return <>
-                <div style={{...sty.cd,marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}>
-                    <div style={{fontSize:13,fontWeight:600}}>📋 Raport anual detaliat</div>
-                    <select value={rapAn} onChange={e=>setRapAn(Number(e.target.value))} style={{padding:"6px 10px",borderRadius:7,border:`1px solid ${th.b}`,background:th.bg,color:th.t,fontSize:13,fontWeight:700}}>
-                      {[...allHistoric].reverse().map(d=><option key={d.an} value={d.an}>{d.an}{d.live?" ●":""}</option>)}
+              {/* Comparator */}
+              <div style={{...sty.cd,marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>⚖️ Comparator ani</div>
+                <div style={{display:"flex",gap:12,alignItems:"center",flexWrap:"wrap",marginBottom:16}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:11,color:th.tm}}>An A:</span>
+                    <select value={arhAn1} onChange={e=>setArhAn1(Number(e.target.value))} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${th.b}`,background:th.bg,color:th.t,fontSize:12,fontWeight:700}}>
+                      {aniiDisp.map(a=><option key={a} value={a}>{a}</option>)}
                     </select>
                   </div>
-                  {rapD&&<div style={{marginTop:16}}>
-                    <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:8,marginBottom:16}}>
-                      {[{l:"Total evenimente",v:rapD.total,prev:rapPrev?.total,ic:"🎪"},{l:"Venit / membru",v:rapD.venit?fv(rapD.venit):rapD.venit_min?`~${fv(Math.round((rapD.venit_min+rapD.venit_max)/2))}`:"n/a",ic:"💶",raw:rapD.venit,rawPrev:rapPrev?.venit},{l:"Nunți",v:rapD.nunti||0,prev:rapPrev?.nunti,ic:"💍"},{l:"Corporate",v:rapD.corporate||0,prev:rapPrev?.corporate,ic:"🏢"}].map((c,i)=>{
-                        const pct=c.raw!=null&&c.rawPrev!=null?pctChange(c.raw,c.rawPrev):typeof c.v==="number"&&c.prev!=null?pctChange(c.v,c.prev):null,pos=pct!=null&&pct>=0;
-                        return <div key={i} style={sty.cd}><div style={{fontSize:10,color:th.tm,marginBottom:4}}>{c.ic} {c.l}</div><div style={{fontSize:17,fontWeight:700}}>{c.v}</div>{pct!=null&&<div style={{fontSize:10,fontWeight:700,marginTop:4,color:pos?"#22c55e":"#ef4444"}}>{pos?"+":""}{pct}% vs {rapPrev?.an}</div>}</div>;
-                      })}
-                    </div>
-                    <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-                      {catKeys.filter(k=>rapD[k]).map(k=>(
-                        <div key={k} style={{padding:"6px 10px",borderRadius:6,background:catColors[k]+"20",border:`1px solid ${catColors[k]}40`,display:"flex",alignItems:"center",gap:6}}>
-                          <span style={{fontSize:16,fontWeight:700,color:catColors[k]}}>{rapD[k]}</span>
-                          <span style={{fontSize:11,color:th.t}}>{catLabel[k]}</span>
-                          {rapPrev&&rapPrev[k]!=null&&<span style={{fontSize:9,color:pctChange(rapD[k]||0,rapPrev[k]||0)>=0?"#22c55e":"#ef4444",fontWeight:700}}>({pctChange(rapD[k]||0,rapPrev[k]||0)>=0?"+":""}{pctChange(rapD[k]||0,rapPrev[k]||0)}%)</span>}
-                        </div>
-                      ))}
-                    </div>
-                    {rapD.an===2020&&<div style={{padding:"10px 14px",borderRadius:8,background:"rgba(239,68,68,.1)",border:"1px solid rgba(239,68,68,.3)",fontSize:11,color:"#ef4444"}}>⚠️ 2020 — an COVID-19.</div>}
-                    {rapD.live&&<div style={{padding:"10px 14px",borderRadius:8,background:"rgba(34,197,94,.08)",border:"1px solid rgba(34,197,94,.3)",fontSize:11,color:"#22c55e",marginTop:8}}>● Date live — actualizate automat din evenimentele confirmate.</div>}
-                  </div>}
+                  <span style={{fontSize:16,color:th.tm}}>vs</span>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:11,color:th.tm}}>An B:</span>
+                    <select value={arhAn2} onChange={e=>setArhAn2(Number(e.target.value))} style={{padding:"5px 8px",borderRadius:6,border:`1px solid ${th.b}`,background:th.bg,color:th.t,fontSize:12,fontWeight:700}}>
+                      {aniiDisp.map(a=><option key={a} value={a}>{a}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div style={{...sty.cd,marginBottom:12}}>
-                  <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>📈 Evoluție total evenimente</div>
-                  <div style={{fontSize:10,color:th.tm,marginBottom:14}}>Date reale + predicții {predYears.join("–")||"viitor"} (regresie liniară, excl. 2020)</div>
-                  <div style={{overflowX:"auto"}}><div style={{minWidth:500}}><SvgBars height={80} data={[...allHistoric.map(d=>({l:String(d.an),v:d.total,color:d.an===2020?"#94a3b8":d.live?"#22c55e":th.a})),...predYears.map(y=>({l:`${y}*`,v:predTotal(y),color:"#6366f130",dim:true}))]} maxV={maxTotal}/></div></div>
-                </div>
-                {predYears.length>0&&<div style={{...sty.cd,marginBottom:12}}>
-                  <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>🔮 Predicții {predYears[0]}–{predYears[predYears.length-1]}</div>
-                  <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:10}}>
-                    {predYears.map(y=>{
-                      const tot=predTotal(y),ven=predVenit(y);
-                      const prevTot=predYears.indexOf(y)===0?allHistoric[allHistoric.length-1]?.total:predTotal(y-1);
-                      const prevVen=predYears.indexOf(y)===0?allHistoric[allHistoric.length-1]?.venit:predVenit(y-1);
-                      const pT=pctChange(tot,prevTot),pV=pctChange(ven,prevVen);
-                      return <div key={y} style={{...sty.cd,border:`2px solid ${th.a}40`,background:`${th.a}08`}}>
-                        <div style={{fontSize:16,fontWeight:800,color:th.a,marginBottom:8}}>{y}</div>
-                        <div style={{fontSize:22,fontWeight:700,marginBottom:4}}>{tot}</div>
-                        {pT!=null&&<div style={{fontSize:10,fontWeight:700,color:pT>=0?"#22c55e":"#ef4444",marginBottom:10}}>{pT>=0?"+":""}{pT}% vs {y-1}</div>}
-                        <div style={{borderTop:`1px solid ${th.b}`,paddingTop:8,marginTop:4}}>
-                          <div style={{fontSize:16,fontWeight:700,color:"#22c55e"}}>{fv(ven)}</div>
-                          {pV!=null&&<div style={{fontSize:10,fontWeight:700,color:pV>=0?"#22c55e":"#ef4444"}}>{pV>=0?"+":""}{pV}% vs {y-1}</div>}
+                {an1d&&an2d&&<>
+                  <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(3,1fr)",gap:8,marginBottom:10}}>
+                    {[{l:"Total evenimente",k:"total",icon:"🎪"},{l:"Concerte",k:"concerte",icon:"🎸"},{l:"Nunți",k:"nunti",icon:"💍"},{l:"Corporate",k:"corporate",icon:"🏢"},{l:"Scenă mare",k:"scena_mare",icon:"🎤"},{l:"Party privat",k:"privat",icon:"🥂"}].map(({l,k,icon})=>{
+                      const va=an1d[k]||0,vb=an2d[k]||0,pct=vb?Math.round(((va-vb)/vb)*100):null,pos=pct!=null&&pct>=0;
+                      return <div key={k} style={{padding:"10px 12px",borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                        <div style={{fontSize:10,color:th.tm,marginBottom:4}}>{icon} {l}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+                          <span style={{fontSize:15,fontWeight:700}}>{va||"—"}</span>
+                          <span style={{fontSize:10,color:th.tm}}>vs {vb||"—"}</span>
                         </div>
+                        {pct!=null&&<div style={{marginTop:4,fontSize:10,fontWeight:700,color:pos?"#22c55e":"#ef4444"}}>{pos?"+":""}{pct}% față de {arhAn2}</div>}
                       </div>;
                     })}
                   </div>
-                  <div style={{marginTop:10,fontSize:9,color:th.tm,padding:"6px 10px",borderRadius:6,background:th.h}}>* Predicțiile sunt generate automat pe baza trendurilor 2014–prezent.</div>
-                </div>}
-                <div style={sty.cd}>
-                  <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>🏆 Top 5 ani după total evenimente</div>
-                  {[...allHistoric].sort((a,b)=>b.total-a.total).slice(0,5).map((d,i)=>{
-                    const maxTot=Math.max(...allHistoric.map(x=>x.total)),pct=Math.round((d.total/maxTot)*100);
-                    return <div key={d.an} style={{marginBottom:10}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8}}>
-                          <span style={{fontSize:14,fontWeight:800,color:i===0?"#f59e0b":i===1?"#94a3b8":i===2?"#cd7c2c":th.tm,width:20}}>{["🥇","🥈","🥉","4.","5."][i]}</span>
-                          <span style={{fontSize:13,fontWeight:700}}>{d.an}{d.live&&<span style={{fontSize:9,marginLeft:4,color:"#22c55e"}}>●</span>}</span>
+                  {p.f&&(()=>{
+                    const v1=an1d.venit||(an1d.venit_min?Math.round((an1d.venit_min+an1d.venit_max)/2):null);
+                    const v2=an2d.venit||(an2d.venit_min?Math.round((an2d.venit_min+an2d.venit_max)/2):null);
+                    const pct=v1&&v2?Math.round(((v1-v2)/v2)*100):null,pos=pct!=null&&pct>=0;
+                    return v1||v2?<div style={{padding:"12px 14px",borderRadius:8,background:pos?"rgba(34,197,94,.08)":"rgba(239,68,68,.08)",border:`1px solid ${pos?"#22c55e":"#ef4444"}30`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div>
+                        <div style={{fontSize:10,color:th.tm,marginBottom:2}}>💰 Venit per membru</div>
+                        <div style={{display:"flex",gap:16,alignItems:"baseline"}}>
+                          <span style={{fontSize:16,fontWeight:700}}>{v1?fv(v1):"n/a"}</span>
+                          <span style={{fontSize:11,color:th.tm}}>vs {v2?fv(v2):"n/a"} în {arhAn2}</span>
                         </div>
-                        <span style={{fontSize:13,fontWeight:700}}>{d.total} ev.{d.venit?` · ${fv(d.venit)}/mb`:""}</span>
                       </div>
-                      <div style={{height:6,borderRadius:3,background:th.h,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${pct}%`,background:i===0?"#f59e0b":th.a,borderRadius:3}}/>
-                      </div>
+                      {pct!=null&&<span style={{fontSize:14,fontWeight:800,color:pos?"#22c55e":"#ef4444"}}>{pos?"+":""}{pct}%</span>}
+                    </div>:null;
+                  })()}
+                </>}
+              </div>
+
+              {/* Grafic trend */}
+              <div style={{...sty.cd,marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>📈 Evoluție total evenimente</div>
+                <div style={{fontSize:10,color:th.tm,marginBottom:14}}>Date reale + predicții {predYears.join("–")||"viitor"} (excl. 2020)</div>
+                <div style={{display:"flex",alignItems:"flex-end",gap:2,height:100,paddingBottom:18,position:"relative"}}>
+                  {[...allHistoric.map(d=>({l:String(d.an),v:d.total,color:d.an===2020?"#94a3b8":d.live?"#22c55e":th.a,dim:false,pred:false})),...predYears.map(y=>({l:`${y}*`,v:predTotal(y),color:"#818cf8",dim:true,pred:true}))].map((d,i,arr)=>{
+                    const bh=Math.round((d.v/maxTotal)*80),isHl=d.l===String(arhAn1)||d.l===String(arhAn2);
+                    return <div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                      <div style={{fontSize:7,color:th.tm,marginBottom:1,opacity:d.v>0?1:0}}>{d.v}</div>
+                      <div title={`${d.l}: ${d.v} ev.`} style={{width:"100%",height:bh,borderRadius:"3px 3px 0 0",background:isHl?th.a:d.color,opacity:d.dim?.6:1,border:isHl?`2px solid ${th.a}`:"none",boxSizing:"border-box"}}/>
+                      <div style={{fontSize:7,color:isHl?th.a:th.tm,fontWeight:isHl?700:400,transform:"rotate(-45deg)",transformOrigin:"top center",whiteSpace:"nowrap",marginTop:2}}>{d.l}</div>
                     </div>;
                   })}
                 </div>
-              </>;
-            })()}
+                <div style={{fontSize:9,color:th.tm,marginTop:4}}><span style={{color:"#22c55e"}}>● live</span> · <span style={{color:th.a}}>● istoric</span> · <span style={{color:"#94a3b8"}}>● COVID</span> · <span style={{color:"#818cf8",opacity:.7}}>* predicție</span></div>
+              </div>
 
+              {/* Predicții */}
+              {predYears.length>0&&<div style={{...sty.cd,marginBottom:12}}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>🔮 Predicții {predYears[0]}–{predYears[predYears.length-1]}</div>
+                <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:10}}>
+                  {predYears.map(y=>{
+                    const tot=predTotal(y),ven=predVenit(y);
+                    const prevTot=predYears.indexOf(y)===0?allHistoric[allHistoric.length-1]?.total:predTotal(y-1);
+                    const prevVen=predYears.indexOf(y)===0?allHistoric[allHistoric.length-1]?.venit:predVenit(y-1);
+                    const pT=pctChange(tot,prevTot),pV=pctChange(ven,prevVen);
+                    return <div key={y} style={{...sty.cd,border:`2px solid ${th.a}40`,background:`${th.a}08`}}>
+                      <div style={{fontSize:16,fontWeight:800,color:th.a,marginBottom:8}}>{y}</div>
+                      <div style={{fontSize:22,fontWeight:700,marginBottom:4}}>{tot} <span style={{fontSize:12,color:th.tm,fontWeight:400}}>evenimente</span></div>
+                      {pT!=null&&<div style={{fontSize:10,fontWeight:700,color:pT>=0?"#22c55e":"#ef4444",marginBottom:p.f?8:0}}>{pT>=0?"+":""}{pT}% vs {y-1}</div>}
+                      {p.f&&<div style={{borderTop:`1px solid ${th.b}`,paddingTop:8,marginTop:4}}>
+                        <div style={{fontSize:16,fontWeight:700,color:"#22c55e"}}>{fv(ven)}<span style={{fontSize:10,fontWeight:400,color:th.tm}}>/mb</span></div>
+                        {pV!=null&&<div style={{fontSize:10,fontWeight:700,color:pV>=0?"#22c55e":"#ef4444"}}>{pV>=0?"+":""}{pV}% vs {y-1}</div>}
+                      </div>}
+                    </div>;
+                  })}
+                </div>
+                <div style={{marginTop:8,fontSize:9,color:th.tm,padding:"6px 10px",borderRadius:6,background:th.h}}>* Predicțiile sunt generate automat pe baza trendurilor 2014–prezent (excl. 2020 COVID).</div>
+              </div>}
+
+              {/* Tabel arhivă complet */}
+              <div style={sty.cd}>
+                <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>📋 Arhivă completă 2007–prezent</div>
+                <div style={{fontSize:10,color:th.tm,marginBottom:12}}>{allHistoric.length} ani înregistrați · <span style={{color:"#22c55e"}}>● date live</span></div>
+                <div style={{overflowX:"auto"}}>
+                  <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
+                    <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
+                      <th style={{padding:"7px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>An</th>
+                      <th style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>Total</th>
+                      {catCols.map(c=><th key={c} style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>{catLabel[c]}</th>)}
+                      {p.f&&<th style={{padding:"7px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>€/Mb</th>}
+                    </tr></thead>
+                    <tbody>
+                      {[...allHistoric].reverse().map((d)=>{
+                        const isHl=d.an===arhAn1||d.an===arhAn2;
+                        const vStr=d.venit?fv(d.venit):d.venit_min?`~${fv(d.venit_min)}–${fv(d.venit_max)}`:"—";
+                        return <tr key={d.an} style={{borderBottom:`1px solid ${th.bl}`,background:isHl?`${th.a}18`:"transparent",transition:"background .15s"}}>
+                          <td style={{padding:"7px 8px",fontWeight:isHl?700:600,fontSize:isHl?13:11,whiteSpace:"nowrap"}}>
+                            {d.an}
+                            {d.live&&<span style={{fontSize:8,marginLeft:4,color:"#22c55e",fontWeight:700}}>●</span>}
+                            {isHl&&<span style={{fontSize:8,marginLeft:4,color:th.a,fontWeight:700}}>{d.an===arhAn1?"▶A":"▶B"}</span>}
+                          </td>
+                          <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700}}>{d.total}</td>
+                          {catCols.map(c=><td key={c} style={{padding:"7px 8px",textAlign:"center",color:d[c]?th.t:th.b}}>{d[c]||"·"}</td>)}
+                          {p.f&&<td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.venit||d.venit_min?"#22c55e":th.tm,fontSize:10}}>{vStr}</td>}
+                        </tr>;
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>;
           })()}
 
