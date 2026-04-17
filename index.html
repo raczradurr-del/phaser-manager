@@ -8364,6 +8364,8 @@ function App() {
   const [reqYearFilter, setReqYearFilter] = useState("all");
   const [reqMonthFilter, setReqMonthFilter] = useState("all");
   const [reqCompareYear, setReqCompareYear] = useState("all");
+  const [moneyYearFilter, setMoneyYearFilter] = useState("all");
+  const [moneyMonthFilter, setMoneyMonthFilter] = useState("all");
   const [showArh, setShowArh] = useState(false);
   const [finTab, setFinTab] = useState("curent");
   const [rapAn, setRapAn] = useState(2025);
@@ -12311,18 +12313,46 @@ function App() {
             const reqTotalsShown = reqRowsForMonth.reduce((s,r)=>s+r.monthTotal,0);
             const reqBestYear = [...statsReq.yearComparison].sort((a,b)=>b.total-a.total)[0];
             const reqWorstYear = [...statsReq.yearComparison].sort((a,b)=>a.total-b.total)[0];
-            const reqCompareYearVal = reqCompareYear==="all" ? (reqYears.includes((reqYearFocus||0)-1) ? (reqYearFocus-1) : null) : Number(reqCompareYear);
+            const reqCompareYearVal = reqCompareYear==="none" ? null : (reqCompareYear==="all" ? (reqYears.includes((reqYearFocus||0)-1) ? (reqYearFocus-1) : null) : Number(reqCompareYear));
             const reqYearA = reqYearFocus ? statsReq.yearComparison.find(r=>r.year===reqYearFocus) : null;
             const reqYearB = reqCompareYearVal ? statsReq.yearComparison.find(r=>r.year===reqCompareYearVal) : null;
+            const moneyRows = evs
+              .filter(e=>e.st==="confirmat" && e.date)
+              .map(e=>{
+                const d = new Date(e.date+"T00:00:00");
+                const y = d.getFullYear();
+                const m = d.getMonth();
+                const svcTot = Object.entries(e.svcp||{}).reduce((s,[k,v])=>s+(e.svc?.[k]?v:0),0);
+                const gross = (e.fee||0) + svcTot;
+                return { y, m, gross };
+              })
+              .filter(r=>!Number.isNaN(r.y) && r.y>=REQUEST_STATS_MIN_YEAR);
+            const moneyYears = [...new Set(moneyRows.map(r=>r.y))].sort((a,b)=>a-b);
+            const moneyYearFocus = moneyYearFilter==="all" ? null : Number(moneyYearFilter);
+            const moneyMonthFocus = moneyMonthFilter==="all" ? null : Number(moneyMonthFilter);
+            const moneyRowsFiltered = moneyRows.filter(r=>(moneyYearFocus==null||r.y===moneyYearFocus) && (moneyMonthFocus==null||r.m===moneyMonthFocus));
+            const moneyTotalFiltered = moneyRowsFiltered.reduce((s,r)=>s+r.gross,0);
+            const moneyAvgEvent = moneyRowsFiltered.length ? Math.round(moneyTotalFiltered/moneyRowsFiltered.length) : 0;
+            const moneyByYear = moneyYears.map(y=>{
+              const rows = moneyRows.filter(r=>r.y===y);
+              const total = rows.reduce((s,r)=>s+r.gross,0);
+              return { year:y, total, count:rows.length, avg:rows.length?Math.round(total/rows.length):0 };
+            });
+            const moneyByMonthInYear = (moneyYearFocus==null ? [] : MONTHS_RO_SHORT.map((m,idx)=>{
+              const rows = moneyRows.filter(r=>r.y===moneyYearFocus && r.m===idx);
+              const total = rows.reduce((s,r)=>s+r.gross,0);
+              return { month:m, total, count:rows.length };
+            }));
             return <div style={{animation:"su .3s ease"}}>
               <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>Statistici</h1>
               <p style={{fontSize:11,color:th.tm,marginBottom:16}}>Arhivă completă 2007–prezent · cereri 2022–prezent</p>
 
+              <div style={{fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:th.tm,marginBottom:8}}>Cereri</div>
               {/* Cereri confirmate/refuzate */}
               <div style={{...sty.cd,marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:600}}>📊 Cereri confirmate vs refuzate</div>
-                  <div style={{fontSize:10,color:th.tm}}>după data cererii (`cr`) · interval 2022–prezent</div>
+                  <div style={{fontSize:10,color:th.tm}}>interval 2022–prezent</div>
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:8,marginBottom:12}}>
                   <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
@@ -12342,6 +12372,7 @@ function App() {
                   <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
                     <div style={{fontSize:10,color:th.tm,marginBottom:4}}>Comparație an A vs B</div>
                     <select value={reqCompareYear} onChange={e=>setReqCompareYear(e.target.value)} style={{...sty.i,padding:8,fontSize:12}}>
+                      <option value="none">Fără comparație</option>
                       <option value="all">Auto (anul anterior)</option>
                       {reqYears.map(y=><option key={`rcy-${y}`} value={String(y)}>{y}</option>)}
                     </select>
@@ -12494,6 +12525,7 @@ function App() {
                 </>}
               </div>
 
+              <div style={{fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:th.tm,marginBottom:8}}>Evenimente</div>
               {/* Comparator */}
               <div style={{...sty.cd,marginBottom:12}}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>⚖️ Comparator ani</div>
@@ -12614,6 +12646,69 @@ function App() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              <div style={{fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:th.tm,margin:"14px 0 8px"}}>Finanțe</div>
+              <div style={sty.cd}>
+                <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(2,1fr)",gap:8,marginBottom:12}}>
+                  <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                    <div style={{fontSize:10,color:th.tm,marginBottom:4}}>Filtru an (bani)</div>
+                    <select value={moneyYearFilter} onChange={e=>setMoneyYearFilter(e.target.value)} style={{...sty.i,padding:8,fontSize:12}}>
+                      <option value="all">Toți anii</option>
+                      {moneyYears.map(y=><option key={`myf-${y}`} value={String(y)}>{y}</option>)}
+                    </select>
+                  </div>
+                  <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                    <div style={{fontSize:10,color:th.tm,marginBottom:4}}>Filtru lună (bani)</div>
+                    <select value={moneyMonthFilter} onChange={e=>setMoneyMonthFilter(e.target.value)} style={{...sty.i,padding:8,fontSize:12}}>
+                      <option value="all">Toate lunile</option>
+                      {MONTHS_RO_SHORT.map((m,i)=><option key={`mmf-${m}`} value={String(i)}>{m}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:8,marginBottom:12}}>
+                  {[
+                    {l:"Bani în filtru",v:f$(moneyTotalFiltered),ac:"#22c55e"},
+                    {l:"Nr. evenimente în filtru",v:moneyRowsFiltered.length,ac:th.t},
+                    {l:"Medie / eveniment",v:f$(moneyAvgEvent),ac:"#6366f1"},
+                    {l:"Ani cu date financiare",v:moneyByYear.length,ac:th.t},
+                  ].map((c,i)=><div key={`m-kpi-${i}`} style={{...sty.cd,padding:12}}>
+                    <div style={{fontSize:10,color:th.tm,marginBottom:5}}>{c.l}</div>
+                    <div style={{fontSize:mob?14:16,fontWeight:700,color:c.ac}}>{c.v}</div>
+                  </div>)}
+                </div>
+                <div style={{overflowX:"auto",marginBottom:10}}>
+                  <table style={{width:"100%",fontSize:11}}>
+                    <thead><tr style={{borderBottom:`1px solid ${th.b}`}}>
+                      {["An","Bani total","Evenimente","Medie / ev."].map(h=><th key={`mh-${h}`} style={{padding:"6px 8px",textAlign:h==="An"?"left":"right",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>{h}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {moneyByYear.map(r=><tr key={`my-${r.year}`} style={{borderBottom:`1px solid ${th.bl}`}}>
+                        <td style={{padding:"6px 8px",fontWeight:700}}>{r.year}</td>
+                        <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#22c55e"}}>{f$(r.total)}</td>
+                        <td style={{padding:"6px 8px",textAlign:"right"}}>{r.count}</td>
+                        <td style={{padding:"6px 8px",textAlign:"right"}}>{f$(r.avg)}</td>
+                      </tr>)}
+                    </tbody>
+                  </table>
+                </div>
+                {moneyYearFocus!=null&&<div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                  <div style={{fontSize:10,color:th.tm,marginBottom:8}}>Bani pe luni în {moneyYearFocus}</div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:4,alignItems:"end",height:82}}>
+                    {(() => {
+                      const mx=Math.max(...moneyByMonthInYear.map(x=>x.total),1);
+                      return moneyByMonthInYear.map((x,i)=>{
+                        const h=Math.max(3,Math.round((x.total/mx)*60));
+                        const hl=moneyMonthFocus===i;
+                        return <div key={`mmy-${x.month}`} title={`${x.month}: ${f$(x.total)} (${x.count} ev.)`} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
+                          <div style={{fontSize:8,color:th.tm}}>{x.total?Math.round(x.total):""}</div>
+                          <div style={{width:"100%",height:h,borderRadius:"3px 3px 0 0",background:hl?th.a:"#22c55e"}}/>
+                          <div style={{fontSize:7,color:hl?th.a:th.tm,transform:"rotate(-35deg)",transformOrigin:"top center"}}>{x.month}</div>
+                        </div>;
+                      });
+                    })()}
+                  </div>
+                </div>}
               </div>
             </div>;
           })()}
