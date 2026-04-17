@@ -1,0 +1,10 @@
+---
+description: Phaser Manager — aplicația livrată e index.html (React în pagină), nu fișiere auxiliare.
+alwaysApply: true
+---
+
+# Punct de intrare canonic
+
+- Modificările de UI, tab-uri, Statistici, state `useState` legat de ecran și logica JSX din zona aplicației trebuie făcute în **`index.html`** (componenta principală e definită acolo).
+- **`phaser-manager.jsx`** nu e sursa de adevăr pentru build-ul pe care îl deschizi din `index.html`; nu-l edita pentru aceste schimbări decât dacă utilizatorul cere explicit acel fișier.
+- Fișierele **JSON** (ex. date seed / analiză) sunt date, nu shell-ul aplicației — nu înlocui editarea `index.html` cu editarea JSON-ului pentru comportament UI.

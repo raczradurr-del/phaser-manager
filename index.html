@@ -12623,8 +12623,11 @@ function App() {
                 <div style={{fontSize:9,color:th.tm,marginTop:4}}><span style={{color:"#22c55e"}}>● live</span> · <span style={{color:th.a}}>● istoric</span> · <span style={{color:"#94a3b8"}}>● COVID</span> · <span style={{color:"#818cf8",opacity:.7}}>* predicție</span></div>
               </div>
 
+              <div style={{marginBottom:10}}>
+                <button type="button" onClick={()=>setEvShowPredictionsPanel(v=>!v)} style={{...sty.bg,fontSize:11,padding:"6px 10px"}}>{evShowPredictionsPanel?"Ascunde":"Arată"} panoul predicții (evenimente + venit estimat)</button>
+              </div>
               {/* Predicții */}
-              {predYears.length>0&&<div style={{...sty.cd,marginBottom:12}}>
+              {predYears.length>0&&evShowPredictionsPanel&&<div style={{...sty.cd,marginBottom:12}}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:12}}>🔮 Predicții {predYears[0]}–{predYears[predYears.length-1]}</div>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:10}}>
                   {predYears.map(y=>{
@@ -12646,22 +12649,23 @@ function App() {
                 <div style={{marginTop:8,fontSize:9,color:th.tm,padding:"6px 10px",borderRadius:6,background:th.h}}>* Predicțiile sunt generate automat pe baza trendurilor 2014–prezent (excl. 2020 COVID).</div>
               </div>}
 
+              <div style={{marginBottom:10}}>
+                <button type="button" onClick={()=>setEvShowArchiveTable(v=>!v)} style={{...sty.bg,fontSize:11,padding:"6px 10px"}}>{evShowArchiveTable?"Ascunde":"Arată"} tabel arhivă (tipuri pe an, fără €/membru)</button>
+              </div>
               {/* Tabel arhivă complet */}
-              <div style={sty.cd}>
+              {evShowArchiveTable&&<div style={sty.cd}>
                 <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>📋 Arhivă completă 2007–prezent</div>
-                <div style={{fontSize:10,color:th.tm,marginBottom:12}}>{allHistoricForReports.length} ani înregistrați · <span style={{color:"#22c55e"}}>● date live</span></div>
+                <div style={{fontSize:10,color:th.tm,marginBottom:12}}>{allHistoricForReports.length} ani înregistrați · <span style={{color:"#22c55e"}}>● date live</span> · €/membru e la subtab Finanțe</div>
                 <div style={{overflowX:"auto"}}>
                   <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
                     <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
                       <th style={{padding:"7px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>An</th>
                       <th style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>Total</th>
                       {catCols.map(c=><th key={c} style={{padding:"7px 8px",textAlign:"center",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>{catLabel[c]}</th>)}
-                      {p.f&&<th style={{padding:"7px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1,whiteSpace:"nowrap"}}>€/Mb</th>}
                     </tr></thead>
                     <tbody>
                       {[...allHistoricForReports].reverse().map((d)=>{
                         const isHl=d.an===arhAn1||d.an===arhAn2;
-                        const vStr=d.venit?fv(d.venit):d.venit_min?`~${fv(d.venit_min)}–${fv(d.venit_max)}`:"—";
                         return <tr key={d.an} style={{borderBottom:`1px solid ${th.bl}`,background:isHl?`${th.a}18`:"transparent",transition:"background .15s"}}>
                           <td style={{padding:"7px 8px",fontWeight:isHl?700:600,fontSize:isHl?13:11,whiteSpace:"nowrap"}}>
                             {d.an}
@@ -12670,14 +12674,16 @@ function App() {
                           </td>
                           <td style={{padding:"7px 8px",textAlign:"center",fontWeight:700}}>{d.total}</td>
                           {catCols.map(c=><td key={c} style={{padding:"7px 8px",textAlign:"center",color:d[c]?th.t:th.b}}>{d[c]||"·"}</td>)}
-                          {p.f&&<td style={{padding:"7px 8px",textAlign:"right",fontWeight:600,color:d.venit||d.venit_min?"#22c55e":th.tm,fontSize:10}}>{vStr}</td>}
                         </tr>;
                       })}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              </div>}
 
+              </>}
+
+              {statsSubTab==="finante"&&<>
               <div style={{fontSize:12,fontWeight:800,textTransform:"uppercase",letterSpacing:1,color:th.tm,margin:"14px 0 8px"}}>Finanțe</div>
               <div style={sty.cd}>
                 <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(2,1fr)",gap:8,marginBottom:12}}>
@@ -12739,7 +12745,91 @@ function App() {
                     })()}
                   </div>
                 </div>}
+                <div style={{display:"flex",flexWrap:"wrap",gap:14,marginTop:12,marginBottom:8,alignItems:"center",fontSize:11}}>
+                  {p.f&&<>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:th.ts}}>
+                      <input type="checkbox" checked={finShowVenitComparator} onChange={e=>setFinShowVenitComparator(e.target.checked)} />
+                      Comparator venit €/membru (anii A/B din Evenimente)
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:th.ts}}>
+                      <input type="checkbox" checked={finChartShowPredictions} onChange={e=>setFinChartShowPredictions(e.target.checked)} />
+                      Predicții în graficul venit
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:th.ts}}>
+                      <input type="checkbox" checked={finShowEuroArchive} onChange={e=>setFinShowEuroArchive(e.target.checked)} />
+                      Arată arhiva €/membru
+                    </label>
+                    <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",color:th.ts}}>
+                      <input type="checkbox" checked={finShowPredictionsPanel} onChange={e=>setFinShowPredictionsPanel(e.target.checked)} />
+                      Panou predicții venit
+                    </label>
+                  </>}
+                </div>
+                {p.f&&finShowVenitComparator&&an1d&&an2d&&<div style={{...sty.cd,marginBottom:12}}>
+                  <div style={{fontSize:12,fontWeight:600,marginBottom:8}}>Venit €/membru: {arhAn1} vs {arhAn2}</div>
+                  <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"1fr 1fr",gap:10,fontSize:12}}>
+                    <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                      <div style={{fontSize:10,color:th.tm}}>{arhAn1}</div>
+                      <div style={{fontWeight:700,color:"#22c55e"}}>{an1d.venit?fv(an1d.venit):an1d.venit_min?`~${fv(an1d.venit_min)}–${fv(an1d.venit_max)}`:"—"}</div>
+                    </div>
+                    <div style={{padding:10,borderRadius:8,background:th.h,border:`1px solid ${th.b}`}}>
+                      <div style={{fontSize:10,color:th.tm}}>{arhAn2}</div>
+                      <div style={{fontWeight:700,color:"#22c55e"}}>{an2d.venit?fv(an2d.venit):an2d.venit_min?`~${fv(an2d.venit_min)}–${fv(an2d.venit_max)}`:"—"}</div>
+                    </div>
+                  </div>
+                </div>}
+                {p.f&&<div style={{...sty.cd,marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:4}}>Evoluție venit €/membru (raport)</div>
+                  <div style={{fontSize:10,color:th.tm,marginBottom:10}}>Istoric {finChartShowPredictions?`+ predicții ${predYears.join("–")}`:"(predicții ascunse)"}</div>
+                  <div style={{display:"flex",alignItems:"flex-end",gap:2,height:100,paddingBottom:18}}>
+                    {[...allHistoricForReports.filter(d=>d.venit).map(d=>({l:String(d.an),v:d.venit,color:d.an===2020?"#94a3b8":d.live?"#22c55e":th.a,dim:false})),...(finChartShowPredictions?predYears.map(y=>({l:`${y}*`,v:predVenit(y),color:"#818cf8",dim:true})):[])].map((d,i)=>{
+                      const bh=Math.round((d.v/maxVenitFinChart)*80),isHl=d.l===String(arhAn1)||d.l===String(arhAn2);
+                      return <div key={`fv-${d.l}-${i}`} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:1}}>
+                        <div style={{fontSize:7,color:th.tm,marginBottom:1,opacity:d.v>0?1:0}}>{d.v?fv(d.v):""}</div>
+                        <div title={`${d.l}: ${fv(d.v)}`} style={{width:"100%",height:bh,borderRadius:"3px 3px 0 0",background:isHl?th.a:d.color,opacity:d.dim?0.6:1,border:isHl?`2px solid ${th.a}`:"none",boxSizing:"border-box"}}/>
+                        <div style={{fontSize:7,color:isHl?th.a:th.tm,fontWeight:isHl?700:400,transform:"rotate(-45deg)",transformOrigin:"top center",whiteSpace:"nowrap",marginTop:2}}>{d.l}</div>
+                      </div>;
+                    })}
+                  </div>
+                </div>}
+                {p.f&&finShowEuroArchive&&<div style={{...sty.cd,marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:8}}>Arhivă €/membru (raport)</div>
+                  <div style={{overflowX:"auto"}}>
+                    <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
+                      <thead><tr style={{borderBottom:`2px solid ${th.b}`}}>
+                        <th style={{padding:"6px 8px",textAlign:"left",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>An</th>
+                        <th style={{padding:"6px 8px",textAlign:"right",fontSize:9,color:th.tm,textTransform:"uppercase",letterSpacing:1}}>€/membru</th>
+                      </tr></thead>
+                      <tbody>
+                        {[...allHistoricForReports].reverse().filter(d=>d.venit||d.venit_min).map(d=>{
+                          const vs=d.venit?fv(d.venit):d.venit_min?`~${fv(d.venit_min)}–${fv(d.venit_max)}`:"—";
+                          return <tr key={`euroa-${d.an}`} style={{borderBottom:`1px solid ${th.bl}`}}>
+                            <td style={{padding:"6px 8px",fontWeight:700}}>{d.an}</td>
+                            <td style={{padding:"6px 8px",textAlign:"right",color:"#22c55e"}}>{vs}</td>
+                          </tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>}
+                {p.f&&finShowPredictionsPanel&&predYears.length>0&&<div style={{...sty.cd,marginBottom:12}}>
+                  <div style={{fontSize:13,fontWeight:600,marginBottom:10}}>Predicții venit €/membru</div>
+                  <div style={{display:"grid",gridTemplateColumns:mob?"1fr":"repeat(3,1fr)",gap:10}}>
+                    {predYears.map(y=>{
+                      const ven=predVenit(y);
+                      const histVen=allHistoricForReports.filter(x=>x.venit).slice(-1)[0]?.venit;
+                      const prevVen=predYears.indexOf(y)===0?histVen:predVenit(y-1);
+                      const pV=pctChange(ven,prevVen);
+                      return <div key={`fpv-${y}`} style={{...sty.cd,border:`2px solid ${th.a}40`,background:`${th.a}08`}}>
+                        <div style={{fontSize:14,fontWeight:800,color:th.a}}>{y}</div>
+                        <div style={{fontSize:18,fontWeight:700,color:"#22c55e"}}>{fv(ven)}</div>
+                        {pV!=null&&<div style={{fontSize:10,fontWeight:700,color:pV>=0?"#22c55e":"#ef4444"}}>{pV>=0?"+":""}{pV}% vs {y-1}</div>}
+                      </div>;
+                    })}
+                  </div>
+                </div>}
               </div>
+              </>}
             </div>;
           })()}
 
