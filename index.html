@@ -8440,6 +8440,62 @@ function App() {
       yearComparison
     };
   },[evs]);
+  const [reqStatsSeed, setReqStatsSeed] = useState(null);
+  useEffect(()=>{
+    let cancelled = false;
+    const normalizeSeed = (j) => {
+      if(!j || typeof j !== "object") return null;
+      const monthConfirmed = Array.isArray(j.monthConfirmed)
+        ? j.monthConfirmed.map(v=>Number(v)||0).slice(0,12)
+        : Array(12).fill(0);
+      const monthRejected = Array.isArray(j.monthRejected)
+        ? j.monthRejected.map(v=>Number(v)||0).slice(0,12)
+        : Array(12).fill(0);
+      const yearComparison = Array.isArray(j.yearComparison)
+        ? j.yearComparison.map(r=>({
+            year: Number(r.year)||0,
+            confirmed: Number(r.confirmed)||0,
+            rejected: Number(r.rejected)||0,
+            total: Number(r.total)||0,
+            rejectRate: Number(r.rejectRate)||0,
+            months: Array.isArray(r.months) ? r.months.map(v=>Number(v)||0).slice(0,12) : Array(12).fill(0)
+          })).filter(r=>r.year>=REQUEST_STATS_MIN_YEAR)
+        : [];
+      const totalFromRows = yearComparison.reduce((s,r)=>s+r.total,0);
+      const total = Number(j.total)||totalFromRows;
+      const monthMax = (arr) => {
+        const max = Math.max(...arr, 0);
+        if(!max) return null;
+        const idx = arr.findIndex(v=>v===max);
+        return { month: MONTHS_RO_FULL[idx], count:max };
+      };
+      const yearMax = (key) => {
+        if(!yearComparison.length) return null;
+        const best = [...yearComparison].sort((a,b)=>b[key]-a[key])[0];
+        return { year:best.year, count:best[key] };
+      };
+      return {
+        confirmedTotal: Number(j.confirmedTotal)||yearComparison.reduce((s,r)=>s+r.confirmed,0),
+        rejectedTotal: Number(j.rejectedTotal)||yearComparison.reduce((s,r)=>s+r.rejected,0),
+        total,
+        monthConfirmed,
+        monthRejected,
+        mostRequestedMonth: j.mostRequestedMonth || monthMax(monthConfirmed.map((v,i)=>v+monthRejected[i])),
+        yearMostConfirmed: j.yearMostConfirmed || yearMax("confirmed"),
+        yearMostRejected: j.yearMostRejected || yearMax("rejected"),
+        yearComparison
+      };
+    };
+    fetch("all-events-analysis.json", { cache:"no-store" })
+      .then(r=>r.ok ? r.json() : null)
+      .then(j=>{
+        if(cancelled || !j) return;
+        const n = normalizeSeed(j);
+        if(n) setReqStatsSeed(n);
+      })
+      .catch(()=>{});
+    return ()=>{ cancelled = true; };
+  },[]);
   const [calSidebarDate, setCalSidebarDate] = useState(null);
   const [calDragEvId, setCalDragEvId] = useState(null);
   const [calDropDate, setCalDropDate] = useState(null);
@@ -12143,7 +12199,8 @@ function App() {
             const an1d=allHistoricForReports.find(d=>d.an===arhAn1);
             const an2d=allHistoricForReports.find(d=>d.an===arhAn2);
             const aniiDisp=allHistoricForReports.map(d=>d.an);
-            const reqMonthMax = Math.max(...reqStats.monthConfirmed, ...reqStats.monthRejected, 1);
+            const statsReq = reqStats.total ? reqStats : (reqStatsSeed || reqStats);
+            const reqMonthMax = Math.max(...statsReq.monthConfirmed, ...statsReq.monthRejected, 1);
             return <div style={{animation:"su .3s ease"}}>
               <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>Statistici</h1>
               <p style={{fontSize:11,color:th.tm,marginBottom:16}}>Arhivă completă 2007–prezent (fără 2021) · cereri 2022–prezent</p>
@@ -12154,14 +12211,14 @@ function App() {
                   <div style={{fontSize:13,fontWeight:600}}>📊 Cereri confirmate vs refuzate</div>
                   <div style={{fontSize:10,color:th.tm}}>după data cererii (`cr`) · interval 2022–prezent</div>
                 </div>
-                {!reqStats.total&&<div style={{padding:18,textAlign:"center",fontSize:12,color:th.tm}}>Nu există încă suficiente cereri confirmate/refuzate pentru raport.</div>}
-                {!!reqStats.total&&<>
+                {!statsReq.total&&<div style={{padding:18,textAlign:"center",fontSize:12,color:th.tm}}>Nu există încă suficiente cereri confirmate/refuzate pentru raport.</div>}
+                {!!statsReq.total&&<>
                   <div style={{display:"grid",gridTemplateColumns:mob?"1fr 1fr":"repeat(4,1fr)",gap:8,marginBottom:12}}>
                     {[
-                      {l:"Cereri analizate",v:reqStats.total,ac:th.t},
-                      {l:"Luna cu cele mai multe cereri",v:reqStats.mostRequestedMonth?`${reqStats.mostRequestedMonth.month} (${reqStats.mostRequestedMonth.count})`:"—",ac:"#6366f1"},
-                      {l:"An cu cele mai multe confirmări",v:reqStats.yearMostConfirmed?`${reqStats.yearMostConfirmed.year} (${reqStats.yearMostConfirmed.count})`:"—",ac:"#22c55e"},
-                      {l:"An cu cele mai multe refuzuri",v:reqStats.yearMostRejected?`${reqStats.yearMostRejected.year} (${reqStats.yearMostRejected.count})`:"—",ac:"#ef4444"},
+                      {l:"Cereri analizate",v:statsReq.total,ac:th.t},
+                      {l:"Luna cu cele mai multe cereri",v:statsReq.mostRequestedMonth?`${statsReq.mostRequestedMonth.month} (${statsReq.mostRequestedMonth.count})`:"—",ac:"#6366f1"},
+                      {l:"An cu cele mai multe confirmări",v:statsReq.yearMostConfirmed?`${statsReq.yearMostConfirmed.year} (${statsReq.yearMostConfirmed.count})`:"—",ac:"#22c55e"},
+                      {l:"An cu cele mai multe refuzuri",v:statsReq.yearMostRejected?`${statsReq.yearMostRejected.year} (${statsReq.yearMostRejected.count})`:"—",ac:"#ef4444"},
                     ].map((c,i)=><div key={i} style={{...sty.cd,padding:12}}>
                       <div style={{fontSize:10,color:th.tm,marginBottom:5}}>{c.l}</div>
                       <div style={{fontSize:mob?14:16,fontWeight:700,color:c.ac}}>{c.v}</div>
@@ -12173,7 +12230,7 @@ function App() {
                       <div style={{fontSize:10,color:th.tm,marginBottom:8}}>Confirmate pe luni (toți anii incluși)</div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:3,alignItems:"end",height:72}}>
                         {MONTHS_RO_SHORT.map((m,i)=>{
-                          const v=reqStats.monthConfirmed[i]||0;
+                          const v=statsReq.monthConfirmed[i]||0;
                           const h=Math.max(3,Math.round((v/reqMonthMax)*56));
                           return <div key={`c-${m}`} title={`${m}: ${v}`} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                             <div style={{fontSize:8,color:th.tm}}>{v||""}</div>
@@ -12187,7 +12244,7 @@ function App() {
                       <div style={{fontSize:10,color:th.tm,marginBottom:8}}>Refuzate pe luni (toți anii incluși)</div>
                       <div style={{display:"grid",gridTemplateColumns:"repeat(12,1fr)",gap:3,alignItems:"end",height:72}}>
                         {MONTHS_RO_SHORT.map((m,i)=>{
-                          const v=reqStats.monthRejected[i]||0;
+                          const v=statsReq.monthRejected[i]||0;
                           const h=Math.max(3,Math.round((v/reqMonthMax)*56));
                           return <div key={`r-${m}`} title={`${m}: ${v}`} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
                             <div style={{fontSize:8,color:th.tm}}>{v||""}</div>
@@ -12208,7 +12265,7 @@ function App() {
                         </tr>
                       </thead>
                       <tbody>
-                        {reqStats.yearComparison.map(row=><tr key={row.year} style={{borderBottom:`1px solid ${th.bl}`}}>
+                        {statsReq.yearComparison.map(row=><tr key={row.year} style={{borderBottom:`1px solid ${th.bl}`}}>
                           <td style={{padding:"6px 8px",fontWeight:700}}>{row.year}</td>
                           <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#22c55e"}}>{row.confirmed}</td>
                           <td style={{padding:"6px 8px",textAlign:"right",fontWeight:600,color:"#ef4444"}}>{row.rejected}</td>
