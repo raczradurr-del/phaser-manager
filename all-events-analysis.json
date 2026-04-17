@@ -1,0 +1,278 @@
+{
+  "totals": {
+    "confirmed_total": 124,
+    "rejected_total": 200,
+    "with_valid_request_date": 322,
+    "missing_request_date_confirmed": 1,
+    "missing_request_date_rejected": 1
+  },
+  "peaks": {
+    "most_requested_month_overall": {
+      "month": "ianuarie",
+      "count": 45
+    },
+    "most_requested_month_confirmed": {
+      "month": "octombrie",
+      "count": 15
+    },
+    "most_requested_month_rejected": {
+      "month": "ianuarie",
+      "count": 31
+    },
+    "year_most_rejections": {
+      "year": 2022,
+      "count": 60
+    },
+    "year_most_confirmations": {
+      "year": 2023,
+      "count": 35
+    }
+  },
+  "top5_months_overall": [
+    {
+      "month": "ianuarie",
+      "count": 45
+    },
+    {
+      "month": "octombrie",
+      "count": 38
+    },
+    {
+      "month": "februarie",
+      "count": 32
+    },
+    {
+      "month": "noiembrie",
+      "count": 31
+    },
+    {
+      "month": "iunie",
+      "count": 28
+    }
+  ],
+  "top5_months_confirmed": [
+    {
+      "month": "octombrie",
+      "count": 15
+    },
+    {
+      "month": "ianuarie",
+      "count": 14
+    },
+    {
+      "month": "martie",
+      "count": 12
+    },
+    {
+      "month": "iunie",
+      "count": 12
+    },
+    {
+      "month": "noiembrie",
+      "count": 12
+    }
+  ],
+  "top5_months_rejected": [
+    {
+      "month": "ianuarie",
+      "count": 31
+    },
+    {
+      "month": "februarie",
+      "count": 23
+    },
+    {
+      "month": "octombrie",
+      "count": 23
+    },
+    {
+      "month": "noiembrie",
+      "count": 19
+    },
+    {
+      "month": "iunie",
+      "count": 16
+    }
+  ],
+  "year_comparison": [
+    {
+      "year": 2021,
+      "confirmed": 1,
+      "rejected": 2,
+      "total": 3,
+      "reject_rate": 66.7
+    },
+    {
+      "year": 2022,
+      "confirmed": 27,
+      "rejected": 60,
+      "total": 87,
+      "reject_rate": 69.0
+    },
+    {
+      "year": 2023,
+      "confirmed": 35,
+      "rejected": 43,
+      "total": 78,
+      "reject_rate": 55.1
+    },
+    {
+      "year": 2024,
+      "confirmed": 33,
+      "rejected": 42,
+      "total": 75,
+      "reject_rate": 56.0
+    },
+    {
+      "year": 2025,
+      "confirmed": 27,
+      "rejected": 45,
+      "total": 72,
+      "reject_rate": 62.5
+    },
+    {
+      "year": 2026,
+      "confirmed": 0,
+      "rejected": 7,
+      "total": 7,
+      "reject_rate": 100.0
+    }
+  ],
+  "peak_months_per_year": [
+    {
+      "year": 2021,
+      "count": 2,
+      "months": [
+        "octombrie"
+      ]
+    },
+    {
+      "year": 2022,
+      "count": 13,
+      "months": [
+        "ianuarie",
+        "noiembrie"
+      ]
+    },
+    {
+      "year": 2023,
+      "count": 14,
+      "months": [
+        "ianuarie"
+      ]
+    },
+    {
+      "year": 2024,
+      "count": 12,
+      "months": [
+        "august"
+      ]
+    },
+    {
+      "year": 2025,
+      "count": 12,
+      "months": [
+        "iunie"
+      ]
+    },
+    {
+      "year": 2026,
+      "count": 5,
+      "months": [
+        "februarie"
+      ]
+    }
+  ],
+  "monthly_comparison_by_year": [
+    {
+      "year": 2021,
+      "ian": 0,
+      "feb": 0,
+      "mar": 0,
+      "apr": 0,
+      "mai": 0,
+      "iun": 0,
+      "iul": 0,
+      "aug": 0,
+      "sep": 1,
+      "oct": 2,
+      "noi": 0,
+      "dec": 0
+    },
+    {
+      "year": 2022,
+      "ian": 13,
+      "feb": 7,
+      "mar": 10,
+      "apr": 4,
+      "mai": 9,
+      "iun": 6,
+      "iul": 3,
+      "aug": 3,
+      "sep": 4,
+      "oct": 6,
+      "noi": 13,
+      "dec": 9
+    },
+    {
+      "year": 2023,
+      "ian": 14,
+      "feb": 6,
+      "mar": 3,
+      "apr": 8,
+      "mai": 3,
+      "iun": 8,
+      "iul": 5,
+      "aug": 4,
+      "sep": 5,
+      "oct": 11,
+      "noi": 6,
+      "dec": 5
+    },
+    {
+      "year": 2024,
+      "ian": 10,
+      "feb": 7,
+      "mar": 4,
+      "apr": 3,
+      "mai": 2,
+      "iun": 2,
+      "iul": 5,
+      "aug": 12,
+      "sep": 10,
+      "oct": 11,
+      "noi": 8,
+      "dec": 1
+    },
+    {
+      "year": 2025,
+      "ian": 6,
+      "feb": 7,
+      "mar": 9,
+      "apr": 7,
+      "mai": 8,
+      "iun": 12,
+      "iul": 4,
+      "aug": 2,
+      "sep": 5,
+      "oct": 8,
+      "noi": 4,
+      "dec": 0
+    },
+    {
+      "year": 2026,
+      "ian": 2,
+      "feb": 5,
+      "mar": 0,
+      "apr": 0,
+      "mai": 0,
+      "iun": 0,
+      "iul": 0,
+      "aug": 0,
+      "sep": 0,
+      "oct": 0,
+      "noi": 0,
+      "dec": 0
+    }
+  ]
+}

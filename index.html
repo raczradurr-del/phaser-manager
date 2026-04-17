@@ -346,7 +346,7 @@ function patchEventStatus(ev, st, respinsMotiv) {
 const PRIVATE_TYPES = ["Nuntă","Botez","Private Party","Corporate","Altele"];
 const PUBLIC_TYPES  = ["Festival","Concert","Club","Altele"];
 const REPORT_EXCLUDED_YEARS = new Set([2021]);
-const REQUEST_STATS_EXCLUDED_YEARS = new Set([2021, 2026]);
+const REQUEST_STATS_MIN_YEAR = 2022;
 const MONTHS_RO_SHORT = ["Ian","Feb","Mar","Apr","Mai","Iun","Iul","Aug","Sep","Oct","Noi","Dec"];
 const MONTHS_RO_FULL = ["ianuarie","februarie","martie","aprilie","mai","iunie","iulie","august","septembrie","octombrie","noiembrie","decembrie"];
 
@@ -8394,7 +8394,7 @@ function App() {
       const d = parseDate(ev.cr);
       if(!d) return;
       const y = d.getFullYear();
-      if(REQUEST_STATS_EXCLUDED_YEARS.has(y)) return;
+      if(y < REQUEST_STATS_MIN_YEAR) return;
       const m = d.getMonth();
       if(!byYear[y]) byYear[y] = { confirmed:0, rejected:0, months:Array(12).fill(0) };
       byYear[y].months[m] += 1;
@@ -12146,13 +12146,13 @@ function App() {
             const reqMonthMax = Math.max(...reqStats.monthConfirmed, ...reqStats.monthRejected, 1);
             return <div style={{animation:"su .3s ease"}}>
               <h1 style={{fontSize:22,fontWeight:700,marginBottom:4}}>Statistici</h1>
-              <p style={{fontSize:11,color:th.tm,marginBottom:16}}>Arhivă completă 2007–prezent (fără 2021) · comparații cereri fără 2021 și 2026</p>
+              <p style={{fontSize:11,color:th.tm,marginBottom:16}}>Arhivă completă 2007–prezent (fără 2021) · cereri 2022–prezent</p>
 
               {/* Cereri confirmate/refuzate */}
               <div style={{...sty.cd,marginBottom:12}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8,marginBottom:10}}>
                   <div style={{fontSize:13,fontWeight:600}}>📊 Cereri confirmate vs refuzate</div>
-                  <div style={{fontSize:10,color:th.tm}}>după data cererii (`cr`) · fără 2021 și 2026</div>
+                  <div style={{fontSize:10,color:th.tm}}>după data cererii (`cr`) · interval 2022–prezent</div>
                 </div>
                 {!reqStats.total&&<div style={{padding:18,textAlign:"center",fontSize:12,color:th.tm}}>Nu există încă suficiente cereri confirmate/refuzate pentru raport.</div>}
                 {!!reqStats.total&&<>
