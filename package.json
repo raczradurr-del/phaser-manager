@@ -1,5 +1,10 @@
 {
   "devDependencies": {
-    "supabase": "^2.85.0"
+    "supabase": "^2.85.0",
+    "wrangler": "^4.83.0"
+  },
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   }
 }
